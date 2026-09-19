@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/appbar.dart';
+import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:frontend_tecsys/widgets/search_bar.dart';
 import 'package:latlong2/latlong.dart';
 
 void main() {
@@ -28,7 +31,7 @@ class HomePage extends State<MyApp> {
     _mapController.dispose();
     super.dispose();
   }
-  
+
   void _zoomIn() {
     setState(() {
       _currentZoom = (_mapController.camera.zoom + 1).clamp(2.0, 18.0);
@@ -38,7 +41,7 @@ class HomePage extends State<MyApp> {
 
   void _zoomOut() {
     setState(() {
-      _currentZoom = (_mapController.camera.zoom - 1).clamp(2.0, 18.0); 
+      _currentZoom = (_mapController.camera.zoom - 1).clamp(2.0, 18.0);
       _mapController.move(_mapController.camera.center, _currentZoom);
     });
   }
@@ -78,12 +81,54 @@ class HomePage extends State<MyApp> {
                 ),
               ],
             ),
-            // Positioned(
-            //   top: 60,
-            //   left: 16,
-            //   right: 16,
-            //   child: MapNavigationControls(onZoomIn: _zoomIn, onZoomOut: _zoomOut, onLocationPressed: _onLocationPressed),
-            // ),
+            Positioned(
+              top: 10,
+              left: 15,
+              right: 15,
+              child: Column(
+                spacing: 10,
+                children: [
+                  Center(
+                    child: Row(
+                      spacing: 20,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: MapSearchBar(),
+                        ),
+                        IconButton(
+                          onPressed: () => "Olá mundo",
+                          icon: Icon(
+                            Icons.layers_outlined,
+                            color: AppColors.textPrimaryColor,
+                          ),
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.searchBarFieldsBackground,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            fixedSize: const Size(50, 50)
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    children: [
+                    
+                    ],
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: MapNavigationControls(
+                      onZoomIn: _zoomIn,
+                      onZoomOut: _zoomOut,
+                      onLocationPressed: _onLocationPressed,
+                    ),
+                  )
+                ],
+              ),
+            ),
           ],
         ),
         bottomNavigationBar: Navbar(),
