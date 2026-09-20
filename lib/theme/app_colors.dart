@@ -8,7 +8,8 @@ abstract class AppColors {
   static const Color unselectedItemColor = Color(0xFFBDBDBD);
   static const Color widgetColor = Color(0xFF35D6C0);
 
-  // Paleta expandida baseada no Figma
+  // Paleta expandida baseada no Figma e SCRUM-36
+  static final Color searchBarFieldsBackground = const Color(0xFF10312C).withValues(alpha: 0.95);
   static const Color surfaceBackground = Color(0xFF081C18);
   static const Color surfaceCard = Color(0xFF0E2621);
   static const Color surfaceCardLight = Color(0xFF13352E);
