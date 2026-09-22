@@ -6,6 +6,7 @@ import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
+import 'package:frontend_tecsys/utils/map_utils.dart';
 import 'package:latlong2/latlong.dart';
 
 void main() {
@@ -25,6 +26,8 @@ class MyApp extends StatefulWidget {
 class HomePage extends State<MyApp> {
   final MapController _mapController = MapController();
   double _currentZoom = 3.8;
+  bool isDrawing = false;
+  List<LatLng> polygonPoints = [];
 
   @override
   void dispose() {
@@ -62,6 +65,7 @@ class HomePage extends State<MyApp> {
         body: Stack(
           children: [
             FlutterMap(
+              mapController: _mapController,
               options: MapOptions(
                 initialCenter: LatLng(-14.2350, -51.9253),
                 initialZoom: _currentZoom,
@@ -73,11 +77,57 @@ class HomePage extends State<MyApp> {
                     LatLng(89.9, 180.0),
                   ),
                 ),
+                onTap: (tapPosition, point) {
+                  if (!isDrawing) return;
+                  setState(() {
+                    polygonPoints.add(point);
+                  });
+                },
               ),
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.example.frontend_tecsys',
+                ),
+                PolygonLayer(
+                  polygons: polygonPoints.length >= 3
+                      ? <Polygon<Object>>[
+                          Polygon<Object>(
+                            points: polygonPoints,
+                            color: AppColors.navBarBackground.withAlpha(100),
+                            borderColor: AppColors.navBarBackground,
+                            borderStrokeWidth: 2.5,
+                            pattern: StrokePattern.dashed(segments: [10, 5]),
+                          ),
+                        ]
+                      : <Polygon<Object>>[],
+                ),
+                MarkerLayer(
+                  markers: polygonPoints.map((point) {
+                    return Marker(
+                      point: point,
+                      width: 14.0,
+                      height: 14.0,
+                      alignment: Alignment.center,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.navBarBackground,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.navBarBackground,
+                            width: 2.0,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
               ],
             ),
@@ -93,9 +143,7 @@ class HomePage extends State<MyApp> {
                       spacing: 20,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Expanded(
-                          child: MapSearchBar(),
-                        ),
+                        Expanded(child: MapSearchBar()),
                         IconButton(
                           onPressed: () => "Olá mundo",
                           icon: Icon(
@@ -103,19 +151,86 @@ class HomePage extends State<MyApp> {
                             color: AppColors.textPrimaryColor,
                           ),
                           style: IconButton.styleFrom(
-                            backgroundColor: AppColors.searchBarFieldsBackground,
+                            backgroundColor:
+                                AppColors.searchBarFieldsBackground,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
-                            fixedSize: const Size(50, 50)
+                            fixedSize: const Size(50, 50),
                           ),
                         ),
                       ],
                     ),
                   ),
                   Row(
+                    spacing: 5,
                     children: [
-                    
+                      IconButton(
+                        onPressed: () {
+                          setState(() {
+                            isDrawing = !isDrawing;
+                          });
+                        },
+                        icon: Icon(Icons.draw, color: Colors.white),
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.backgroundColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                      if (isDrawing)
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              polygonPoints.clear();
+                            });
+                          },
+                          icon: Icon(Icons.delete, color: Colors.black),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      if (polygonPoints.length >= 3)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.navBarBackground,
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: 6,
+                                offset: Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.square_foot,
+                                color: AppColors.textPrimaryColor,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Área desenhada: ${calculatePolygonAreaKm2(polygonPoints).toStringAsFixed(2)} km²',
+                                style: TextStyle(
+                                  color: AppColors.textPrimaryColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                   Align(
@@ -125,7 +240,7 @@ class HomePage extends State<MyApp> {
                       onZoomOut: _zoomOut,
                       onLocationPressed: _onLocationPressed,
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
