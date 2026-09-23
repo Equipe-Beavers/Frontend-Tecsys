@@ -28,11 +28,7 @@ abstract class AppColors {
   static const Color badgeSuccessBg = Color(0xFF183B33);
   static const Color badgeSuccessText = Color(0xFFC8F135);
 
-  // Cores de Camadas da BDGD (Rede, Estruturas, Proteção/Manobra, Regulação)
-  static const Color layerRedeMT = Color(0xFFC8F135);
-  static const Color layerRedeBT = Color(0xFF35D6C0);
-  static const Color layerNeutro = Color(0xFF7E9A94);
-
+  // Cores de camadas dos ativos BDGD
   static const Color layerPoste = Color(0xFF35D6C0);
   static const Color layerTransformador = Color(0xFF26C6DA);
   static const Color layerSubestacao = Color(0xFFC8F135);

@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 
-enum CategoriaAtivo {
-  rede,
-  estruturas,
-  protecaoManobra,
-  regulacao,
-}
+enum CategoriaAtivo { estruturas, protecaoManobra, regulacao }
 
 enum TipoAtivo {
   // Estruturas
   poste,
   transformador,
   subestacao,
+  dispositivo,
 
   // Proteção e Manobra
   chaveFusivel,
@@ -23,11 +19,6 @@ enum TipoAtivo {
   // Regulação
   reguladorTensao,
   bancoCapacitores,
-
-  // Rede (Polylines)
-  redeMT,
-  redeBT,
-  redeNeutro,
 }
 
 extension TipoAtivoExtension on TipoAtivo {
@@ -39,6 +30,8 @@ extension TipoAtivoExtension on TipoAtivo {
         return 'Transformador de Distribuição';
       case TipoAtivo.subestacao:
         return 'Subestação';
+      case TipoAtivo.dispositivo:
+        return 'Dispositivo';
       case TipoAtivo.chaveFusivel:
         return 'Chave Fusível / Corta-Circuito';
       case TipoAtivo.chaveSeccionadora:
@@ -51,12 +44,6 @@ extension TipoAtivoExtension on TipoAtivo {
         return 'Regulador de Tensão';
       case TipoAtivo.bancoCapacitores:
         return 'Banco de Capacitores';
-      case TipoAtivo.redeMT:
-        return 'Cabo de Média Tensão (MT)';
-      case TipoAtivo.redeBT:
-        return 'Cabo de Baixa Tensão (BT)';
-      case TipoAtivo.redeNeutro:
-        return 'Condutor Terminal / Neutro';
     }
   }
 
@@ -68,6 +55,8 @@ extension TipoAtivoExtension on TipoAtivo {
         return AppColors.layerTransformador;
       case TipoAtivo.subestacao:
         return AppColors.layerSubestacao;
+      case TipoAtivo.dispositivo:
+        return AppColors.secondaryTeal;
       case TipoAtivo.chaveFusivel:
         return AppColors.layerChaveFusivel;
       case TipoAtivo.chaveSeccionadora:
@@ -80,12 +69,6 @@ extension TipoAtivoExtension on TipoAtivo {
         return AppColors.layerRegulador;
       case TipoAtivo.bancoCapacitores:
         return AppColors.layerBancoCapacitores;
-      case TipoAtivo.redeMT:
-        return AppColors.layerRedeMT;
-      case TipoAtivo.redeBT:
-        return AppColors.layerRedeBT;
-      case TipoAtivo.redeNeutro:
-        return AppColors.layerNeutro;
     }
   }
 
@@ -97,6 +80,8 @@ extension TipoAtivoExtension on TipoAtivo {
         return Icons.offline_bolt;
       case TipoAtivo.subestacao:
         return Icons.business;
+      case TipoAtivo.dispositivo:
+        return Icons.electrical_services;
       case TipoAtivo.chaveFusivel:
         return Icons.electrical_services;
       case TipoAtivo.chaveSeccionadora:
@@ -109,22 +94,15 @@ extension TipoAtivoExtension on TipoAtivo {
         return Icons.tune;
       case TipoAtivo.bancoCapacitores:
         return Icons.battery_charging_full;
-      case TipoAtivo.redeMT:
-      case TipoAtivo.redeBT:
-      case TipoAtivo.redeNeutro:
-        return Icons.linear_scale;
     }
   }
 
   CategoriaAtivo get categoria {
     switch (this) {
-      case TipoAtivo.redeMT:
-      case TipoAtivo.redeBT:
-      case TipoAtivo.redeNeutro:
-        return CategoriaAtivo.rede;
       case TipoAtivo.poste:
       case TipoAtivo.transformador:
       case TipoAtivo.subestacao:
+      case TipoAtivo.dispositivo:
         return CategoriaAtivo.estruturas;
       case TipoAtivo.chaveFusivel:
       case TipoAtivo.chaveSeccionadora:
@@ -136,6 +114,31 @@ extension TipoAtivoExtension on TipoAtivo {
         return CategoriaAtivo.regulacao;
     }
   }
+
+  String get apiValue {
+    switch (this) {
+      case TipoAtivo.poste:
+        return 'POSTE';
+      case TipoAtivo.transformador:
+        return 'TRANSFORMADOR';
+      case TipoAtivo.subestacao:
+        return 'SUBESTACAO';
+      case TipoAtivo.dispositivo:
+        return 'DISPOSITIVO';
+      case TipoAtivo.chaveFusivel:
+        return 'CHAVE_FUSIVEL';
+      case TipoAtivo.chaveSeccionadora:
+        return 'CHAVE_SECCIONADORA';
+      case TipoAtivo.religador:
+        return 'RELIGADOR';
+      case TipoAtivo.seccionadorAutomatico:
+        return 'SECCIONADOR_AUTOMATICO';
+      case TipoAtivo.reguladorTensao:
+        return 'REGULADOR_TENSAO';
+      case TipoAtivo.bancoCapacitores:
+        return 'BANCO_CAPACITORES';
+    }
+  }
 }
 
 class AtivoBdgd {
@@ -144,15 +147,19 @@ class AtivoBdgd {
   final TipoAtivo tipo;
   final double latitude;
   final double longitude;
-  final String statusOperacional; // ex: 'Em operação'
-  final String material;          // ex: 'Concreto - Duplo T'
-  final String esforcoTracao;     // ex: '600 daN - 11 m'
-  final String ordemImobilizacao; // ex: 'OI-2023-554812'
-  final String situacaoAtivo;     // ex: 'Ativo - sem restrições'
-  final String subestacaoConectada;// ex: 'SE Boa Vista - 138 kV'
-  final String pontoAcesso;       // ex: 'PAC 10417'
-  final String municipio;         // ex: 'Uberlândia - MG'
-  final String distribuidora;     // ex: 'CEMIG Distribuição'
+  final String statusOperacional; // ex: 'AT1' / 'EM OPERACAO'
+  final String material; // ex: 'CQ'
+  final String esforcoTracao; // ex: '7'
+  final String altura; // ex: '13'
+  final String potenciaNominal; // ex: '37,5'
+  final String situacaoAtivo;
+  final String subestacaoConectada; // ex: 'DMBE'
+  final String municipio;
+  final String bairro;
+  final String distribuidora; // ex: 'Enel SP'
+  final int? tipoDispositivoId;
+  final String? tipoDispositivoNome;
+  final String? tipoDispositivoCategoria;
 
   const AtivoBdgd({
     required this.id,
@@ -160,15 +167,120 @@ class AtivoBdgd {
     required this.tipo,
     required this.latitude,
     required this.longitude,
-    this.statusOperacional = 'Em operação',
-    this.material = 'Concreto - Duplo T',
-    this.esforcoTracao = '600 daN - 11 m',
-    this.ordemImobilizacao = 'OI-2023-554812',
-    this.situacaoAtivo = 'Ativo - sem restrições',
-    this.subestacaoConectada = 'SE Boa Vista - 138 kV',
-    this.pontoAcesso = 'PAC 10417',
-    this.municipio = 'Uberlândia - MG',
-    this.distribuidora = 'CEMIG Distribuição',
+    this.statusOperacional = 'Não informado',
+    this.material = 'Não informado',
+    this.esforcoTracao = 'Não informado',
+    this.altura = 'Não informado',
+    this.potenciaNominal = 'Não informado',
+    this.situacaoAtivo = 'Não informado',
+    this.subestacaoConectada = 'Não informado',
+    this.municipio = 'Não informado',
+    this.bairro = 'Não informado',
+    this.distribuidora = 'Não informada',
+    this.tipoDispositivoId,
+    this.tipoDispositivoNome,
+    this.tipoDispositivoCategoria,
   });
-}
 
+  factory AtivoBdgd.fromJson(Map<String, dynamic> json) {
+    final atributos = _asMap(json['atributos']);
+    final tipo = _tipoFromApi(json['tipo']);
+
+    return AtivoBdgd(
+      id: _asString(json['id']),
+      codId: _asString(json['codId'], fallback: _asString(json['id'])),
+      tipo: tipo,
+      latitude: _asDouble(json['latitude']),
+      longitude: _asDouble(json['longitude']),
+      municipio: _asString(json['municipio'], fallback: 'Não informado'),
+      bairro: _asString(json['bairro'], fallback: 'Não informado'),
+      tipoDispositivoId: _asInt(
+        json['tipoDispositivoId'] ?? atributos['tip_unid'],
+      ),
+      tipoDispositivoNome: _asNullableString(
+        json['tipoDispositivoNome'] ?? atributos['tipo_dispositivo_nome'],
+      ),
+      tipoDispositivoCategoria: _asNullableString(
+        json['tipoDispositivoCategoria'] ??
+            atributos['tipo_dispositivo_categoria'],
+      ),
+      material: _asString(
+        atributos['material'] ?? atributos['mat'],
+        fallback: 'Não informado',
+      ),
+      esforcoTracao: _asString(
+        atributos['esforco'] ?? atributos['esf'],
+        fallback: 'Não informado',
+      ),
+      altura: _asString(atributos['alt'], fallback: 'Não informado'),
+      potenciaNominal: _asString(
+        atributos['pot_nom'],
+        fallback: 'Não informado',
+      ),
+      subestacaoConectada: _asString(
+        atributos['subestacao'] ?? atributos['sub'],
+        fallback: 'Não informado',
+      ),
+      statusOperacional: _asString(
+        atributos['statusOperacional'] ??
+            atributos['sitcont'] ??
+            atributos['sit_ativ'],
+        fallback: 'Não informado',
+      ),
+      situacaoAtivo: _asString(
+        atributos['situacaoAtivo'] ??
+            atributos['sitcont'] ??
+            atributos['sit_ativ'],
+        fallback: 'Não informado',
+      ),
+      distribuidora: _asString(json['distribuidora'], fallback: 'Não informada'),
+    );
+  }
+
+  static TipoAtivo _tipoFromApi(dynamic value) {
+    switch (value.toString().toUpperCase()) {
+      case 'POSTE':
+        return TipoAtivo.poste;
+      case 'SUBESTACAO':
+        return TipoAtivo.subestacao;
+      case 'TRANSFORMADOR':
+        return TipoAtivo.transformador;
+      case 'CHAVE_FUSIVEL':
+        return TipoAtivo.chaveFusivel;
+      case 'CHAVE_SECCIONADORA':
+        return TipoAtivo.chaveSeccionadora;
+      case 'RELIGADOR':
+        return TipoAtivo.religador;
+      case 'SECCIONADOR_AUTOMATICO':
+        return TipoAtivo.seccionadorAutomatico;
+      case 'REGULADOR_TENSAO':
+        return TipoAtivo.reguladorTensao;
+      case 'BANCO_CAPACITORES':
+        return TipoAtivo.bancoCapacitores;
+      case 'DISPOSITIVO':
+        return TipoAtivo.dispositivo;
+      default:
+        throw FormatException('Tipo de ativo não suportado: $value');
+    }
+  }
+
+  static Map<String, dynamic> _asMap(dynamic value) =>
+      value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+
+  static String _asString(dynamic value, {String fallback = ''}) =>
+      value?.toString() ?? fallback;
+
+  static String? _asNullableString(dynamic value) =>
+      value?.toString();
+
+  static int? _asInt(dynamic value) =>
+      value is int ? value : int.tryParse('$value');
+
+  static double _asDouble(dynamic value) {
+    final parsed = value is num ? value.toDouble() : double.tryParse('$value');
+    if (parsed == null || !parsed.isFinite) {
+      throw const FormatException('Coordenada de ativo inválida.');
+    }
+    return parsed;
+  }
+}

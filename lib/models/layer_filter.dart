@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 
 enum TipoIndicadorVisual {
-  linha,
   ponto,
   quadrado,
   anel,
@@ -38,30 +37,6 @@ class CatalogoCamadas {
   static List<GrupoCamadasFiltro> obterGrupos() {
     return [
       GrupoCamadasFiltro(
-        titulo: 'REDE',
-        categoria: CategoriaAtivo.rede,
-        itens: [
-          ItemCamadaFiltro(
-            tipo: TipoAtivo.redeMT,
-            titulo: 'Cabo de Média Tensão (MT)',
-            indicadorVisual: TipoIndicadorVisual.linha,
-            corIndicador: TipoAtivo.redeMT.cor,
-          ),
-          ItemCamadaFiltro(
-            tipo: TipoAtivo.redeBT,
-            titulo: 'Cabo de Baixa Tensão (BT)',
-            indicadorVisual: TipoIndicadorVisual.linha,
-            corIndicador: TipoAtivo.redeBT.cor,
-          ),
-          ItemCamadaFiltro(
-            tipo: TipoAtivo.redeNeutro,
-            titulo: 'Condutor Terminal / Neutro',
-            indicadorVisual: TipoIndicadorVisual.linha,
-            corIndicador: TipoAtivo.redeNeutro.cor,
-          ),
-        ],
-      ),
-      GrupoCamadasFiltro(
         titulo: 'ESTRUTURAS',
         categoria: CategoriaAtivo.estruturas,
         itens: [
@@ -82,6 +57,12 @@ class CatalogoCamadas {
             titulo: 'Subestação',
             indicadorVisual: TipoIndicadorVisual.quadrado,
             corIndicador: TipoAtivo.subestacao.cor,
+          ),
+          ItemCamadaFiltro(
+            tipo: TipoAtivo.dispositivo,
+            titulo: 'Dispositivo',
+            indicadorVisual: TipoIndicadorVisual.ponto,
+            corIndicador: TipoAtivo.dispositivo.cor,
           ),
         ],
       ),
@@ -138,19 +119,16 @@ class CatalogoCamadas {
 
   static Map<TipoAtivo, bool> obterEstadoInicialPadrao() {
     return {
-      TipoAtivo.redeMT: true,
-      TipoAtivo.redeBT: true,
-      TipoAtivo.redeNeutro: false,
       TipoAtivo.poste: true,
-      TipoAtivo.transformador: false,
+      TipoAtivo.transformador: true,
       TipoAtivo.subestacao: true,
+      TipoAtivo.dispositivo: true,
       TipoAtivo.chaveFusivel: true,
       TipoAtivo.chaveSeccionadora: false,
       TipoAtivo.religador: true,
-      TipoAtivo.seccionadorAutomatico: true, // total 7 de 12 ativas como no Figma
-      TipoAtivo.reguladorTensao: false,
-      TipoAtivo.bancoCapacitores: false,
+      TipoAtivo.seccionadorAutomatico: false,
+      TipoAtivo.reguladorTensao: true,
+      TipoAtivo.bancoCapacitores: true,
     };
   }
 }
-

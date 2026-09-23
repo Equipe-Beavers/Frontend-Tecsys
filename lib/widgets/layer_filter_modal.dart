@@ -49,10 +49,10 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
 
   int get _totalCamadas => _estadoRascunho.length;
 
-  void _limparTodas() {
+  void _limparGrupo(GrupoCamadasFiltro grupo) {
     setState(() {
-      for (final key in _estadoRascunho.keys) {
-        _estadoRascunho[key] = false;
+      for (final item in grupo.itens) {
+        _estadoRascunho[item.tipo] = false;
       }
     });
   }
@@ -136,7 +136,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
                 shrinkWrap: true,
                 children: [
                   for (int i = 0; i < _grupos.length; i++) ...[
-                    _buildSecaoGrupo(_grupos[i]),
+                    _buildSecaoGrupo(_grupos[i], i == 0),
                     if (i < _grupos.length - 1)
                       const Divider(color: AppColors.borderSubtle, height: 24),
                   ],
@@ -199,9 +199,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
     );
   }
 
-  Widget _buildSecaoGrupo(GrupoCamadasFiltro grupo) {
-    final isRede = grupo.categoria == CategoriaAtivo.rede;
-
+  Widget _buildSecaoGrupo(GrupoCamadasFiltro grupo, bool podeLimpar) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -220,18 +218,18 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
                   letterSpacing: 1.0,
                 ),
               ),
-              if (isRede)
-                GestureDetector(
-                  onTap: _limparTodas,
-                  child: const Text(
-                    'Limpar',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.secondaryTeal,
+if (podeLimpar)
+                  GestureDetector(
+                    onTap: () => _limparGrupo(grupo),
+                    child: const Text(
+                      'Limpar',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.secondaryTeal,
+                      ),
                     ),
                   ),
-                ),
             ],
           ),
         ),
@@ -292,15 +290,6 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
 
   Widget _buildIndicadorVisual(ItemCamadaFiltro item) {
     switch (item.indicadorVisual) {
-      case TipoIndicadorVisual.linha:
-        return Container(
-          width: 20,
-          height: 3.5,
-          decoration: BoxDecoration(
-            color: item.corIndicador,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        );
       case TipoIndicadorVisual.ponto:
         return Container(
           width: 10,
@@ -331,4 +320,3 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
     }
   }
 }
-

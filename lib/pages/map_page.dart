@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
@@ -18,48 +20,171 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
+  static const _fallbackCenter = LatLng(-23.4532, -46.4438);
+
   final MapController _mapController = MapController();
   final AtivosService _ativosService = AtivosService();
+  final TextEditingController _buscaController = TextEditingController();
 
-  // Coordenadas iniciais baseadas no protótipo (Uberlândia - MG / CEMIG)
-  final LatLng _centroInicial = const LatLng(-18.9112, -48.2619);
+  List<DistribuidoraResumo> _distribuidoras = [];
+  String? _distribuidoraSelecionada;
+  String? _municipioSelecionado;
+  String _textoBusca = '';
   double _currentZoom = 15.2;
 
   List<AtivoBdgd> _todosAtivos = [];
-  List<SegmentoRede> _segmentosRede = [];
-  Map<TipoAtivo, bool> _camadasAtivas = CatalogoCamadas.obterEstadoInicialPadrao();
+  Map<TipoAtivo, bool> _camadasAtivas =
+      CatalogoCamadas.obterEstadoInicialPadrao();
   AtivoBdgd? _ativoSelecionado;
   bool _carregando = true;
+  String? _erro;
+
+  Timer? _debounceTimer;
+  int _sequenciaRequisicao = 0;
+  bool _mapaPronto = false;
+  bool _distribuidorasProntas = false;
+  bool _cargaInicialFeita = false;
+
+  static const int _limiteAtivos = 3000;
 
   final Map<Marker, AtivoBdgd> _markerAtivoMap = {};
 
   @override
   void initState() {
     super.initState();
-    _carregarDados();
+    _inicializar();
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
+    _buscaController.dispose();
     _mapController.dispose();
+    _ativosService.dispose();
     super.dispose();
   }
 
+  void _aoMapaPronto() {
+    _mapaPronto = true;
+    _tentarCargaInicial();
+  }
+
+  void _tentarCargaInicial() {
+    if (!_mapaPronto || !_distribuidorasProntas || _cargaInicialFeita) {
+      return;
+    }
+    _cargaInicialFeita = true;
+    DistribuidoraResumo? inicial;
+    for (final item in _distribuidoras) {
+      if (item.nome == _distribuidoraSelecionada) {
+        inicial = item;
+        break;
+      }
+    }
+    if (inicial == null) return;
+    _mapController.move(LatLng(inicial.latitude, inicial.longitude), 12.5);
+    _agendarCarregamento();
+  }
+
+  void _agendarCarregamento() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 400), _carregarDados);
+  }
+
   Future<void> _carregarDados() async {
-    final ativos = await _ativosService.getAtivos();
-    final segmentos = await _ativosService.getSegmentosRede();
+    if (!_mapaPronto || _distribuidoraSelecionada == null) return;
+
+    final camadasApi = <String>{
+      for (final entry in _camadasAtivas.entries)
+        if (entry.value) entry.key.apiValue,
+    };
+
+    if (camadasApi.isEmpty) {
+      setState(() {
+        _todosAtivos = [];
+        _carregando = false;
+        _erro = null;
+      });
+      return;
+    }
+
+    final sequencia = ++_sequenciaRequisicao;
+    final bounds = _mapController.camera.visibleBounds;
 
     if (mounted) {
       setState(() {
-        _todosAtivos = ativos;
-        _segmentosRede = segmentos;
+        if (_todosAtivos.isEmpty) _carregando = true;
+        _erro = null;
+      });
+    }
+
+    try {
+      final resultado = await _ativosService.getAtivos(
+        minLatitude: bounds.south,
+        maxLatitude: bounds.north,
+        minLongitude: bounds.west,
+        maxLongitude: bounds.east,
+        distribuidora: _distribuidoraSelecionada,
+        tipos: camadasApi,
+        limit: _limiteAtivos,
+      );
+
+      if (!mounted || sequencia != _sequenciaRequisicao) return;
+      setState(() {
+        _todosAtivos = resultado.ativos;
+        _carregando = false;
+      });
+    } catch (error) {
+      if (!mounted || sequencia != _sequenciaRequisicao) return;
+      setState(() {
+        _erro = 'Não foi possível carregar os ativos reais.';
         _carregando = false;
       });
     }
   }
 
+  Future<void> _inicializar() async {
+    try {
+      final distribuidoras = await _ativosService.getDistribuidoras();
+      if (!mounted || distribuidoras.isEmpty) return;
+      setState(() {
+        _distribuidoras = distribuidoras;
+        _distribuidoraSelecionada = distribuidoras.first.nome;
+        _distribuidorasProntas = true;
+      });
+      _tentarCargaInicial();
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _erro = 'Não foi possível carregar as distribuidoras reais.';
+          _carregando = false;
+        });
+      }
+    }
+  }
+
   int get _totalCamadasAtivas =>
       _camadasAtivas.values.where((ativa) => ativa).length;
+
+  Future<void> _selecionarDistribuidora(String? distribuidora) async {
+    if (distribuidora == null || distribuidora == _distribuidoraSelecionada) {
+      return;
+    }
+    setState(() {
+      _distribuidoraSelecionada = distribuidora;
+      _todosAtivos = [];
+      _ativoSelecionado = null;
+      _municipioSelecionado = null;
+      _textoBusca = '';
+      _buscaController.clear();
+    });
+    final resumo = _distribuidoras.firstWhere(
+      (item) => item.nome == distribuidora,
+    );
+    final centro = LatLng(resumo.latitude, resumo.longitude);
+    _mapController.move(centro, 12.5);
+    _agendarCarregamento();
+  }
 
   void _zoomIn() {
     setState(() {
@@ -76,10 +201,109 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _centralizarRede() {
+    final resumo = _distribuidoras.firstWhere(
+      (item) => item.nome == _distribuidoraSelecionada,
+    );
+    final centro = LatLng(resumo.latitude, resumo.longitude);
     setState(() {
       _currentZoom = 15.2;
-      _mapController.move(_centroInicial, _currentZoom);
+      _mapController.move(centro, _currentZoom);
     });
+  }
+
+  List<String> get _municipiosDisponiveis {
+    final municipios =
+        _todosAtivos
+            .map((ativo) => ativo.municipio)
+            .where((municipio) => municipio != 'Não informado')
+            .toSet()
+            .toList()
+          ..sort();
+    return municipios;
+  }
+
+  List<AtivoBdgd> get _ativosVisiveis {
+    final termo = _textoBusca.trim().toLowerCase();
+    return _todosAtivos.where((ativo) {
+      final correspondeMunicipio =
+          _municipioSelecionado == null ||
+          ativo.municipio == _municipioSelecionado;
+      if (!correspondeMunicipio) return false;
+      if (termo.isEmpty) return true;
+      return ativo.codId.toLowerCase().contains(termo) ||
+          ativo.id.toLowerCase().contains(termo) ||
+          ativo.municipio.toLowerCase().contains(termo) ||
+          ativo.tipo.label.toLowerCase().contains(termo);
+    }).toList();
+  }
+
+  void _aplicarBusca(String valor) {
+    setState(() {
+      _textoBusca = valor;
+    });
+  }
+
+  void _abrirFiltroMunicipio() {
+    final municipios = _municipiosDisponiveis;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                title: Text('Filtrar por cidade'),
+                subtitle: Text(
+                  'Selecione um município para filtrar os ativos no mapa.',
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    ListTile(
+                      title: const Text('Todos os municípios'),
+                      leading: Icon(
+                        _municipioSelecionado == null
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        color: AppColors.primaryLime,
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        setState(() => _municipioSelecionado = null);
+                      },
+                    ),
+                    ...municipios.map(
+                      (municipio) => ListTile(
+                        title: Text(municipio),
+                        leading: Icon(
+                          municipio == _municipioSelecionado
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          color: AppColors.primaryLime,
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _municipioSelecionado = municipio);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _abrirPainelCamadas() {
@@ -90,11 +314,15 @@ class _MapPageState extends State<MapPage> {
         setState(() {
           _camadasAtivas = novasCamadas;
         });
+        _agendarCarregamento();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length} ativas',
-              style: const TextStyle(color: AppColors.textDark, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: AppColors.textDark,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             backgroundColor: AppColors.primaryLime,
             duration: const Duration(seconds: 2),
@@ -131,7 +359,7 @@ class _MapPageState extends State<MapPage> {
   List<Marker> _gerarMarcadores() {
     _markerAtivoMap.clear();
 
-    final ativosFiltrados = _todosAtivos.where((a) {
+    final ativosFiltrados = _ativosVisiveis.where((a) {
       return _camadasAtivas[a.tipo] ?? false;
     }).toList();
 
@@ -163,7 +391,9 @@ class _MapPageState extends State<MapPage> {
         ),
         boxShadow: [
           BoxShadow(
-            color: (isSelected ? AppColors.primaryLime : cor).withValues(alpha: isSelected ? 0.6 : 0.3),
+            color: (isSelected ? AppColors.primaryLime : cor).withValues(
+              alpha: isSelected ? 0.6 : 0.3,
+            ),
             blurRadius: isSelected ? 10 : 5,
             spreadRadius: isSelected ? 2 : 0,
           ),
@@ -179,29 +409,9 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  List<Polyline> _gerarLinhasRede() {
-    final polylines = <Polyline>[];
-
-    for (final segmento in _segmentosRede) {
-      final isAtiva = _camadasAtivas[segmento.tipo] ?? false;
-      if (isAtiva) {
-        polylines.add(
-          Polyline(
-            points: segmento.pontos,
-            color: segmento.cor,
-            strokeWidth: segmento.largura,
-          ),
-        );
-      }
-    }
-
-    return polylines;
-  }
-
   @override
   Widget build(BuildContext context) {
     final marcadores = _gerarMarcadores();
-    final polylines = _gerarLinhasRede();
 
     return Scaffold(
       backgroundColor: AppColors.surfaceBackground,
@@ -211,10 +421,14 @@ class _MapPageState extends State<MapPage> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _centroInicial,
+              initialCenter: _fallbackCenter,
               initialZoom: _currentZoom,
               minZoom: 4.0,
               maxZoom: 19.0,
+              onMapReady: _aoMapaPronto,
+              onPositionChanged: (camera, hasGesture) {
+                _agendarCarregamento();
+              },
               onTap: (tapPosition, latLng) {
                 if (_ativoSelecionado != null) {
                   setState(() {
@@ -229,9 +443,6 @@ class _MapPageState extends State<MapPage> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.tecsys.geomash',
               ),
-
-              // Camada de Redes Elétricas (Polylines MT, BT, Neutro)
-              PolylineLayer(polylines: polylines),
 
               // Camada de Clustering de Marcadores da BDGD
               MarkerClusterLayerWidget(
@@ -258,7 +469,9 @@ class _MapPageState extends State<MapPage> {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primaryLime.withValues(alpha: 0.35),
+                            color: AppColors.primaryLime.withValues(
+                              alpha: 0.35,
+                            ),
                             blurRadius: 8,
                             spreadRadius: 1,
                           ),
@@ -313,12 +526,22 @@ class _MapPageState extends State<MapPage> {
                         size: 22,
                       ),
                       const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'Buscar alimentador ou município',
-                          style: TextStyle(
-                            color: AppColors.textMuted,
+                      Expanded(
+                        child: TextField(
+                          controller: _buscaController,
+                          onChanged: _aplicarBusca,
+                          style: const TextStyle(
+                            color: AppColors.textWhite,
                             fontSize: 14,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Buscar ativo ou município',
+                            hintStyle: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 14,
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
                           ),
                         ),
                       ),
@@ -337,32 +560,71 @@ class _MapPageState extends State<MapPage> {
                 ),
                 const SizedBox(height: 10),
 
-                // Chips de Filtro Rápido (381 - CEMIG ▼ | Cidade / bairro ▼)
+                // Chips de Filtro Rápido derivados dos ativos retornados pela API.
                 Row(
                   children: [
                     _buildChipFiltro(
-                      label: '381 - CEMIG',
+                      label: _distribuidoraSelecionada ?? 'Distribuidora',
                       destaque: true,
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Distribuidora ativa: CEMIG (381)'),
-                            duration: Duration(seconds: 1),
+                        showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (context) => SafeArea(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight:
+                                    MediaQuery.of(context).size.height * 0.7,
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const ListTile(
+                                    title: Text('Selecionar distribuidora'),
+                                    subtitle: Text(
+                                      'Os ativos serão recarregados para a região escolhida.',
+                                    ),
+                                  ),
+                                  const Divider(height: 1),
+                                  Flexible(
+                                    child: ListView(
+                                      shrinkWrap: true,
+                                      padding: EdgeInsets.zero,
+                                      children: _distribuidoras
+                                          .map(
+                                            (distribuidora) => ListTile(
+                                              title: Text(distribuidora.nome),
+                                              leading: Icon(
+                                                distribuidora.nome ==
+                                                        _distribuidoraSelecionada
+                                                    ? Icons
+                                                        .radio_button_checked
+                                                    : Icons
+                                                        .radio_button_unchecked,
+                                                color: AppColors.primaryLime,
+                                              ),
+                                              onTap: () {
+                                                Navigator.pop(context);
+                                                _selecionarDistribuidora(
+                                                  distribuidora.nome,
+                                                );
+                                              },
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         );
                       },
                     ),
                     const SizedBox(width: 8),
                     _buildChipFiltro(
-                      label: 'Cidade / bairro',
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Região: Uberlândia - MG'),
-                            duration: Duration(seconds: 1),
-                          ),
-                        );
-                      },
+                      label: _municipioSelecionado ?? 'Cidade / bairro',
+                      onTap: _abrirFiltroMunicipio,
                     ),
                   ],
                 ),
@@ -394,7 +656,10 @@ class _MapPageState extends State<MapPage> {
                   const SnackBar(
                     content: Text(
                       'Avançar para seleção de área e criação de estudo (RF03 / RF04)',
-                      style: TextStyle(color: AppColors.textDark, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: AppColors.textDark,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     backgroundColor: AppColors.primaryLime,
                     behavior: SnackBarBehavior.floating,
@@ -430,12 +695,27 @@ class _MapPageState extends State<MapPage> {
           ),
 
           // Indicador de Carregamento
-          if (_carregando)
+          if (_carregando && _todosAtivos.isEmpty)
             Container(
               color: Colors.black45,
               child: const Center(
-                child: CircularProgressIndicator(
-                  color: AppColors.primaryLime,
+                child: CircularProgressIndicator(color: AppColors.primaryLime),
+              ),
+            ),
+          if (_erro != null)
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 100,
+              child: Card(
+                color: AppColors.surfaceCard,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    _erro!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.textWhite),
+                  ),
                 ),
               ),
             ),
@@ -457,7 +737,9 @@ class _MapPageState extends State<MapPage> {
           color: AppColors.surfaceCard.withValues(alpha: 0.95),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: destaque ? AppColors.primaryLime.withValues(alpha: 0.5) : AppColors.border,
+            color: destaque
+                ? AppColors.primaryLime.withValues(alpha: 0.5)
+                : AppColors.border,
             width: 1.0,
           ),
           boxShadow: [

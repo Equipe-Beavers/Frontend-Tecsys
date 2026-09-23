@@ -147,45 +147,56 @@ class AssetDetailSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
-                children: [
-                  _buildLinhaAtributo(
-                    rotulo: 'Lat / Long',
-                    valor:
-                        '${ativo.latitude.toStringAsFixed(4)} / ${ativo.longitude.toStringAsFixed(4)}',
-                  ),
-                  _buildLinhaAtributo(
-                    rotulo: 'Material',
-                    valor: ativo.material,
-                  ),
-                  _buildLinhaAtributo(
-                    rotulo: 'Esforço / tração',
-                    valor: ativo.esforcoTracao,
-                  ),
-                  _buildLinhaAtributo(
-                    rotulo: 'Ordem de imobilização',
-                    valor: ativo.ordemImobilizacao,
-                  ),
-                  _buildLinhaAtributo(
-                    rotulo: 'Situação do ativo',
-                    valor: ativo.situacaoAtivo,
-                    valorColor: AppColors.primaryLime,
-                  ),
-                  _buildLinhaAtributo(
-                    rotulo: 'Subestação conectada',
-                    valor: ativo.subestacaoConectada,
-                  ),
-                  _buildLinhaAtributo(
-                    rotulo: 'Ponto de acesso',
-                    valor: ativo.pontoAcesso,
-                    mostrarDivisor: false,
-                  ),
-                ],
+                children: _linhasAtributos(ativo),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _linhasAtributos(AtivoBdgd ativo) {
+    bool preenchido(String valor) =>
+        valor.isNotEmpty &&
+        valor != 'Não informado' &&
+        valor != 'Não informada';
+
+    final linhas = <MapEntry<String, String>>[
+      MapEntry(
+        'Lat / Long',
+        '${ativo.latitude.toStringAsFixed(4)} / '
+        '${ativo.longitude.toStringAsFixed(4)}',
+      ),
+      MapEntry('Município', ativo.municipio),
+      MapEntry('Distribuidora', ativo.distribuidora),
+      if (preenchido(ativo.codId)) MapEntry('Código BDGD', ativo.codId),
+      if (ativo.tipoDispositivoNome != null &&
+          ativo.tipoDispositivoNome!.isNotEmpty)
+        MapEntry('Tipo de dispositivo', ativo.tipoDispositivoNome!),
+      if (preenchido(ativo.material)) MapEntry('Material', ativo.material),
+      if (preenchido(ativo.esforcoTracao))
+        MapEntry('Esforço / tração', ativo.esforcoTracao),
+      if (preenchido(ativo.altura)) MapEntry('Altura (m)', ativo.altura),
+      if (preenchido(ativo.potenciaNominal))
+        MapEntry('Potência nominal', ativo.potenciaNominal),
+      if (preenchido(ativo.subestacaoConectada))
+        MapEntry('Subestação conectada', ativo.subestacaoConectada),
+    ];
+
+    final widgets = <Widget>[];
+    for (var i = 0; i < linhas.length; i++) {
+      final linha = linhas[i];
+      widgets.add(
+        _buildLinhaAtributo(
+          rotulo: linha.key,
+          valor: linha.value,
+          valorColor: AppColors.textWhite,
+          mostrarDivisor: i != linhas.length - 1,
+        ),
+      );
+    }
+    return widgets;
   }
 
   Widget _buildLinhaAtributo({
