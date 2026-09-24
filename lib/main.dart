@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/pages/map_page.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/appbar.dart';
+import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 
 void main() {
