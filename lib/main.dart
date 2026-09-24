@@ -34,21 +34,14 @@ class _MyAppState extends State<MyApp> {
         fontFamily: 'sans-serif',
       ),
       home: Scaffold(
-        appBar: const PreferredSize(
-          preferredSize: Size.fromHeight(24),
-          child: AppBarTime(),
-        ),
         body: IndexedStack(
-          index: _abaSelecionada,
+          index: 0,
           children: [
             const MapPage(),
-            _buildPlaceholderPagina('Estudos e Cenários', Icons.layers_outlined),
-            _buildPlaceholderPagina('Biblioteca de Itens', Icons.description_outlined),
-            _buildPlaceholderPagina('Perfil do Usuário', Icons.person_outline),
           ],
         ),
         bottomNavigationBar: Navbar(
-          currentIndex: _abaSelecionada,
+          currentIndex: 0,
           onTap: (index) {
             setState(() {
               _abaSelecionada = index;
@@ -59,34 +52,5 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
-  Widget _buildPlaceholderPagina(String titulo, IconData icone) {
-    return Container(
-      color: AppColors.surfaceBackground,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icone, size: 48, color: AppColors.primaryLime.withValues(alpha: 0.6)),
-            const SizedBox(height: 16),
-            Text(
-              titulo,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textWhite,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Módulo em desenvolvimento nas próximas etapas',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textMuted,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 }

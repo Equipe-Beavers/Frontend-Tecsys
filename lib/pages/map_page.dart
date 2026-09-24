@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
+import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
+import 'package:frontend_tecsys/widgets/search_bar.dart';
+import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/models/layer_filter.dart';
@@ -10,7 +13,8 @@ import 'package:frontend_tecsys/services/ativos_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
-import 'package:frontend_tecsys/widgets/map_controls.dart';
+import 'package:frontend_tecsys/widgets/map_navigation.dart';
+import 'package:frontend_tecsys/widgets/filter_chip.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -48,6 +52,9 @@ class _MapPageState extends State<MapPage> {
   static const int _limiteAtivos = 3000;
 
   final Map<Marker, AtivoBdgd> _markerAtivoMap = {};
+
+  List<LatLng> polygonPoints = [];
+  bool isDrawing = false;
 
   @override
   void initState() {
@@ -200,7 +207,7 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
-  void _centralizarRede() {
+  void _onLocationPressed() {
     final resumo = _distribuidoras.firstWhere(
       (item) => item.nome == _distribuidoraSelecionada,
     );
@@ -421,235 +428,135 @@ class _MapPageState extends State<MapPage> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _fallbackCenter,
+              initialCenter: LatLng(-14.2350, -51.9253),
               initialZoom: _currentZoom,
-              minZoom: 4.0,
-              maxZoom: 19.0,
-              onMapReady: _aoMapaPronto,
-              onPositionChanged: (camera, hasGesture) {
-                _agendarCarregamento();
-              },
-              onTap: (tapPosition, latLng) {
-                if (_ativoSelecionado != null) {
-                  setState(() {
-                    _ativoSelecionado = null;
-                  });
-                }
+              minZoom: 2.0,
+              maxZoom: 18.0,
+              cameraConstraint: CameraConstraint.contain(
+                bounds: LatLngBounds(
+                  LatLng(-89.9, -180.0),
+                  LatLng(89.9, 180.0),
+                ),
+              ),
+              onTap: (tapPosition, point) {
+                if (!isDrawing) return;
+                setState(() {
+                  polygonPoints.add(point);
+                });
               },
             ),
             children: [
-              // Camada de Tiles (OpenStreetMap com visual estilizado escuro)
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.tecsys.geomash',
+                userAgentPackageName: 'com.example.frontend_tecsys',
               ),
-
-              // Camada de Clustering de Marcadores da BDGD
-              MarkerClusterLayerWidget(
-                options: MarkerClusterLayerOptions(
-                  maxClusterRadius: 50,
-                  size: const Size(42, 42),
-                  markers: marcadores,
-                  showPolygon: false,
-                  zoomToBoundsOnClick: true,
-                  onMarkerTap: (marker) {
-                    final ativo = _markerAtivoMap[marker];
-                    if (ativo != null) {
-                      _selecionarAtivo(ativo);
-                    }
-                  },
-                  builder: (context, markers) {
-                    return Container(
+              PolygonLayer(
+                polygons: polygonPoints.length >= 3
+                    ? <Polygon<Object>>[
+                        Polygon<Object>(
+                          points: polygonPoints,
+                          color: AppColors.navBarBackground.withAlpha(100),
+                          borderColor: AppColors.navBarBackground,
+                          borderStrokeWidth: 2.5,
+                          pattern: StrokePattern.dashed(segments: [10, 5]),
+                        ),
+                      ]
+                    : <Polygon<Object>>[],
+              ),
+              MarkerLayer(
+                markers: polygonPoints.map((point) {
+                  return Marker(
+                    point: point,
+                    width: 14.0,
+                    height: 14.0,
+                    alignment: Alignment.center,
+                    child: Container(
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceCard,
+                        color: AppColors.navBarBackground,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.primaryLime,
+                          color: AppColors.navBarBackground,
                           width: 2.0,
                         ),
-                        boxShadow: [
+                        boxShadow: const [
                           BoxShadow(
-                            color: AppColors.primaryLime.withValues(
-                              alpha: 0.35,
-                            ),
-                            blurRadius: 8,
-                            spreadRadius: 1,
+                            color: Colors.black26,
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
                           ),
                         ],
                       ),
-                      child: Center(
-                        child: Text(
-                          '${markers.length}',
-                          style: const TextStyle(
-                            color: AppColors.primaryLime,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                }).toList(),
               ),
             ],
           ),
-
-          // 2. Barra Superior: Busca & Chips de Distribuidora e Região (Figma Tela 1)
           Positioned(
-            top: 12,
-            left: 16,
-            right: 16,
+            top: 10,
+            left: 15,
+            right: 15,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 10,
               children: [
-                // Barra de Busca estilizada
-                Container(
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceCard.withValues(alpha: 0.95),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.border, width: 1.0),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.35),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      const SizedBox(width: 14),
-                      const Icon(
-                        Icons.search,
-                        color: AppColors.textMuted,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: _buscaController,
-                          onChanged: _aplicarBusca,
-                          style: const TextStyle(
-                            color: AppColors.textWhite,
-                            fontSize: 14,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: 'Buscar ativo ou município',
-                            hintStyle: TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 14,
-                            ),
-                            border: InputBorder.none,
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.near_me_outlined,
-                          color: AppColors.primaryLime,
-                          size: 20,
-                        ),
-                        onPressed: _centralizarRede,
-                        tooltip: 'Localizar',
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Chips de Filtro Rápido derivados dos ativos retornados pela API.
                 Row(
+                  spacing: 10,
                   children: [
-                    _buildChipFiltro(
-                      label: _distribuidoraSelecionada ?? 'Distribuidora',
-                      destaque: true,
+                    Expanded(child: MapSearchBar()),
+                    LayerFilterButton(
+                      onPressed: _abrirPainelCamadas,
+                      activeLayersCount: _totalCamadasAtivas,
+                    ),
+                  ],
+                ),
+                Row(
+                  spacing: 10,
+                  children: [
+                    FilterChipWidget(
+                      label: _distribuidoraSelecionada ?? 'DIST.',
+                      isSelected: true,
                       onTap: () {
-                        showModalBottomSheet<void>(
+                        SelectionBottomSheet.show<String>(
                           context: context,
-                          isScrollControlled: true,
-                          builder: (context) => SafeArea(
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxHeight:
-                                    MediaQuery.of(context).size.height * 0.7,
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const ListTile(
-                                    title: Text('Selecionar distribuidora'),
-                                    subtitle: Text(
-                                      'Os ativos serão recarregados para a região escolhida.',
-                                    ),
-                                  ),
-                                  const Divider(height: 1),
-                                  Flexible(
-                                    child: ListView(
-                                      shrinkWrap: true,
-                                      padding: EdgeInsets.zero,
-                                      children: _distribuidoras
-                                          .map(
-                                            (distribuidora) => ListTile(
-                                              title: Text(distribuidora.nome),
-                                              leading: Icon(
-                                                distribuidora.nome ==
-                                                        _distribuidoraSelecionada
-                                                    ? Icons
-                                                        .radio_button_checked
-                                                    : Icons
-                                                        .radio_button_unchecked,
-                                                color: AppColors.primaryLime,
-                                              ),
-                                              onTap: () {
-                                                Navigator.pop(context);
-                                                _selecionarDistribuidora(
-                                                  distribuidora.nome,
-                                                );
-                                              },
-                                            ),
-                                          )
-                                          .toList(),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                          title: "Selecionar distribuidora",
+                          subtitle: "Os ativos serão recarregados para a região escolhida.",
+                          items: _distribuidoras
+                              .map(
+                                (dist) => SelectionItem(
+                                  title: dist.nome,
+                                  value: dist.nome,
+                                ),
+                              )
+                              .toList(),
+                          selectedValue: _distribuidoraSelecionada,
+                          onSelected: (distribuidoraNome) {
+                            _selecionarDistribuidora(distribuidoraNome);
+                          },
                         );
                       },
                     ),
-                    const SizedBox(width: 8),
-                    _buildChipFiltro(
+                    FilterChipWidget(
                       label: _municipioSelecionado ?? 'Cidade / bairro',
                       onTap: _abrirFiltroMunicipio,
                     ),
                   ],
                 ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: MapNavigationControls(
+                    onZoomIn: _zoomIn,
+                    onZoomOut: _zoomOut,
+                    onLocationPressed: _onLocationPressed,
+                  ),
+                ),
               ],
             ),
           ),
-
-          // 3. Controles Flutuantes à Direita (Camadas, Zoom, Localização)
           Positioned(
-            right: 16,
-            top: 130,
-            child: MapControls(
-              onZoomIn: _zoomIn,
-              onZoomOut: _zoomOut,
-              onLocation: _centralizarRede,
-              onAbrirCamadas: _abrirPainelCamadas,
-              totalCamadasAtivas: _totalCamadasAtivas,
-            ),
-          ),
-
-          // 4. Botão Inferior Flutuante: "+ Iniciar estudo" (Figma Tela 1)
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: 16,
+            left: 15,
+            right: 15,
+            bottom: 10,
             child: ElevatedButton(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -670,21 +577,26 @@ class _MapPageState extends State<MapPage> {
                 backgroundColor: AppColors.primaryLime,
                 foregroundColor: AppColors.textDark,
                 elevation: 6,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 17),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
               ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
+                spacing: 8,
                 children: [
-                  Icon(Icons.add, color: AppColors.textDark, size: 22),
-                  SizedBox(width: 8),
+                  Icon(
+                    Icons.add,
+                    color: AppColors.textDark,
+                    size: 16,
+                    weight: 10.0,
+                  ),
                   Text(
                     'Iniciar estudo',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.3,
                     ),
@@ -693,7 +605,6 @@ class _MapPageState extends State<MapPage> {
               ),
             ),
           ),
-
           // Indicador de Carregamento
           if (_carregando && _todosAtivos.isEmpty)
             Container(
@@ -720,66 +631,6 @@ class _MapPageState extends State<MapPage> {
               ),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildChipFiltro({
-    required String label,
-    required VoidCallback onTap,
-    bool destaque = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceCard.withValues(alpha: 0.95),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: destaque
-                ? AppColors.primaryLime.withValues(alpha: 0.5)
-                : AppColors.border,
-            width: 1.0,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (destaque) ...[
-              Container(
-                width: 7,
-                height: 7,
-                decoration: const BoxDecoration(
-                  color: AppColors.primaryLime,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                color: destaque ? AppColors.textWhite : AppColors.textMuted,
-                fontSize: 12,
-                fontWeight: destaque ? FontWeight.bold : FontWeight.w500,
-              ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.arrow_drop_down,
-              color: AppColors.textMuted,
-              size: 16,
-            ),
-          ],
-        ),
       ),
     );
   }
