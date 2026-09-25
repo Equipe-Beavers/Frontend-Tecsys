@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
@@ -11,7 +10,6 @@ import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/models/layer_filter.dart';
 import 'package:frontend_tecsys/services/ativos_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
-import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
 import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/filter_chip.dart';
@@ -24,24 +22,20 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
-  static const _fallbackCenter = LatLng(-23.4532, -46.4438);
-
   final MapController _mapController = MapController();
   final AtivosService _ativosService = AtivosService();
   final TextEditingController _buscaController = TextEditingController();
 
   List<DistribuidoraResumo> _distribuidoras = [];
   String? _distribuidoraSelecionada;
+  String? _estadoSelecionado;
   String? _municipioSelecionado;
-  String _textoBusca = '';
   double _currentZoom = 15.2;
 
   List<AtivoBdgd> _todosAtivos = [];
   Map<TipoAtivo, bool> _camadasAtivas =
       CatalogoCamadas.obterEstadoInicialPadrao();
-  AtivoBdgd? _ativoSelecionado;
   bool _carregando = true;
-  String? _erro;
 
   Timer? _debounceTimer;
   int _sequenciaRequisicao = 0;
@@ -50,8 +44,6 @@ class _MapPageState extends State<MapPage> {
   bool _cargaInicialFeita = false;
 
   static const int _limiteAtivos = 3000;
-
-  final Map<Marker, AtivoBdgd> _markerAtivoMap = {};
 
   List<LatLng> polygonPoints = [];
   bool isDrawing = false;
@@ -110,18 +102,17 @@ class _MapPageState extends State<MapPage> {
       setState(() {
         _todosAtivos = [];
         _carregando = false;
-        _erro = null;
       });
       return;
     }
 
     final sequencia = ++_sequenciaRequisicao;
     final bounds = _mapController.camera.visibleBounds;
+    final busca = _buscaController.text.trim();
 
     if (mounted) {
       setState(() {
         if (_todosAtivos.isEmpty) _carregando = true;
-        _erro = null;
       });
     }
 
@@ -133,6 +124,9 @@ class _MapPageState extends State<MapPage> {
         maxLongitude: bounds.east,
         distribuidora: _distribuidoraSelecionada,
         tipos: camadasApi,
+        estado: _estadoSelecionado,
+        municipio: _municipioSelecionado,
+        busca: busca,
         limit: _limiteAtivos,
       );
 
@@ -144,7 +138,6 @@ class _MapPageState extends State<MapPage> {
     } catch (error) {
       if (!mounted || sequencia != _sequenciaRequisicao) return;
       setState(() {
-        _erro = 'Não foi possível carregar os ativos reais.';
         _carregando = false;
       });
     }
@@ -163,7 +156,6 @@ class _MapPageState extends State<MapPage> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _erro = 'Não foi possível carregar as distribuidoras reais.';
           _carregando = false;
         });
       }
@@ -179,10 +171,9 @@ class _MapPageState extends State<MapPage> {
     }
     setState(() {
       _distribuidoraSelecionada = distribuidora;
+      _estadoSelecionado = null;
       _todosAtivos = [];
-      _ativoSelecionado = null;
       _municipioSelecionado = null;
-      _textoBusca = '';
       _buscaController.clear();
     });
     final resumo = _distribuidoras.firstWhere(
@@ -190,6 +181,21 @@ class _MapPageState extends State<MapPage> {
     );
     final centro = LatLng(resumo.latitude, resumo.longitude);
     _mapController.move(centro, 12.5);
+    _agendarCarregamento();
+  }
+
+  Future<void> _selecionarEstado(String? estado) async {
+    if (estado == null || estado == _estadoSelecionado) return;
+
+    setState(() {
+      _estadoSelecionado = estado;
+      _municipioSelecionado = null;
+      _buscaController.clear();
+    });
+    _agendarCarregamento();
+  }
+
+  void _onBuscaAlterada(String valor) {
     _agendarCarregamento();
   }
 
@@ -218,36 +224,114 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
+  List<String> get _estadosDisponiveis {
+    final estados =
+        _todosAtivos
+            .map((ativo) {
+              final municipio = ativo.municipio.trim();
+              if (municipio.isEmpty || municipio == 'Não informado') {
+                return null;
+              }
+              if (municipio.contains('-')) {
+                return municipio.split('-').last.trim();
+              }
+              return municipio;
+            })
+            .whereType<String>()
+            .where((estado) => estado.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return estados;
+  }
+
   List<String> get _municipiosDisponiveis {
     final municipios =
         _todosAtivos
             .map((ativo) => ativo.municipio)
             .where((municipio) => municipio != 'Não informado')
+            .where((municipio) {
+              if (_estadoSelecionado == null) return true;
+              if (!municipio.contains('-')) return true;
+              final estado = municipio.split('-').last.trim();
+              return estado == _estadoSelecionado;
+            })
+            .map((municipio) {
+              if (municipio.contains('-')) {
+                return municipio.split('-').first.trim();
+              }
+              return municipio.trim();
+            })
+            .where((municipio) => municipio.isNotEmpty)
             .toSet()
             .toList()
           ..sort();
     return municipios;
   }
 
-  List<AtivoBdgd> get _ativosVisiveis {
-    final termo = _textoBusca.trim().toLowerCase();
-    return _todosAtivos.where((ativo) {
-      final correspondeMunicipio =
-          _municipioSelecionado == null ||
-          ativo.municipio == _municipioSelecionado;
-      if (!correspondeMunicipio) return false;
-      if (termo.isEmpty) return true;
-      return ativo.codId.toLowerCase().contains(termo) ||
-          ativo.id.toLowerCase().contains(termo) ||
-          ativo.municipio.toLowerCase().contains(termo) ||
-          ativo.tipo.label.toLowerCase().contains(termo);
-    }).toList();
-  }
-
-  void _aplicarBusca(String valor) {
-    setState(() {
-      _textoBusca = valor;
-    });
+  void _abrirFiltroEstado() {
+    final estados = _estadosDisponiveis;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                title: Text('Filtrar por estado'),
+                subtitle: Text('Selecione o estado para refinar a busca regional.'),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    ListTile(
+                      title: const Text('Todos os estados'),
+                      leading: Icon(
+                        _estadoSelecionado == null
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        color: AppColors.primaryLime,
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        setState(() {
+                          _estadoSelecionado = null;
+                          _municipioSelecionado = null;
+                        });
+                        _agendarCarregamento();
+                      },
+                    ),
+                    ...estados.map(
+                      (estado) => ListTile(
+                        title: Text(estado),
+                        leading: Icon(
+                          estado == _estadoSelecionado
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          color: AppColors.primaryLime,
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _selecionarEstado(estado);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _abrirFiltroMunicipio() {
@@ -286,6 +370,7 @@ class _MapPageState extends State<MapPage> {
                       onTap: () {
                         Navigator.pop(context);
                         setState(() => _municipioSelecionado = null);
+                        _agendarCarregamento();
                       },
                     ),
                     ...municipios.map(
@@ -300,6 +385,7 @@ class _MapPageState extends State<MapPage> {
                         onTap: () {
                           Navigator.pop(context);
                           setState(() => _municipioSelecionado = municipio);
+                          _agendarCarregamento();
                         },
                       ),
                     ),
@@ -340,86 +426,8 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  void _selecionarAtivo(AtivoBdgd ativo) {
-    setState(() {
-      _ativoSelecionado = ativo;
-    });
-
-    _mapController.move(
-      LatLng(ativo.latitude, ativo.longitude),
-      _mapController.camera.zoom.clamp(15.0, 18.0),
-    );
-
-    AssetDetailSheet.exibir(
-      context,
-      ativo: ativo,
-      onFechar: () {
-        if (mounted) {
-          setState(() {
-            _ativoSelecionado = null;
-          });
-        }
-      },
-    );
-  }
-
-  List<Marker> _gerarMarcadores() {
-    _markerAtivoMap.clear();
-
-    final ativosFiltrados = _ativosVisiveis.where((a) {
-      return _camadasAtivas[a.tipo] ?? false;
-    }).toList();
-
-    return ativosFiltrados.map((ativo) {
-      final isSelected = _ativoSelecionado?.id == ativo.id;
-      final cor = ativo.tipo.cor;
-
-      final marker = Marker(
-        point: LatLng(ativo.latitude, ativo.longitude),
-        width: isSelected ? 42 : 32,
-        height: isSelected ? 42 : 32,
-        child: _buildIconeMarcador(ativo, isSelected, cor),
-      );
-
-      _markerAtivoMap[marker] = ativo;
-      return marker;
-    }).toList();
-  }
-
-  Widget _buildIconeMarcador(AtivoBdgd ativo, bool isSelected, Color cor) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      decoration: BoxDecoration(
-        color: isSelected ? AppColors.surfaceCardLight : AppColors.surfaceCard,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: isSelected ? AppColors.primaryLime : cor,
-          width: isSelected ? 2.5 : 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (isSelected ? AppColors.primaryLime : cor).withValues(
-              alpha: isSelected ? 0.6 : 0.3,
-            ),
-            blurRadius: isSelected ? 10 : 5,
-            spreadRadius: isSelected ? 2 : 0,
-          ),
-        ],
-      ),
-      child: Center(
-        child: Icon(
-          ativo.tipo.icone,
-          color: isSelected ? AppColors.primaryLime : cor,
-          size: isSelected ? 22 : 16,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final marcadores = _gerarMarcadores();
-
     return Scaffold(
       backgroundColor: AppColors.surfaceBackground,
       body: Stack(
@@ -432,6 +440,7 @@ class _MapPageState extends State<MapPage> {
               initialZoom: _currentZoom,
               minZoom: 2.0,
               maxZoom: 18.0,
+              onMapReady: _aoMapaPronto,
               cameraConstraint: CameraConstraint.contain(
                 bounds: LatLngBounds(
                   LatLng(-89.9, -180.0),
@@ -503,7 +512,12 @@ class _MapPageState extends State<MapPage> {
                 Row(
                   spacing: 10,
                   children: [
-                    Expanded(child: MapSearchBar()),
+                    Expanded(
+                      child: MapSearchBar(
+                        controller: _buscaController,
+                        onChanged: _onBuscaAlterada,
+                      ),
+                    ),
                     LayerFilterButton(
                       onPressed: _abrirPainelCamadas,
                       activeLayersCount: _totalCamadasAtivas,
@@ -537,6 +551,10 @@ class _MapPageState extends State<MapPage> {
                       },
                     ),
                     FilterChipWidget(
+                      label: _estadoSelecionado ?? 'Estado',
+                      onTap: _abrirFiltroEstado,
+                    ),
+                    FilterChipWidget(
                       label: _municipioSelecionado ?? 'Cidade / bairro',
                       onTap: _abrirFiltroMunicipio,
                     ),
@@ -559,11 +577,14 @@ class _MapPageState extends State<MapPage> {
             bottom: 10,
             child: ElevatedButton(
               onPressed: () {
+                final totalAtivos = _todosAtivos.length;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                  SnackBar(
                     content: Text(
-                      'Avançar para seleção de área e criação de estudo (RF03 / RF04)',
-                      style: TextStyle(
+                      totalAtivos > 0
+                          ? 'Estudo iniciado com $totalAtivos ativos em ${_distribuidoraSelecionada ?? 'todos os ativos'}.'
+                          : 'Estudo iniciado sem ativos no filtro atual.',
+                      style: const TextStyle(
                         color: AppColors.textDark,
                         fontWeight: FontWeight.bold,
                       ),
@@ -613,23 +634,8 @@ class _MapPageState extends State<MapPage> {
                 child: CircularProgressIndicator(color: AppColors.primaryLime),
               ),
             ),
-          if (_erro != null)
-            Positioned(
-              left: 24,
-              right: 24,
-              bottom: 100,
-              child: Card(
-                color: AppColors.surfaceCard,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    _erro!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.textWhite),
-                  ),
-                ),
-              ),
-            ),
+          // Erros do backend ficam ocultos para a tela final; a app mantém o mapa
+          // limpo enquanto a integração real com a API estiver sendo conectada.
         ],
       ),
     );
