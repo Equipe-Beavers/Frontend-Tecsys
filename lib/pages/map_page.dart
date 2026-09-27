@@ -30,7 +30,7 @@ class _MapPageState extends State<MapPage> {
   String? _distribuidoraSelecionada;
   String? _estadoSelecionado;
   String? _municipioSelecionado;
-  double _currentZoom = 15.2;
+  double _currentZoom = 3.8;
 
   List<AtivoBdgd> _todosAtivos = [];
   Map<TipoAtivo, bool> _camadasAtivas =
@@ -69,29 +69,29 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _tentarCargaInicial() {
-    if (!_mapaPronto || !_distribuidorasProntas || _cargaInicialFeita) {
+    if (!_mapaPronto ||
+        !_distribuidorasProntas ||
+        _cargaInicialFeita ||
+        _distribuidoraSelecionada == null) {
       return;
     }
+
     _cargaInicialFeita = true;
-    DistribuidoraResumo? inicial;
-    for (final item in _distribuidoras) {
-      if (item.nome == _distribuidoraSelecionada) {
-        inicial = item;
-        break;
-      }
-    }
-    if (inicial == null) return;
-    _mapController.move(LatLng(inicial.latitude, inicial.longitude), 12.5);
     _agendarCarregamento();
   }
 
   void _agendarCarregamento() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 400), _carregarDados);
+    _debounceTimer = Timer(
+      const Duration(milliseconds: 400),
+      _carregarDados,
+    );
   }
 
   Future<void> _carregarDados() async {
-    if (!_mapaPronto || _distribuidoraSelecionada == null) return;
+    if (!_mapaPronto || _distribuidoraSelecionada == null) {
+      return;
+    }
 
     final camadasApi = <String>{
       for (final entry in _camadasAtivas.entries)
@@ -112,7 +112,9 @@ class _MapPageState extends State<MapPage> {
 
     if (mounted) {
       setState(() {
-        if (_todosAtivos.isEmpty) _carregando = true;
+        if (_todosAtivos.isEmpty) {
+          _carregando = true;
+        }
       });
     }
 
@@ -130,13 +132,19 @@ class _MapPageState extends State<MapPage> {
         limit: _limiteAtivos,
       );
 
-      if (!mounted || sequencia != _sequenciaRequisicao) return;
+      if (!mounted || sequencia != _sequenciaRequisicao) {
+        return;
+      }
+
       setState(() {
         _todosAtivos = resultado.ativos;
         _carregando = false;
       });
     } catch (error) {
-      if (!mounted || sequencia != _sequenciaRequisicao) return;
+      if (!mounted || sequencia != _sequenciaRequisicao) {
+        return;
+      }
+
       setState(() {
         _carregando = false;
       });
@@ -146,12 +154,18 @@ class _MapPageState extends State<MapPage> {
   Future<void> _inicializar() async {
     try {
       final distribuidoras = await _ativosService.getDistribuidoras();
-      if (!mounted || distribuidoras.isEmpty) return;
+
+      if (!mounted || distribuidoras.isEmpty) {
+        return;
+      }
+
       setState(() {
         _distribuidoras = distribuidoras;
         _distribuidoraSelecionada = distribuidoras.first.nome;
         _distribuidorasProntas = true;
+        _carregando = false;
       });
+
       _tentarCargaInicial();
     } catch (error) {
       if (mounted) {
@@ -166,32 +180,34 @@ class _MapPageState extends State<MapPage> {
       _camadasAtivas.values.where((ativa) => ativa).length;
 
   Future<void> _selecionarDistribuidora(String? distribuidora) async {
-    if (distribuidora == null || distribuidora == _distribuidoraSelecionada) {
+    if (distribuidora == null ||
+        distribuidora == _distribuidoraSelecionada) {
       return;
     }
+
     setState(() {
       _distribuidoraSelecionada = distribuidora;
       _estadoSelecionado = null;
       _todosAtivos = [];
       _municipioSelecionado = null;
       _buscaController.clear();
+      _carregando = true;
     });
-    final resumo = _distribuidoras.firstWhere(
-      (item) => item.nome == distribuidora,
-    );
-    final centro = LatLng(resumo.latitude, resumo.longitude);
-    _mapController.move(centro, 12.5);
+
     _agendarCarregamento();
   }
 
   Future<void> _selecionarEstado(String? estado) async {
-    if (estado == null || estado == _estadoSelecionado) return;
+    if (estado == null || estado == _estadoSelecionado) {
+      return;
+    }
 
     setState(() {
       _estadoSelecionado = estado;
       _municipioSelecionado = null;
       _buscaController.clear();
     });
+
     _agendarCarregamento();
   }
 
@@ -201,76 +217,87 @@ class _MapPageState extends State<MapPage> {
 
   void _zoomIn() {
     setState(() {
-      _currentZoom = (_mapController.camera.zoom + 1).clamp(3.0, 19.0);
-      _mapController.move(_mapController.camera.center, _currentZoom);
+      _currentZoom =
+          (_mapController.camera.zoom + 1).clamp(3.8, 18.0);
+      _mapController.move(
+        _mapController.camera.center,
+        _currentZoom,
+      );
     });
   }
 
   void _zoomOut() {
     setState(() {
-      _currentZoom = (_mapController.camera.zoom - 1).clamp(3.0, 19.0);
-      _mapController.move(_mapController.camera.center, _currentZoom);
+      _currentZoom =
+          (_mapController.camera.zoom - 1).clamp(3.8, 18.0);
+      _mapController.move(
+        _mapController.camera.center,
+        _currentZoom,
+      );
     });
   }
 
-  void _onLocationPressed() {
-    final resumo = _distribuidoras.firstWhere(
-      (item) => item.nome == _distribuidoraSelecionada,
-    );
-    final centro = LatLng(resumo.latitude, resumo.longitude);
-    setState(() {
-      _currentZoom = 15.2;
-      _mapController.move(centro, _currentZoom);
-    });
-  }
+  void _onLocationPressed() {}
 
   List<String> get _estadosDisponiveis {
-    final estados =
-        _todosAtivos
-            .map((ativo) {
-              final municipio = ativo.municipio.trim();
-              if (municipio.isEmpty || municipio == 'Não informado') {
-                return null;
-              }
-              if (municipio.contains('-')) {
-                return municipio.split('-').last.trim();
-              }
-              return municipio;
-            })
-            .whereType<String>()
-            .where((estado) => estado.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
+    final estados = _todosAtivos
+        .map((ativo) {
+          final municipio = ativo.municipio.trim();
+
+          if (municipio.isEmpty || municipio == 'Não informado') {
+            return null;
+          }
+
+          if (municipio.contains('-')) {
+            return municipio.split('-').last.trim();
+          }
+
+          return municipio;
+        })
+        .whereType<String>()
+        .where((estado) => estado.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
     return estados;
   }
 
   List<String> get _municipiosDisponiveis {
-    final municipios =
-        _todosAtivos
-            .map((ativo) => ativo.municipio)
-            .where((municipio) => municipio != 'Não informado')
-            .where((municipio) {
-              if (_estadoSelecionado == null) return true;
-              if (!municipio.contains('-')) return true;
-              final estado = municipio.split('-').last.trim();
-              return estado == _estadoSelecionado;
-            })
-            .map((municipio) {
-              if (municipio.contains('-')) {
-                return municipio.split('-').first.trim();
-              }
-              return municipio.trim();
-            })
-            .where((municipio) => municipio.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
+    final municipios = _todosAtivos
+        .map((ativo) => ativo.municipio)
+        .where((municipio) => municipio != 'Não informado')
+        .where((municipio) {
+          if (_estadoSelecionado == null) {
+            return true;
+          }
+
+          if (!municipio.contains('-')) {
+            return true;
+          }
+
+          final estado = municipio.split('-').last.trim();
+
+          return estado == _estadoSelecionado;
+        })
+        .map((municipio) {
+          if (municipio.contains('-')) {
+            return municipio.split('-').first.trim();
+          }
+
+          return municipio.trim();
+        })
+        .where((municipio) => municipio.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
     return municipios;
   }
 
   void _abrirFiltroEstado() {
     final estados = _estadosDisponiveis;
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -284,7 +311,9 @@ class _MapPageState extends State<MapPage> {
             children: [
               const ListTile(
                 title: Text('Filtrar por estado'),
-                subtitle: Text('Selecione o estado para refinar a busca regional.'),
+                subtitle: Text(
+                  'Selecione o estado para refinar a busca regional.',
+                ),
               ),
               const Divider(height: 1),
               Flexible(
@@ -302,10 +331,12 @@ class _MapPageState extends State<MapPage> {
                       ),
                       onTap: () {
                         Navigator.pop(context);
+
                         setState(() {
                           _estadoSelecionado = null;
                           _municipioSelecionado = null;
                         });
+
                         _agendarCarregamento();
                       },
                     ),
@@ -336,6 +367,7 @@ class _MapPageState extends State<MapPage> {
 
   void _abrirFiltroMunicipio() {
     final municipios = _municipiosDisponiveis;
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -369,7 +401,11 @@ class _MapPageState extends State<MapPage> {
                       ),
                       onTap: () {
                         Navigator.pop(context);
-                        setState(() => _municipioSelecionado = null);
+
+                        setState(() {
+                          _municipioSelecionado = null;
+                        });
+
                         _agendarCarregamento();
                       },
                     ),
@@ -384,7 +420,11 @@ class _MapPageState extends State<MapPage> {
                         ),
                         onTap: () {
                           Navigator.pop(context);
-                          setState(() => _municipioSelecionado = municipio);
+
+                          setState(() {
+                            _municipioSelecionado = municipio;
+                          });
+
                           _agendarCarregamento();
                         },
                       ),
@@ -407,7 +447,9 @@ class _MapPageState extends State<MapPage> {
         setState(() {
           _camadasAtivas = novasCamadas;
         });
+
         _agendarCarregamento();
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -432,7 +474,6 @@ class _MapPageState extends State<MapPage> {
       backgroundColor: AppColors.surfaceBackground,
       body: Stack(
         children: [
-          // 1. Mapa Interativo com OpenStreetMap
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
@@ -448,7 +489,10 @@ class _MapPageState extends State<MapPage> {
                 ),
               ),
               onTap: (tapPosition, point) {
-                if (!isDrawing) return;
+                if (!isDrawing) {
+                  return;
+                }
+
                 setState(() {
                   polygonPoints.add(point);
                 });
@@ -456,8 +500,10 @@ class _MapPageState extends State<MapPage> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.frontend_tecsys',
+                urlTemplate:
+                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName:
+                    'com.example.frontend_tecsys',
               ),
               PolygonLayer(
                 polygons: polygonPoints.length >= 3
@@ -467,7 +513,9 @@ class _MapPageState extends State<MapPage> {
                           color: AppColors.navBarBackground.withAlpha(100),
                           borderColor: AppColors.navBarBackground,
                           borderStrokeWidth: 2.5,
-                          pattern: StrokePattern.dashed(segments: [10, 5]),
+                          pattern: StrokePattern.dashed(
+                            segments: [10, 5],
+                          ),
                         ),
                       ]
                     : <Polygon<Object>>[],
@@ -533,8 +581,9 @@ class _MapPageState extends State<MapPage> {
                       onTap: () {
                         SelectionBottomSheet.show<String>(
                           context: context,
-                          title: "Selecionar distribuidora",
-                          subtitle: "Os ativos serão recarregados para a região escolhida.",
+                          title: 'Selecionar distribuidora',
+                          subtitle:
+                              'Os ativos serão recarregados para a região escolhida.',
                           items: _distribuidoras
                               .map(
                                 (dist) => SelectionItem(
@@ -545,7 +594,9 @@ class _MapPageState extends State<MapPage> {
                               .toList(),
                           selectedValue: _distribuidoraSelecionada,
                           onSelected: (distribuidoraNome) {
-                            _selecionarDistribuidora(distribuidoraNome);
+                            _selecionarDistribuidora(
+                              distribuidoraNome,
+                            );
                           },
                         );
                       },
@@ -578,6 +629,7 @@ class _MapPageState extends State<MapPage> {
             child: ElevatedButton(
               onPressed: () {
                 final totalAtivos = _todosAtivos.length;
+
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
@@ -602,7 +654,8 @@ class _MapPageState extends State<MapPage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
+                shadowColor:
+                    AppColors.primaryLime.withValues(alpha: 0.4),
               ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -626,16 +679,15 @@ class _MapPageState extends State<MapPage> {
               ),
             ),
           ),
-          // Indicador de Carregamento
           if (_carregando && _todosAtivos.isEmpty)
             Container(
               color: Colors.black45,
               child: const Center(
-                child: CircularProgressIndicator(color: AppColors.primaryLime),
+                child: CircularProgressIndicator(
+                  color: AppColors.primaryLime,
+                ),
               ),
             ),
-          // Erros do backend ficam ocultos para a tela final; a app mantém o mapa
-          // limpo enquanto a integração real com a API estiver sendo conectada.
         ],
       ),
     );

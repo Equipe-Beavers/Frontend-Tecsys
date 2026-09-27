@@ -119,16 +119,16 @@ class CatalogoCamadas {
 
   static Map<TipoAtivo, bool> obterEstadoInicialPadrao() {
     return {
-      TipoAtivo.poste: true,
-      TipoAtivo.transformador: true,
-      TipoAtivo.subestacao: true,
-      TipoAtivo.dispositivo: true,
-      TipoAtivo.chaveFusivel: true,
+      TipoAtivo.poste: false,
+      TipoAtivo.transformador: false,
+      TipoAtivo.subestacao: false,
+      TipoAtivo.dispositivo: false,
+      TipoAtivo.chaveFusivel: false,
       TipoAtivo.chaveSeccionadora: false,
-      TipoAtivo.religador: true,
+      TipoAtivo.religador: false,
       TipoAtivo.seccionadorAutomatico: false,
-      TipoAtivo.reguladorTensao: true,
-      TipoAtivo.bancoCapacitores: true,
+      TipoAtivo.reguladorTensao: false,
+      TipoAtivo.bancoCapacitores: false,
     };
   }
 }
