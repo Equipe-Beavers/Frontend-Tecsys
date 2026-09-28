@@ -1,20 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/models/criterio_instalacao.dart';
+import 'package:frontend_tecsys/models/estudo.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
 import 'package:frontend_tecsys/models/perfil_rf.dart';
+import 'package:frontend_tecsys/pages/recomendacao_resultado_page.dart';
+import 'package:frontend_tecsys/services/ativos_service.dart';
 import 'package:frontend_tecsys/services/criterio_service.dart';
-import 'package:frontend_tecsys/services/estudos_service.dart';
+import 'package:frontend_tecsys/services/estudos_service.dart'
+    show EstudosService, ContagemPontos;
 import 'package:frontend_tecsys/services/perfil_rf_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
+import 'package:frontend_tecsys/utils/map_utils.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:latlong2/latlong.dart';
 
 class NovoEstudoPage extends StatefulWidget {
   final String distribuidora;
   final String? municipio;
+  final String? uf;
   final double areaKm2;
   final List<LatLng> pontosArea;
+  final List<AtivoBdgd> ativos;
+  final EstudoResumo? estudo;
+  final ContagemPontos? contagem;
 
   const NovoEstudoPage({
     super.key,
@@ -22,7 +32,25 @@ class NovoEstudoPage extends StatefulWidget {
     required this.municipio,
     required this.areaKm2,
     required this.pontosArea,
-  });
+    this.uf,
+    this.ativos = const [],
+  }) : estudo = null,
+       contagem = null;
+
+  /// Modo de visualização: exibe um estudo já salvo, com os campos
+  /// preenchidos e prontos para prosseguir direto à recomendação.
+  NovoEstudoPage.detalhes({
+    super.key,
+    required EstudoResumo estudo,
+    ContagemPontos? contagem,
+  }) : estudo = estudo,
+       contagem = contagem,
+       distribuidora = estudo.distribuidora ?? '',
+       municipio = estudo.municipio,
+       uf = estudo.uf,
+       areaKm2 = calculatePolygonAreaKm2(estudo.pontosArea),
+       pontosArea = estudo.pontosArea,
+       ativos = const [];
 
   @override
   State<NovoEstudoPage> createState() => _NovoEstudoPageState();
@@ -32,6 +60,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   final EstudosService _estudosService = EstudosService();
   final PerfilRfService _perfilRfService = PerfilRfService();
   final CriterioService _criterioService = CriterioService();
+  final AtivosService _ativosService = AtivosService();
   final _formKey = GlobalKey<FormState>();
   final _nomeController = TextEditingController();
   final _descricaoController = TextEditingController();
@@ -47,9 +76,22 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   CriterioInstalacao _criterioSelecionado = CriterioInstalacao.padrao;
   bool _salvando = false;
 
+  List<AtivoBdgd> _ativosDaArea = [];
+  bool _carregandoAtivos = false;
+
+  bool get _modoVisualizacao => widget.estudo != null;
+
   @override
   void initState() {
     super.initState();
+    if (_modoVisualizacao) {
+      final estudo = widget.estudo!;
+      _nomeController.text = estudo.nome;
+      _descricaoController.text = estudo.descricao ?? '';
+      _bairroController.text = estudo.bairro ?? '';
+      _carregarAtivosDaArea();
+    }
+    _estadoController.text = widget.uf ?? '';
     _carregarOpcoes();
   }
 
@@ -88,6 +130,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     _estudosService.dispose();
     _perfilRfService.dispose();
     _criterioService.dispose();
+    _ativosService.dispose();
     _nomeController.dispose();
     _descricaoController.dispose();
     _cidadeController.dispose();
@@ -108,6 +151,255 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     return '$local · ${_formatarNumero(widget.areaKm2)} km²';
   }
 
+  Future<void> _carregarAtivosDaArea() async {
+    if (widget.pontosArea.length < 3) return;
+
+    setState(() => _carregandoAtivos = true);
+
+    final latitudes = widget.pontosArea.map((ponto) => ponto.latitude);
+    final longitudes = widget.pontosArea.map((ponto) => ponto.longitude);
+
+    try {
+      final resultado = await _ativosService.getAtivos(
+        minLatitude: latitudes.reduce((a, b) => a < b ? a : b),
+        maxLatitude: latitudes.reduce((a, b) => a > b ? a : b),
+        minLongitude: longitudes.reduce((a, b) => a < b ? a : b),
+        maxLongitude: longitudes.reduce((a, b) => a > b ? a : b),
+        distribuidora: widget.distribuidora.isEmpty
+            ? null
+            : widget.distribuidora,
+        municipio: widget.municipio,
+        limit: 5000,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _ativosDaArea = resultado.ativos
+            .where(
+              (ativo) => isPointInPolygon(
+                LatLng(ativo.latitude, ativo.longitude),
+                widget.pontosArea,
+              ),
+            )
+            .toList();
+        _carregandoAtivos = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _carregandoAtivos = false);
+    }
+  }
+
+  List<AtivoBdgd> get _ativosParaExibir =>
+      _modoVisualizacao ? _ativosDaArea : widget.ativos;
+
+  Map<TipoAtivo, List<AtivoBdgd>> get _ativosPorTipo {
+    final grupos = <TipoAtivo, List<AtivoBdgd>>{};
+    for (final ativo in _ativosParaExibir) {
+      (grupos[ativo.tipo] ??= <AtivoBdgd>[]).add(ativo);
+    }
+    final ordenado = grupos.entries.toList()
+      ..sort((a, b) => b.value.length.compareTo(a.value.length));
+    return Map.fromEntries(ordenado);
+  }
+
+  void _abrirListaAtivos(TipoAtivo tipo, List<AtivoBdgd> ativos) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.3,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceCardLight,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(tipo.icone, color: tipo.cor, size: 18),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              tipo.label,
+                              style: const TextStyle(
+                                color: AppColors.textWhite,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '${ativos.length} ativo(s)',
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                Expanded(
+                  child: ListView.separated(
+                    controller: scrollController,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    itemCount: ativos.length,
+                    separatorBuilder: (_, _) =>
+                        const Divider(height: 1, color: AppColors.border),
+                    itemBuilder: (context, index) {
+                      final ativo = ativos[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: tipo.cor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                ativo.codId,
+                                style: const TextStyle(
+                                  color: AppColors.textWhite,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              'ID ${ativo.id}',
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildAtivosACobrir() {
+    final grupos = _ativosPorTipo;
+
+    if (_carregandoAtivos) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.primaryLime),
+        ),
+      );
+    }
+
+    if (grupos.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceCard,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Text(
+          'Nenhum ativo dentro da área selecionada.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: grupos.entries.map((entry) {
+        final tipo = entry.key;
+        final ativos = entry.value;
+        return Material(
+          color: AppColors.surfaceCardLight,
+          borderRadius: BorderRadius.circular(24),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24),
+            onTap: () => _abrirListaAtivos(tipo, ativos),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: tipo.cor.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: tipo.cor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${tipo.label} - ${ativos.length}',
+                    style: const TextStyle(
+                      color: AppColors.textWhite,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   void _selecionarPerfil() {
     SelectionBottomSheet.show<PerfilRf>(
       context: context,
@@ -124,7 +416,8 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           )
           .toList(),
       selectedValue: _perfilSelecionado,
-      onSelected: (perfil) => setState(() => _perfilSelecionado = perfil ?? _perfilSelecionado),
+      onSelected: (perfil) =>
+          setState(() => _perfilSelecionado = perfil ?? _perfilSelecionado),
     );
   }
 
@@ -138,7 +431,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           )
           .toList(),
       selectedValue: _criterioSelecionado,
-      onSelected: (criterio) => setState(() => _criterioSelecionado = criterio ?? _criterioSelecionado),
+      onSelected: (criterio) => setState(
+        () => _criterioSelecionado = criterio ?? _criterioSelecionado,
+      ),
     );
   }
 
@@ -152,7 +447,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
 
     setState(() => _salvando = true);
     try {
-      await _estudosService.criarEstudo(
+      final estudoCriado = await _estudosService.criarEstudo(
         NovoEstudo(
           nome: _nomeController.text.trim(),
           descricao: _textoOuNulo(_descricaoController),
@@ -166,7 +461,45 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
         ),
       );
       if (!mounted) return;
-      Navigator.pop(context, true);
+
+      final idEstudo = (estudoCriado['id_estudo'] as num?)?.toInt();
+      if (idEstudo == null) {
+        Navigator.pop(context, true);
+        return;
+      }
+
+      if (widget.ativos.isNotEmpty) {
+        final criados = await _estudosService.criarPontosEstudoParaAtivos(
+          idEstudo,
+          widget.ativos,
+        );
+        if (!mounted) return;
+
+        if (criados < widget.ativos.length) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '$criados de ${widget.ativos.length} ativos foram salvos '
+                'como pontos de interesse do estudo.',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+
+      await Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RecomendacaoResultadoPage(
+            idEstudo: idEstudo,
+            idPerfilRf: _perfilSelecionado.idPerfilRf ?? 1,
+            idCriterioInstalacao: _criterioSelecionado.idCriterioInstalacao,
+            titulo: _nomeController.text.trim(),
+            subtitulo: _descricaoArea,
+          ),
+        ),
+      );
     } catch (erro) {
       if (!mounted) return;
       setState(() => _salvando = false);
@@ -177,6 +510,49 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
         ),
       );
     }
+  }
+
+  Future<void> _abrirRecomendacao() async {
+    final estudo = widget.estudo;
+    if (_salvando || estudo == null) return;
+
+    final contagem = widget.contagem;
+    if (contagem != null && !contagem.completa) {
+      final semInteresse = contagem.interesse == 0;
+      final semCandidato = contagem.candidato == 0;
+      final mensagem = semInteresse && semCandidato
+          ? 'Este estudo ainda não possui pontos de interesse e candidatos marcados.'
+          : semInteresse
+          ? 'Este estudo ainda não possui pontos de interesse marcados.'
+          : 'Este estudo ainda não possui candidatos marcados.';
+      _mostrarMensagem(mensagem);
+      return;
+    }
+
+    setState(() => _salvando = true);
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RecomendacaoResultadoPage(
+            idEstudo: estudo.idEstudo,
+            idPerfilRf: _perfilSelecionado.idPerfilRf ?? 1,
+            idCriterioInstalacao: _criterioSelecionado.idCriterioInstalacao,
+            titulo: estudo.nome,
+            subtitulo: estudo.local,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _salvando = false);
+    }
+  }
+
+  void _mostrarMensagem(String mensagem) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensagem), behavior: SnackBarBehavior.floating),
+    );
   }
 
   @override
@@ -302,6 +678,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                     ),
                     const SizedBox(height: 20),
                     _buildRotulo('ATIVOS A COBRIR'),
+                    _buildAtivosACobrir(),
                   ],
                 ),
               ),
@@ -326,10 +703,10 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
               size: 18,
             ),
           ),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Novo estudo',
-              style: TextStyle(
+              _modoVisualizacao ? 'Detalhes do estudo' : 'Novo estudo',
+              style: const TextStyle(
                 color: AppColors.textWhite,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -342,9 +719,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
               color: AppColors.secondaryTeal,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Text(
-              'PASSO 4 DE 4',
-              style: TextStyle(
+            child: Text(
+              _modoVisualizacao ? 'SIMULAR' : 'PASSO 4 DE 4',
+              style: const TextStyle(
                 color: AppColors.textDark,
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
@@ -378,6 +755,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     int linhas = 1,
     FormFieldValidator<String>? validador,
     int? tamanhoMaximo,
+    bool habilitado = true,
   }) {
     final borda = OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
@@ -387,6 +765,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       controller: controller,
       maxLines: linhas,
       validator: validador,
+      enabled: habilitado,
       inputFormatters: tamanhoMaximo == null
           ? null
           : [LengthLimitingTextInputFormatter(tamanhoMaximo)],
@@ -458,16 +837,17 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
               ],
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Editar',
-              style: TextStyle(
-                color: AppColors.secondaryTeal,
-                fontWeight: FontWeight.w600,
+          if (!_modoVisualizacao)
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Editar',
+                style: TextStyle(
+                  color: AppColors.secondaryTeal,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -562,7 +942,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       child: SizedBox(
         width: double.infinity,
         child: ElevatedButton(
-          onPressed: _salvando ? null : _criarEstudo,
+          onPressed: _salvando
+              ? null
+              : (_modoVisualizacao ? _abrirRecomendacao : _criarEstudo),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryLime,
             foregroundColor: AppColors.textDark,
@@ -583,9 +965,14 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                     color: AppColors.textDark,
                   ),
                 )
-              : const Text(
-                  'Criar estudo e simular',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              : Text(
+                  _modoVisualizacao
+                      ? 'Ver recomendação'
+                      : 'Criar estudo e simular',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
         ),
       ),

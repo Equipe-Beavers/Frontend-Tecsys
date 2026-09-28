@@ -21,6 +21,10 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   static const int _totalAbas = 2;
+  static const int _abaEstudos = 1;
+
+  final GlobalKey<EstudosPageState> _estudosPageKey =
+      GlobalKey<EstudosPageState>();
 
   int _abaSelecionada = 0;
 
@@ -38,9 +42,9 @@ class _MyAppState extends State<MyApp> {
       home: Scaffold(
         body: IndexedStack(
           index: _abaSelecionada,
-          children: const [
-            MapPage(),
-            EstudosPage(),
+          children: [
+            const MapPage(),
+            EstudosPage(key: _estudosPageKey),
           ],
         ),
         bottomNavigationBar: Navbar(
@@ -50,6 +54,9 @@ class _MyAppState extends State<MyApp> {
             setState(() {
               _abaSelecionada = index;
             });
+            if (index == _abaEstudos) {
+              _estudosPageKey.currentState?.recarregar();
+            }
           },
         ),
       ),

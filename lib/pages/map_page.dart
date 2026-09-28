@@ -152,9 +152,9 @@ class _MapPageState extends State<MapPage> {
         _carregando = false;
         _erro = resultado.ativos.isEmpty
             ? 'Nenhum ativo do banco local para '
-                '${_distribuidoraSelecionada ?? 'esta distribuidora'}'
-                '${_municipioSelecionado != null ? ' em $_municipioSelecionado' : ''} '
-                'nesta região do mapa.'
+                  '${_distribuidoraSelecionada ?? 'esta distribuidora'}'
+                  '${_municipioSelecionado != null ? ' em $_municipioSelecionado' : ''} '
+                  'nesta região do mapa.'
             : null;
       });
     } catch (error) {
@@ -339,7 +339,8 @@ class _MapPageState extends State<MapPage> {
           breadcrumb: _distribuidoraSelecionada != null
               ? '$_distribuidoraSelecionada · Selecione o município'
               : null,
-          notFoundMessage: _erroRegiao ??
+          notFoundMessage:
+              _erroRegiao ??
               'Nenhuma cidade encontrada para a distribuidora selecionada.',
           onProsseguir: (cidade, bairro) {
             prosseguiu = true;
@@ -386,6 +387,20 @@ class _MapPageState extends State<MapPage> {
 
     _currentZoom = 11.0;
     _mapController.move(LatLng(latitude, longitude), _currentZoom);
+  }
+
+  /// UF do município selecionado, usada para preencher o formulário de estudo.
+  String? get _ufSelecionada {
+    final cidade = _municipioSelecionado;
+    if (cidade == null) return null;
+
+    for (final municipio in _municipiosDaRegiao) {
+      if (municipio.nome == cidade) {
+        return municipio.uf;
+      }
+    }
+
+    return null;
   }
 
   /// PASSO 1: escolha da distribuidora. Ao confirmar, abre direto o
@@ -458,11 +473,23 @@ class _MapPageState extends State<MapPage> {
   List<AtivoBdgd> get _ativosVisiveis {
     final termo = _textoBusca.trim().toLowerCase();
     return _todosAtivos.where((ativo) {
-      if (termo.isEmpty) return true;
-      return ativo.codId.toLowerCase().contains(termo) ||
-          ativo.id.toLowerCase().contains(termo) ||
-          ativo.municipio.toLowerCase().contains(termo) ||
-          ativo.tipo.label.toLowerCase().contains(termo);
+      if (termo.isNotEmpty &&
+          !(ativo.codId.toLowerCase().contains(termo) ||
+              ativo.id.toLowerCase().contains(termo) ||
+              ativo.municipio.toLowerCase().contains(termo) ||
+              ativo.tipo.label.toLowerCase().contains(termo))) {
+        return false;
+      }
+
+      if (_areaDesenhada &&
+          !isPointInPolygon(
+            LatLng(ativo.latitude, ativo.longitude),
+            polygonPoints,
+          )) {
+        return false;
+      }
+
+      return true;
     }).toList();
   }
 
@@ -548,8 +575,10 @@ class _MapPageState extends State<MapPage> {
         builder: (_) => NovoEstudoPage(
           distribuidora: _distribuidoraSelecionada ?? '',
           municipio: _municipioSelecionado,
+          uf: _ufSelecionada,
           areaKm2: calculatePolygonAreaKm2(polygonPoints),
           pontosArea: List.unmodifiable(polygonPoints),
+          ativos: List.unmodifiable(_ativosVisiveis),
         ),
       ),
     );
@@ -568,46 +597,67 @@ class _MapPageState extends State<MapPage> {
   }
 
   Widget _buildBotoesArea() {
-    return Row(
-      spacing: 12,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: OutlinedButton(
-            onPressed: _cancelarArea,
-            style: OutlinedButton.styleFrom(
-              backgroundColor: AppColors.surfaceCard,
-              foregroundColor: AppColors.textWhite,
-              side: const BorderSide(color: AppColors.border),
-              padding: const EdgeInsets.symmetric(vertical: 17),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        Card(
+          color: AppColors.surfaceCard,
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              '${_ativosVisiveis.length} ativo(s) dentro da área selecionada',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textWhite,
+                fontWeight: FontWeight.w600,
               ),
-            ),
-            child: const Text(
-              'Cancelar',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
         ),
-        Expanded(
-          flex: 2,
-          child: ElevatedButton(
-            onPressed: _prosseguirArea,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryLime,
-              foregroundColor: AppColors.textDark,
-              elevation: 6,
-              padding: const EdgeInsets.symmetric(vertical: 17),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        Row(
+          spacing: 12,
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _cancelarArea,
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: AppColors.surfaceCard,
+                  foregroundColor: AppColors.textWhite,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 17),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Cancelar',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
               ),
-              shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
             ),
-            child: const Text(
-              'Prosseguir',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            Expanded(
+              flex: 2,
+              child: ElevatedButton(
+                onPressed: _prosseguirArea,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryLime,
+                  foregroundColor: AppColors.textDark,
+                  elevation: 6,
+                  padding: const EdgeInsets.symmetric(vertical: 17),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
+                ),
+                child: const Text(
+                  'Prosseguir',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ],
     );
@@ -828,8 +878,7 @@ class _MapPageState extends State<MapPage> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      shadowColor:
-                          AppColors.primaryLime.withValues(alpha: 0.4),
+                      shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -857,18 +906,14 @@ class _MapPageState extends State<MapPage> {
             Container(
               color: Colors.black45,
               child: const Center(
-                child: CircularProgressIndicator(
-                  color: AppColors.primaryLime,
-                ),
+                child: CircularProgressIndicator(color: AppColors.primaryLime),
               ),
             ),
           if (_carregando && _todosAtivos.isEmpty && !_carregandoRegiao)
             Container(
               color: Colors.black45,
               child: const Center(
-                child: CircularProgressIndicator(
-                  color: AppColors.primaryLime,
-                ),
+                child: CircularProgressIndicator(color: AppColors.primaryLime),
               ),
             ),
           if (_erro != null)

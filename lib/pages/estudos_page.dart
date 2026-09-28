@@ -1,28 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:frontend_tecsys/models/criterio_instalacao.dart';
 import 'package:frontend_tecsys/models/estudo.dart';
-import 'package:frontend_tecsys/models/perfil_rf.dart';
-import 'package:frontend_tecsys/pages/recomendacao_resultado_page.dart';
-import 'package:frontend_tecsys/services/criterio_service.dart';
+import 'package:frontend_tecsys/pages/novo_estudo_page.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
-import 'package:frontend_tecsys/services/perfil_rf_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
-import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 
 class EstudosPage extends StatefulWidget {
   const EstudosPage({super.key});
 
   @override
-  State<EstudosPage> createState() => _EstudosPageState();
+  State<EstudosPage> createState() => EstudosPageState();
 }
 
-class _EstudosPageState extends State<EstudosPage> {
+class EstudosPageState extends State<EstudosPage> {
   final EstudosService _estudosService = EstudosService();
-  final PerfilRfService _perfisService = PerfilRfService();
-  final CriterioService _criteriosService = CriterioService();
 
   late Future<_DadosEstudos> _dados;
-  bool _processando = false;
+  bool _atualizando = false;
 
   @override
   void initState() {
@@ -33,8 +26,6 @@ class _EstudosPageState extends State<EstudosPage> {
   @override
   void dispose() {
     _estudosService.dispose();
-    _perfisService.dispose();
-    _criteriosService.dispose();
     super.dispose();
   }
 
@@ -51,8 +42,20 @@ class _EstudosPageState extends State<EstudosPage> {
     return _DadosEstudos(estudos: estudos, contagem: contagem);
   }
 
-  void _recarregar() {
-    setState(() => _dados = _buscarDados());
+  /// Recarrega a lista de estudos. Público para que a navegação principal
+  /// possa acionar a atualização ao selecionar a aba Estudos.
+  Future<void> recarregar() async {
+    if (_atualizando || !mounted) return;
+
+    setState(() => _atualizando = true);
+    final busca = _buscarDados();
+    setState(() => _dados = busca);
+
+    try {
+      await busca;
+    } finally {
+      if (mounted) setState(() => _atualizando = false);
+    }
   }
 
   @override
@@ -68,27 +71,31 @@ class _EstudosPageState extends State<EstudosPage> {
         ),
         actions: [
           IconButton(
-            onPressed: _recarregar,
-            icon: const Icon(Icons.refresh, color: AppColors.textMuted),
+            onPressed: _atualizando ? null : recarregar,
+            icon: _atualizando
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.textMuted,
+                    ),
+                  )
+                : const Icon(Icons.refresh, color: AppColors.textMuted),
           ),
         ],
       ),
       body: Column(
         children: [
-          if (_processando)
-            const LinearProgressIndicator(
-              color: AppColors.primaryLime,
-              backgroundColor: AppColors.surfaceCard,
-              minHeight: 2,
-            ),
           Expanded(
             child: FutureBuilder<_DadosEstudos>(
               future: _dados,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child:
-                        CircularProgressIndicator(color: AppColors.primaryLime),
+                    child: CircularProgressIndicator(
+                      color: AppColors.primaryLime,
+                    ),
                   );
                 }
 
@@ -103,14 +110,15 @@ class _EstudosPageState extends State<EstudosPage> {
 
                 return RefreshIndicator(
                   color: AppColors.primaryLime,
-                  onRefresh: () async => _recarregar(),
+                  onRefresh: recarregar,
                   child: ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     itemCount: dados.estudos.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final estudo = dados.estudos[index];
-                      final contagem = dados.contagem[estudo.idEstudo] ??
+                      final contagem =
+                          dados.contagem[estudo.idEstudo] ??
                           const ContagemPontos(interesse: 0, candidato: 0);
                       return _buildCard(estudo, contagem);
                     },
@@ -140,7 +148,7 @@ class _EstudosPageState extends State<EstudosPage> {
             ),
             const SizedBox(height: 16),
             OutlinedButton(
-              onPressed: _recarregar,
+              onPressed: recarregar,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primaryLime,
                 side: const BorderSide(color: AppColors.border),
@@ -172,7 +180,7 @@ class _EstudosPageState extends State<EstudosPage> {
   Widget _buildCard(EstudoResumo estudo, ContagemPontos contagem) {
     return InkWell(
       borderRadius: BorderRadius.circular(14),
-      onTap: _processando ? null : () => _abrirEstudo(estudo, contagem),
+      onTap: () => _abrirEstudo(estudo, contagem),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -209,14 +217,20 @@ class _EstudosPageState extends State<EstudosPage> {
                 estudo.descricao!,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                ),
               ),
             ],
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.location_on_outlined,
-                    size: 14, color: AppColors.secondaryTeal),
+                const Icon(
+                  Icons.location_on_outlined,
+                  size: 14,
+                  color: AppColors.secondaryTeal,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   '${contagem.interesse} interesse · ${contagem.candidato} candidato',
@@ -227,7 +241,7 @@ class _EstudosPageState extends State<EstudosPage> {
                 ),
                 const Spacer(),
                 Text(
-                  contagem.completa ? 'Recomendar' : 'Sem pontos marcados',
+                  _rotuloStatus(contagem),
                   style: TextStyle(
                     color: contagem.completa
                         ? AppColors.primaryLime
@@ -252,6 +266,15 @@ class _EstudosPageState extends State<EstudosPage> {
     );
   }
 
+  String _rotuloStatus(ContagemPontos contagem) {
+    if (contagem.completa) return 'Recomendar';
+    if (contagem.interesse == 0 && contagem.candidato == 0) {
+      return 'Sem pontos marcados';
+    }
+    if (contagem.interesse == 0) return 'Sem interesse marcado';
+    return 'Sem candidato marcado';
+  }
+
   Widget _buildBadge(String status) {
     final rotulo = status.replaceAll('_', ' ').toLowerCase();
 
@@ -272,126 +295,15 @@ class _EstudosPageState extends State<EstudosPage> {
     );
   }
 
-  Future<void> _abrirEstudo(EstudoResumo estudo, ContagemPontos contagem) async {
-    if (!contagem.completa) {
-      _mostrarMensagem(
-        'Este estudo ainda não possui pontos de interesse e candidatos marcados.',
-      );
-      return;
-    }
-
-    setState(() => _processando = true);
-
-    try {
-      final perfis = await _carregarPerfis();
-      if (!mounted) return;
-
-      final perfilSelecionado = await _escolherPerfil(perfis);
-      if (perfilSelecionado == null || !mounted) return;
-
-      final criterios = await _carregarCriterios();
-      if (!mounted) return;
-
-      final criterioSelecionado = await _escolherCriterio(criterios);
-      if (!mounted) return;
-
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => RecomendacaoResultadoPage(
-            idEstudo: estudo.idEstudo,
-            idPerfilRf: perfilSelecionado.idPerfilRf ?? 1,
-            idCriterioInstalacao: criterioSelecionado?.idCriterioInstalacao,
-            titulo: estudo.nome,
-            subtitulo: estudo.local,
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _processando = false);
-      }
-    }
-  }
-
-  Future<List<PerfilRf>> _carregarPerfis() async {
-    try {
-      final perfis = await _perfisService.getPerfis();
-      if (perfis.isNotEmpty) return perfis;
-    } catch (_) {
-      // Fallback para a lista local caso a API não responda.
-    }
-    return PerfilRf.disponiveis;
-  }
-
-  Future<List<CriterioInstalacao>> _carregarCriterios() async {
-    try {
-      final criterios = await _criteriosService.getCriterios();
-      if (criterios.isNotEmpty) return criterios;
-    } catch (_) {
-      // Fallback para a lista local caso a API não responda.
-    }
-    return CriterioInstalacao.disponiveis;
-  }
-
-  Future<PerfilRf?> _escolherPerfil(List<PerfilRf> perfis) async {
-    PerfilRf? selecionado;
-
-    await SelectionBottomSheet.show<PerfilRf>(
-      context: context,
-      title: 'Selecionar perfil RF',
-      subtitle: 'Os parâmetros de rádio usados no cálculo de cobertura.',
-      searchHint: 'Buscar perfil',
-      notFoundMessage: 'Nenhum perfil encontrado.',
-      items: perfis
-          .map(
-            (perfil) => SelectionItem(
-              title: perfil.nome,
-              subtitle: perfil.modeloGateway,
-              value: perfil,
-            ),
-          )
-          .toList(),
-      selectedValue: perfis.isEmpty ? null : perfis.first,
-      onSelected: (perfil) => selecionado = perfil,
-    );
-
-    return selecionado;
-  }
-
-  Future<CriterioInstalacao?> _escolherCriterio(
-    List<CriterioInstalacao> criterios,
+  Future<void> _abrirEstudo(
+    EstudoResumo estudo,
+    ContagemPontos contagem,
   ) async {
-    CriterioInstalacao? selecionado;
-
-    await SelectionBottomSheet.show<CriterioInstalacao>(
-      context: context,
-      title: 'Selecionar critério de instalação',
-      subtitle: 'Regras usadas para posicionar os gateways.',
-      searchHint: 'Buscar critério',
-      notFoundMessage: 'Nenhum critério encontrado.',
-      items: criterios
-          .map(
-            (criterio) => SelectionItem(
-              title: criterio.nome,
-              subtitle: 'Altura mínima ${criterio.alturaMinimaM} m',
-              value: criterio,
-            ),
-          )
-          .toList(),
-      selectedValue: criterios.isEmpty ? null : criterios.first,
-      onSelected: (criterio) => selecionado = criterio,
-    );
-
-    return selecionado;
-  }
-
-  void _mostrarMensagem(String mensagem) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensagem),
-        behavior: SnackBarBehavior.floating,
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            NovoEstudoPage.detalhes(estudo: estudo, contagem: contagem),
       ),
     );
   }

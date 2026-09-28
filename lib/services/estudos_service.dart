@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:frontend_tecsys/config/api_config.dart';
+import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/models/estudo.dart';
+import 'package:frontend_tecsys/models/estudo_ponto.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
 
 class ContagemPontos {
@@ -17,8 +19,10 @@ class ContagemPontos {
 class EstudosService {
   EstudosService({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrl =
-          (baseUrl ?? ApiConfig.baseUrl).replaceFirst(RegExp(r'/+$'), '');
+      _baseUrl = (baseUrl ?? ApiConfig.baseUrl).replaceFirst(
+        RegExp(r'/+$'),
+        '',
+      );
 
   final http.Client _client;
   final String _baseUrl;
@@ -41,7 +45,10 @@ class EstudosService {
     }
 
     return (corpo['estudos'] as List)
-        .map((item) => EstudoResumo.fromJson(Map<String, dynamic>.from(item as Map)))
+        .map(
+          (item) =>
+              EstudoResumo.fromJson(Map<String, dynamic>.from(item as Map)),
+        )
         .toList();
   }
 
@@ -73,9 +80,8 @@ class EstudosService {
       final papel = ponto['papel']?.toString();
       final conta = acumulado.putIfAbsent(idEstudo, () => [0, 0]);
 
-      if (papel == 'interesse' || papel == 'ambos') {
-        conta[0] += 1;
-      }
+      // Qualquer ponto cadastrado para o estudo já conta como interesse.
+      conta[0] += 1;
       if (papel == 'candidato' || papel == 'ambos') {
         conta[1] += 1;
       }
@@ -112,6 +118,71 @@ class EstudosService {
       throw const FormatException('Resposta de criação de estudo inválida.');
     }
     return Map<String, dynamic>.from(corpo['estudo'] as Map);
+  }
+
+  Future<void> criarPontoEstudo(int idEstudo, NovoEstudoPonto ponto) async {
+    final resposta = await _client
+        .post(
+          Uri.parse('$_baseUrl/estudos/$idEstudo/pontos'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(ponto.toJson()),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (resposta.statusCode != 201) {
+      final corpo = resposta.body.isEmpty ? null : jsonDecode(resposta.body);
+      final mensagem = corpo is Map && corpo['erro'] != null
+          ? corpo['erro'].toString()
+          : 'A API de pontos respondeu com HTTP ${resposta.statusCode}.';
+      throw StateError(mensagem);
+    }
+  }
+
+  /// Cria um ponto de estudo para cada ativo, em lotes concorrentes.
+  /// Retorna a quantidade de pontos criados com sucesso.
+  Future<int> criarPontosEstudoParaAtivos(
+    int idEstudo,
+    List<AtivoBdgd> ativos, {
+    String papel = 'interesse',
+    int tamanhoLote = 15,
+  }) async {
+    var criados = 0;
+
+    for (var inicio = 0; inicio < ativos.length; inicio += tamanhoLote) {
+      final lote = ativos.skip(inicio).take(tamanhoLote);
+
+      final resultados = await Future.wait(
+        lote.map((ativo) async {
+          try {
+            await criarPontoEstudo(
+              idEstudo,
+              NovoEstudoPonto(
+                idEstudo: idEstudo,
+                idAtivoBdgd: ativo.id,
+                tipoAtivo: ativo.tipo.apiValue,
+                rotulo: ativo.codId,
+                papel: papel,
+                latitude: ativo.latitude,
+                longitude: ativo.longitude,
+                atributos: {
+                  'municipio': ativo.municipio,
+                  'bairro': ativo.bairro,
+                  'distribuidora': ativo.distribuidora,
+                  'status_operacional': ativo.statusOperacional,
+                },
+              ),
+            );
+            return true;
+          } catch (_) {
+            return false;
+          }
+        }),
+      );
+
+      criados += resultados.where((sucesso) => sucesso).length;
+    }
+
+    return criados;
   }
 
   void dispose() => _client.close();
