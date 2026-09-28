@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
@@ -259,10 +258,6 @@ class _MapPageState extends State<MapPage> {
       _carregando = true;
     });
 
-    _mapController.move(
-      LatLng(resumo.latitude, resumo.longitude),
-      12.5,
-    );
 
     await _carregarDados();
 
@@ -348,12 +343,12 @@ class _MapPageState extends State<MapPage> {
   List<String> get _municipiosDisponiveis {
     final municipios =
         _todosAtivos
-            .map((ativo) => ativo.municipio)]
+            .map((ativo) => ativo.municipio)
             .where((municipio) => municipio != 'Não informado')
             .toSet()
             .toList()
           ..sort();
-    return municipios;
+    return municipios.toList();
   }
 
   List<AtivoBdgd> get _ativosVisiveis {
