@@ -3,10 +3,44 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/models/layer_filter.dart';
 import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
+import 'package:frontend_tecsys/widgets/city_bairro_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 
 void main() {
+  testWidgets('Cidade selecionada exibe UF e segue com nome e bairro', (
+    WidgetTester tester,
+  ) async {
+    String? cidadeEscolhida;
+    String? bairroEscolhido;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CidadeBairroBottomSheet(
+            cidades: const ['Uberaba'],
+            bairrosPorCidade: const {
+              'Uberaba': ['Centro'],
+            },
+            ufPorCidade: const {'Uberaba': 'MG'},
+            cidadeSelecionada: 'Uberaba',
+            bairroSelecionado: 'Centro',
+            onProsseguir: (cidade, bairro) {
+              cidadeEscolhida = cidade;
+              bairroEscolhido = bairro;
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('MG - Uberaba'), findsOneWidget);
+    expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
+    await tester.tap(find.text('Prosseguir'));
+    expect(cidadeEscolhida, 'Uberaba');
+    expect(bairroEscolhido, 'Centro');
+  });
+
   testWidgets('Navbar renderiza abas corretamente', (
     WidgetTester tester,
   ) async {

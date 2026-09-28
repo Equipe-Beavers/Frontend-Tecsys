@@ -4,6 +4,7 @@ import 'package:frontend_tecsys/theme/app_colors.dart';
 class CidadeBairroBottomSheet extends StatefulWidget {
   final List<String> cidades;
   final Map<String, List<String>> bairrosPorCidade;
+  final Map<String, String?> ufPorCidade;
   final String? cidadeSelecionada;
   final String? bairroSelecionado;
   final String? stepLabel;
@@ -16,6 +17,7 @@ class CidadeBairroBottomSheet extends StatefulWidget {
     super.key,
     required this.cidades,
     required this.bairrosPorCidade,
+    this.ufPorCidade = const {},
     this.cidadeSelecionada,
     this.bairroSelecionado,
     this.stepLabel,
@@ -29,8 +31,7 @@ class CidadeBairroBottomSheet extends StatefulWidget {
       _CidadeBairroBottomSheetState();
 }
 
-class _CidadeBairroBottomSheetState
-    extends State<CidadeBairroBottomSheet> {
+class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
   String? _cidadeSelecionada;
   String? _bairroSelecionado;
   final TextEditingController _buscaController = TextEditingController();
@@ -55,6 +56,9 @@ class _CidadeBairroBottomSheetState
 
     return widget.cidades.where((cidade) {
       if (cidade.toLowerCase().contains(termo)) return true;
+      if (widget.ufPorCidade[cidade]?.toLowerCase().contains(termo) ?? false) {
+        return true;
+      }
       final bairros = widget.bairrosPorCidade[cidade] ?? [];
       return bairros.any((bairro) => bairro.toLowerCase().contains(termo));
     }).toList();
@@ -147,10 +151,7 @@ class _CidadeBairroBottomSheetState
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Selecione a cidade e o bairro para o estudo.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textMuted,
-                  ),
+                  style: TextStyle(fontSize: 13, color: AppColors.textMuted),
                 ),
               ),
             ),
@@ -216,10 +217,7 @@ class _CidadeBairroBottomSheetState
                 child: Text(
                   'Você pode prosseguir mesmo sem selecionar uma cidade.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                 ),
               ),
 
@@ -282,6 +280,7 @@ class _CidadeBairroBottomSheetState
   Widget _buildCidade(String cidade) {
     final selecionada = cidade == _cidadeSelecionada;
     final bairros = widget.bairrosPorCidade[cidade] ?? [];
+    final uf = widget.ufPorCidade[cidade];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -319,7 +318,7 @@ class _CidadeBairroBottomSheetState
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      cidade,
+                      uf == null || uf.isEmpty ? cidade : '$cidade - $uf',
                       style: TextStyle(
                         color: AppColors.textWhite,
                         fontWeight: selecionada
@@ -346,9 +345,7 @@ class _CidadeBairroBottomSheetState
               child: Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: [
-                  for (final bairro in bairros) _buildBairro(bairro),
-                ],
+                children: [for (final bairro in bairros) _buildBairro(bairro)],
               ),
             ),
         ],
@@ -368,9 +365,7 @@ class _CidadeBairroBottomSheetState
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: selecionado
-              ? AppColors.primaryLime
-              : AppColors.surfaceInput,
+          color: selecionado ? AppColors.primaryLime : AppColors.surfaceInput,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/models/criterio_instalacao.dart';
+import 'package:frontend_tecsys/models/estudo.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
 import 'package:frontend_tecsys/models/perfil_rf.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
@@ -11,16 +12,35 @@ import 'package:latlong2/latlong.dart';
 class NovoEstudoPage extends StatefulWidget {
   final String distribuidora;
   final String? municipio;
+  final String? bairro;
+  final String? uf;
   final double areaKm2;
   final List<LatLng> pontosArea;
+  final EstudoResumo? estudo;
 
   const NovoEstudoPage({
     super.key,
     required this.distribuidora,
     required this.municipio,
+    this.bairro,
+    this.uf,
     required this.areaKm2,
     required this.pontosArea,
+    this.estudo,
   });
+
+  factory NovoEstudoPage.edicao({Key? key, required EstudoResumo estudo}) {
+    return NovoEstudoPage(
+      key: key,
+      distribuidora: estudo.distribuidora ?? '',
+      municipio: estudo.municipio,
+      bairro: estudo.bairro,
+      uf: estudo.uf,
+      areaKm2: 0,
+      pontosArea: const [],
+      estudo: estudo,
+    );
+  }
 
   @override
   State<NovoEstudoPage> createState() => _NovoEstudoPageState();
@@ -29,11 +49,16 @@ class NovoEstudoPage extends StatefulWidget {
 class _NovoEstudoPageState extends State<NovoEstudoPage> {
   final EstudosService _estudosService = EstudosService();
   final _formKey = GlobalKey<FormState>();
-  final _nomeController = TextEditingController();
-  final _descricaoController = TextEditingController();
+  late final _nomeController = TextEditingController(text: widget.estudo?.nome);
+  late final _descricaoController = TextEditingController(
+    text: widget.estudo?.descricao,
+  );
+  late final _distribuidoraController = TextEditingController(
+    text: widget.distribuidora,
+  );
   late final _cidadeController = TextEditingController(text: widget.municipio);
-  final _estadoController = TextEditingController();
-  final _bairroController = TextEditingController();
+  late final _estadoController = TextEditingController(text: widget.uf);
+  late final _bairroController = TextEditingController(text: widget.bairro);
 
   PerfilRf _perfilSelecionado = PerfilRf.padrao;
   CriterioInstalacao _criterioSelecionado = CriterioInstalacao.padrao;
@@ -43,6 +68,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   void dispose() {
     _nomeController.dispose();
     _descricaoController.dispose();
+    _distribuidoraController.dispose();
     _cidadeController.dispose();
     _estadoController.dispose();
     _bairroController.dispose();
@@ -74,7 +100,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           )
           .toList(),
       selectedValue: _perfilSelecionado,
-      onSelected: (perfil) => setState(() => _perfilSelecionado = perfil),
+      onSelected: (perfil) {
+        if (perfil != null) setState(() => _perfilSelecionado = perfil);
+      },
     );
   }
 
@@ -88,7 +116,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           )
           .toList(),
       selectedValue: _criterioSelecionado,
-      onSelected: (criterio) => setState(() => _criterioSelecionado = criterio),
+      onSelected: (criterio) {
+        if (criterio != null) setState(() => _criterioSelecionado = criterio);
+      },
     );
   }
 
@@ -97,24 +127,40 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     return texto.isEmpty ? null : texto;
   }
 
-  Future<void> _criarEstudo() async {
+  Future<void> _salvarEstudo() async {
     if (_salvando || !_formKey.currentState!.validate()) return;
 
     setState(() => _salvando = true);
     try {
-      await _estudosService.criarEstudo(
-        NovoEstudo(
-          nome: _nomeController.text.trim(),
-          descricao: _textoOuNulo(_descricaoController),
-          uf: _textoOuNulo(_estadoController)?.toUpperCase(),
-          municipio: _textoOuNulo(_cidadeController),
-          bairro: _textoOuNulo(_bairroController),
-          distribuidora: widget.distribuidora.isEmpty
-              ? null
-              : widget.distribuidora,
-          pontosArea: widget.pontosArea,
-        ),
-      );
+      final nome = _nomeController.text.trim();
+      final descricao = _textoOuNulo(_descricaoController);
+      final uf = _textoOuNulo(_estadoController)?.toUpperCase();
+      final municipio = _textoOuNulo(_cidadeController);
+      final bairro = _textoOuNulo(_bairroController);
+      final distribuidora = _textoOuNulo(_distribuidoraController);
+
+      if (widget.estudo != null) {
+        await _estudosService.atualizarEstudo(widget.estudo!.id, {
+          'nome': nome,
+          'descricao': descricao,
+          'uf': uf,
+          'municipio': municipio,
+          'bairro': bairro,
+          'distribuidora': distribuidora,
+        });
+      } else {
+        await _estudosService.criarEstudo(
+          NovoEstudo(
+            nome: nome,
+            descricao: descricao,
+            uf: uf,
+            municipio: municipio,
+            bairro: bairro,
+            distribuidora: distribuidora,
+            pontosArea: widget.pontosArea,
+          ),
+        );
+      }
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (erro) {
@@ -122,7 +168,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       setState(() => _salvando = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Não foi possível criar o estudo: $erro'),
+          content: Text(
+            'Não foi possível ${widget.estudo != null ? 'atualizar' : 'criar'} o estudo: $erro',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -161,6 +209,13 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                     ),
                     const SizedBox(height: 20),
                     _buildCardArea(),
+                    const SizedBox(height: 20),
+                    _buildRotulo('DISTRIBUIDORA'),
+                    _buildCampoTexto(
+                      controller: _distribuidoraController,
+                      dica: 'Distribuidora selecionada',
+                      somenteLeitura: true,
+                    ),
                     const SizedBox(height: 20),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -276,9 +331,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
               size: 18,
             ),
           ),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Novo estudo',
+              widget.estudo != null ? 'Editar estudo' : 'Novo estudo',
               style: TextStyle(
                 color: AppColors.textWhite,
                 fontSize: 18,
@@ -328,6 +383,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     int linhas = 1,
     FormFieldValidator<String>? validador,
     int? tamanhoMaximo,
+    bool somenteLeitura = false,
   }) {
     final borda = OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
@@ -337,6 +393,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       controller: controller,
       maxLines: linhas,
       validator: validador,
+      readOnly: somenteLeitura,
       inputFormatters: tamanhoMaximo == null
           ? null
           : [LengthLimitingTextInputFormatter(tamanhoMaximo)],
@@ -512,7 +569,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       child: SizedBox(
         width: double.infinity,
         child: ElevatedButton(
-          onPressed: _salvando ? null : _criarEstudo,
+          onPressed: _salvando ? null : _salvarEstudo,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryLime,
             foregroundColor: AppColors.textDark,
@@ -533,8 +590,10 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                     color: AppColors.textDark,
                   ),
                 )
-              : const Text(
-                  'Criar estudo e simular',
+              : Text(
+                  widget.estudo != null
+                      ? 'Salvar alterações'
+                      : 'Criar estudo e simular',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                 ),
         ),

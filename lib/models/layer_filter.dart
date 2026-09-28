@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 
-enum TipoIndicadorVisual {
-  ponto,
-  quadrado,
-  anel,
-}
+enum TipoIndicadorVisual { ponto, quadrado, anel }
 
 class ItemCamadaFiltro {
   final TipoAtivo tipo;
@@ -119,16 +115,16 @@ class CatalogoCamadas {
 
   static Map<TipoAtivo, bool> obterEstadoInicialPadrao() {
     return {
-      TipoAtivo.poste: false,
-      TipoAtivo.transformador: false,
-      TipoAtivo.subestacao: false,
-      TipoAtivo.dispositivo: false,
-      TipoAtivo.chaveFusivel: false,
-      TipoAtivo.chaveSeccionadora: false,
-      TipoAtivo.religador: false,
-      TipoAtivo.seccionadorAutomatico: false,
-      TipoAtivo.reguladorTensao: false,
-      TipoAtivo.bancoCapacitores: false,
+      TipoAtivo.poste: true,
+      TipoAtivo.transformador: true,
+      TipoAtivo.subestacao: true,
+      TipoAtivo.dispositivo: true,
+      TipoAtivo.chaveFusivel: true,
+      TipoAtivo.chaveSeccionadora: true,
+      TipoAtivo.religador: true,
+      TipoAtivo.seccionadorAutomatico: true,
+      TipoAtivo.reguladorTensao: true,
+      TipoAtivo.bancoCapacitores: true,
     };
   }
 }
