@@ -96,10 +96,6 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
         .toList();
   }
 
-  // IMPORTANTE:
-  // Quando não há itens carregados (falha na API, por exemplo),
-  // o botão "Prosseguir" continua habilitado, permitindo avançar
-  // no fluxo mesmo sem selecionar nada.
   bool get _podeProsseguir =>
       _selecionado != null || widget.items.isEmpty;
 
@@ -237,37 +233,42 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                                   : AppColors.border,
                             ),
                           ),
-                          child: ListTile(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            title: Text(
-                              item.title,
-                              style: TextStyle(
-                                color: AppColors.textWhite,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            clipBehavior: Clip.antiAlias,
+                            child: ListTile(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
                               ),
+                              title: Text(
+                                item.title,
+                                style: TextStyle(
+                                  color: AppColors.textWhite,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                              subtitle: item.subtitle != null
+                                  ? Text(
+                                      item.subtitle!,
+                                      style: const TextStyle(
+                                        color: AppColors.textMuted,
+                                        fontSize: 12,
+                                      ),
+                                    )
+                                  : null,
+                              leading: Icon(
+                                isSelected
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_unchecked,
+                                color: AppColors.primaryLime,
+                              ),
+                              onTap: () {
+                                setState(() => _selecionado = item.value);
+                              },
                             ),
-                            subtitle: item.subtitle != null
-                                ? Text(
-                                    item.subtitle!,
-                                    style: const TextStyle(
-                                      color: AppColors.textMuted,
-                                      fontSize: 12,
-                                    ),
-                                  )
-                                : null,
-                            leading: Icon(
-                              isSelected
-                                  ? Icons.radio_button_checked
-                                  : Icons.radio_button_unchecked,
-                              color: AppColors.primaryLime,
-                            ),
-                            onTap: () {
-                              setState(() => _selecionado = item.value);
-                            },
                           ),
                         );
                       },
