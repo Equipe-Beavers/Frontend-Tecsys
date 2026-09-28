@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 
-class MapSearchBar extends StatefulWidget {
-  const MapSearchBar({super.key});
+class MapSearchBar extends StatelessWidget {
+  const MapSearchBar({
+    super.key,
+    required this.controller,
+    this.onChanged,
+  });
 
-  @override
-  State<MapSearchBar> createState() => _MapSearchBar();
-}
+  final TextEditingController controller;
+  final ValueChanged<String>? onChanged;
 
-class _MapSearchBar extends State<MapSearchBar> {
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -20,6 +22,8 @@ class _MapSearchBar extends State<MapSearchBar> {
       ),
       child: Center(
         child: TextField(
+          controller: controller,
+          onChanged: onChanged,
           textAlignVertical: TextAlignVertical.center,
           style: const TextStyle(color: Colors.white, fontSize: 15),
           decoration: InputDecoration(
@@ -28,11 +32,11 @@ class _MapSearchBar extends State<MapSearchBar> {
             focusedBorder: InputBorder.none,
             enabledBorder: InputBorder.none,
             contentPadding: const EdgeInsets.symmetric(vertical: 14),
-            hintText: "Buscar ativo ou município",
+            hintText: 'Buscar ativo ou município',
             hintStyle: TextStyle(
               color: Colors.white.withValues(alpha: 0.4),
               fontSize: 16,
-              fontWeight: FontWeight.w200
+              fontWeight: FontWeight.w200,
             ),
             prefixIcon: Icon(
               Icons.search,
@@ -41,7 +45,7 @@ class _MapSearchBar extends State<MapSearchBar> {
             ),
           ),
         ),
-      )
+      ),
     );
   }
 }
