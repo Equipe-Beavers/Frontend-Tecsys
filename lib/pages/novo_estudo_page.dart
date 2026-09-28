@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/models/criterio_instalacao.dart';
+import 'package:frontend_tecsys/models/novo_estudo.dart';
 import 'package:frontend_tecsys/models/perfil_rf.dart';
+import 'package:frontend_tecsys/services/estudos_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
+import 'package:latlong2/latlong.dart';
 
 class NovoEstudoPage extends StatefulWidget {
   final String distribuidora;
   final String? municipio;
   final double areaKm2;
+  final List<LatLng> pontosArea;
 
   const NovoEstudoPage({
     super.key,
     required this.distribuidora,
     required this.municipio,
     required this.areaKm2,
+    required this.pontosArea,
   });
 
   @override
@@ -21,17 +27,25 @@ class NovoEstudoPage extends StatefulWidget {
 }
 
 class _NovoEstudoPageState extends State<NovoEstudoPage> {
+  final EstudosService _estudosService = EstudosService();
   final _formKey = GlobalKey<FormState>();
   final _nomeController = TextEditingController();
   final _descricaoController = TextEditingController();
+  late final _cidadeController = TextEditingController(text: widget.municipio);
+  final _estadoController = TextEditingController();
+  final _bairroController = TextEditingController();
 
   PerfilRf _perfilSelecionado = PerfilRf.padrao;
   CriterioInstalacao _criterioSelecionado = CriterioInstalacao.padrao;
+  bool _salvando = false;
 
   @override
   void dispose() {
     _nomeController.dispose();
     _descricaoController.dispose();
+    _cidadeController.dispose();
+    _estadoController.dispose();
+    _bairroController.dispose();
     super.dispose();
   }
 
@@ -78,9 +92,41 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     );
   }
 
-  void _criarEstudo() {
-    if (!_formKey.currentState!.validate()) return;
-    Navigator.pop(context, true);
+  String? _textoOuNulo(TextEditingController controller) {
+    final texto = controller.text.trim();
+    return texto.isEmpty ? null : texto;
+  }
+
+  Future<void> _criarEstudo() async {
+    if (_salvando || !_formKey.currentState!.validate()) return;
+
+    setState(() => _salvando = true);
+    try {
+      await _estudosService.criarEstudo(
+        NovoEstudo(
+          nome: _nomeController.text.trim(),
+          descricao: _textoOuNulo(_descricaoController),
+          uf: _textoOuNulo(_estadoController)?.toUpperCase(),
+          municipio: _textoOuNulo(_cidadeController),
+          bairro: _textoOuNulo(_bairroController),
+          distribuidora: widget.distribuidora.isEmpty
+              ? null
+              : widget.distribuidora,
+          pontosArea: widget.pontosArea,
+        ),
+      );
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (erro) {
+      if (!mounted) return;
+      setState(() => _salvando = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Não foi possível criar o estudo: $erro'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
@@ -115,6 +161,45 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                     ),
                     const SizedBox(height: 20),
                     _buildCardArea(),
+                    const SizedBox(height: 20),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 12,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildRotulo('CIDADE'),
+                              _buildCampoTexto(
+                                controller: _cidadeController,
+                                dica: 'Ex.: Uberaba',
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildRotulo('ESTADO'),
+                              _buildCampoTexto(
+                                controller: _estadoController,
+                                tamanhoMaximo: 2,
+                                dica: 'UF',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _buildRotulo('BAIRRO'),
+                    _buildCampoTexto(
+                      controller: _bairroController,
+                      dica: 'Ex.: Zona Oeste',
+                    ),
                     const SizedBox(height: 20),
                     _buildRotulo('PERFIL DE RF E GATEWAY'),
                     _buildCardSelecao(
@@ -242,6 +327,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     required String dica,
     int linhas = 1,
     FormFieldValidator<String>? validador,
+    int? tamanhoMaximo,
   }) {
     final borda = OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
@@ -251,6 +337,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       controller: controller,
       maxLines: linhas,
       validator: validador,
+      inputFormatters: tamanhoMaximo == null
+          ? null
+          : [LengthLimitingTextInputFormatter(tamanhoMaximo)],
       style: const TextStyle(color: AppColors.textWhite, fontSize: 14),
       cursorColor: AppColors.primaryLime,
       decoration: InputDecoration(
@@ -423,19 +512,31 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       child: SizedBox(
         width: double.infinity,
         child: ElevatedButton(
-          onPressed: _criarEstudo,
+          onPressed: _salvando ? null : _criarEstudo,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryLime,
             foregroundColor: AppColors.textDark,
+            disabledBackgroundColor: AppColors.primaryLime.withValues(
+              alpha: 0.6,
+            ),
             padding: const EdgeInsets.symmetric(vertical: 17),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Text(
-            'Criar estudo e simular',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-          ),
+          child: _salvando
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.textDark,
+                  ),
+                )
+              : const Text(
+                  'Criar estudo e simular',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
         ),
       ),
     );

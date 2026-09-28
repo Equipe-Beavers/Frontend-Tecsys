@@ -379,6 +379,7 @@ class _MapPageState extends State<MapPage> {
           distribuidora: _distribuidoraSelecionada ?? '',
           municipio: _municipioSelecionado,
           areaKm2: calculatePolygonAreaKm2(polygonPoints),
+          pontosArea: List.unmodifiable(polygonPoints),
         ),
       ),
     );
