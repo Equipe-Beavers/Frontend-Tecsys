@@ -15,6 +15,8 @@ import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
 import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/filter_chip.dart';
+import 'package:frontend_tecsys/pages/novo_estudo_page.dart';
+import 'package:frontend_tecsys/utils/map_utils.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -54,7 +56,7 @@ class _MapPageState extends State<MapPage> {
   final Map<Marker, AtivoBdgd> _markerAtivoMap = {};
 
   List<LatLng> polygonPoints = [];
-  bool isDrawing = false;
+  bool isDrawing = true;
 
   @override
   void initState() {
@@ -363,6 +365,74 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
+  bool get _areaDesenhada => polygonPoints.length >= 3;
+
+  void _cancelarArea() {
+    setState(() => polygonPoints = []);
+  }
+
+  Future<void> _prosseguirArea() async {
+    final estudoCriado = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NovoEstudoPage(
+          distribuidora: _distribuidoraSelecionada ?? '',
+          municipio: _municipioSelecionado,
+          areaKm2: calculatePolygonAreaKm2(polygonPoints),
+        ),
+      ),
+    );
+    if (estudoCriado == true && mounted) {
+      setState(() => polygonPoints = []);
+    }
+  }
+
+  Widget _buildBotoesArea() {
+    return Row(
+      spacing: 12,
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: _cancelarArea,
+            style: OutlinedButton.styleFrom(
+              backgroundColor: AppColors.surfaceCard,
+              foregroundColor: AppColors.textWhite,
+              side: const BorderSide(color: AppColors.border),
+              padding: const EdgeInsets.symmetric(vertical: 17),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: ElevatedButton(
+            onPressed: _prosseguirArea,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryLime,
+              foregroundColor: AppColors.textDark,
+              elevation: 6,
+              padding: const EdgeInsets.symmetric(vertical: 17),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
+            ),
+            child: const Text(
+              'Prosseguir',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   List<Marker> _gerarMarcadores() {
     _markerAtivoMap.clear();
 
@@ -557,53 +627,55 @@ class _MapPageState extends State<MapPage> {
             left: 15,
             right: 15,
             bottom: 10,
-            child: ElevatedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Avançar para seleção de área e criação de estudo (RF03 / RF04)',
-                      style: TextStyle(
-                        color: AppColors.textDark,
-                        fontWeight: FontWeight.bold,
+            child: _areaDesenhada
+                ? _buildBotoesArea()
+                : ElevatedButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Avançar para seleção de área e criação de estudo (RF03 / RF04)',
+                            style: TextStyle(
+                              color: AppColors.textDark,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          backgroundColor: AppColors.primaryLime,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryLime,
+                      foregroundColor: AppColors.textDark,
+                      elevation: 6,
+                      padding: const EdgeInsets.symmetric(vertical: 17),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
+                      shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
                     ),
-                    backgroundColor: AppColors.primaryLime,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryLime,
-                foregroundColor: AppColors.textDark,
-                elevation: 6,
-                padding: const EdgeInsets.symmetric(vertical: 17),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                spacing: 8,
-                children: [
-                  Icon(
-                    Icons.add,
-                    color: AppColors.textDark,
-                    size: 16,
-                    weight: 10.0,
-                  ),
-                  Text(
-                    'Iniciar estudo',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.3,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      spacing: 8,
+                      children: [
+                        Icon(
+                          Icons.add,
+                          color: AppColors.textDark,
+                          size: 16,
+                          weight: 10.0,
+                        ),
+                        Text(
+                          'Iniciar estudo',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
           ),
           // Indicador de Carregamento
           if (_carregando && _todosAtivos.isEmpty)
