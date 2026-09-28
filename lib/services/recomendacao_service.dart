@@ -1,15 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:frontend_tecsys/config/api_config.dart';
 import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
 
 class RecomendacaoService {
   RecomendacaoService({http.Client? client, String? baseUrl})
       : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ??
-            const String.fromEnvironment(
-              'API_BASE_URL',
-              defaultValue: 'http://localhost:3000',
-            );
+        _baseUrl =
+            (baseUrl ?? ApiConfig.baseUrl).replaceFirst(RegExp(r'/+$'), '');
 
   final http.Client _client;
   final String _baseUrl;
@@ -28,9 +26,8 @@ class RecomendacaoService {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'id_perfil_rf': idPerfilRf,
-            if (idCriterioInstalacao != null)
-              'id_criterio_instalacao': idCriterioInstalacao,
-            if (nomeCenario != null) 'nome_cenario': nomeCenario,
+            'id_criterio_instalacao': ?idCriterioInstalacao,
+            'nome_cenario': ?nomeCenario,
           }),
         )
         .timeout(const Duration(seconds: 30));

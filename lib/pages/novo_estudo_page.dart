@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/models/criterio_instalacao.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
 import 'package:frontend_tecsys/models/perfil_rf.dart';
+import 'package:frontend_tecsys/services/criterio_service.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
+import 'package:frontend_tecsys/services/perfil_rf_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:latlong2/latlong.dart';
@@ -28,6 +30,8 @@ class NovoEstudoPage extends StatefulWidget {
 
 class _NovoEstudoPageState extends State<NovoEstudoPage> {
   final EstudosService _estudosService = EstudosService();
+  final PerfilRfService _perfilRfService = PerfilRfService();
+  final CriterioService _criterioService = CriterioService();
   final _formKey = GlobalKey<FormState>();
   final _nomeController = TextEditingController();
   final _descricaoController = TextEditingController();
@@ -35,12 +39,55 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   final _estadoController = TextEditingController();
   final _bairroController = TextEditingController();
 
+  List<PerfilRf> _perfis = PerfilRf.disponiveis;
+  List<CriterioInstalacao> _criterios = CriterioInstalacao.disponiveis;
+  bool _carregandoOpcoes = true;
+
   PerfilRf _perfilSelecionado = PerfilRf.padrao;
   CriterioInstalacao _criterioSelecionado = CriterioInstalacao.padrao;
   bool _salvando = false;
 
   @override
+  void initState() {
+    super.initState();
+    _carregarOpcoes();
+  }
+
+  Future<void> _carregarOpcoes() async {
+    try {
+      final perfis = await _perfilRfService.getPerfis();
+      if (perfis.isNotEmpty && mounted) {
+        setState(() {
+          _perfis = perfis;
+          _perfilSelecionado = perfis.first;
+        });
+      }
+    } catch (_) {
+      // Mantém a lista local caso a API não responda.
+    }
+
+    try {
+      final criterios = await _criterioService.getCriterios();
+      if (criterios.isNotEmpty && mounted) {
+        setState(() {
+          _criterios = criterios;
+          _criterioSelecionado = criterios.first;
+        });
+      }
+    } catch (_) {
+      // Mantém a lista local caso a API não responda.
+    }
+
+    if (mounted) {
+      setState(() => _carregandoOpcoes = false);
+    }
+  }
+
+  @override
   void dispose() {
+    _estudosService.dispose();
+    _perfilRfService.dispose();
+    _criterioService.dispose();
     _nomeController.dispose();
     _descricaoController.dispose();
     _cidadeController.dispose();
@@ -65,7 +112,10 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     SelectionBottomSheet.show<PerfilRf>(
       context: context,
       title: 'Selecionar perfil RF e gateway',
-      items: PerfilRf.disponiveis
+      subtitle: _carregandoOpcoes
+          ? 'Carregando perfis do servidor...'
+          : 'Perfis disponíveis no banco de dados.',
+      items: _perfis
           .map(
             (perfil) => SelectionItem(
               title: '${perfil.nome} · ${perfil.modeloGateway}',
@@ -74,7 +124,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           )
           .toList(),
       selectedValue: _perfilSelecionado,
-      onSelected: (perfil) => setState(() => _perfilSelecionado = perfil),
+      onSelected: (perfil) => setState(() => _perfilSelecionado = perfil ?? _perfilSelecionado),
     );
   }
 
@@ -82,13 +132,13 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     SelectionBottomSheet.show<CriterioInstalacao>(
       context: context,
       title: 'Selecionar critério de instalação',
-      items: CriterioInstalacao.disponiveis
+      items: _criterios
           .map(
             (criterio) => SelectionItem(title: criterio.nome, value: criterio),
           )
           .toList(),
       selectedValue: _criterioSelecionado,
-      onSelected: (criterio) => setState(() => _criterioSelecionado = criterio),
+      onSelected: (criterio) => setState(() => _criterioSelecionado = criterio ?? _criterioSelecionado),
     );
   }
 

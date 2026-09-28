@@ -90,8 +90,18 @@ void main() {
     expect(find.text('ESTRUTURAS'), findsOneWidget);
     expect(find.text('PROTEÇÃO E MANOBRA'), findsOneWidget);
     expect(find.text('REGULAÇÃO'), findsOneWidget);
-    expect(find.text('8 de 10 camadas ativas'), findsOneWidget);
+    expect(find.text('0 de 10 camadas ativas'), findsOneWidget);
     expect(find.text('Salvar filtro'), findsOneWidget);
+
+    // Todas as camadas iniciam desmarcadas
+    for (final checkbox in tester.widgetList<Checkbox>(find.byType(Checkbox))) {
+      expect(checkbox.value, isFalse);
+    }
+
+    // Marca a primeira camada (Poste) e confirma a contagem
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pump();
+    expect(find.text('1 de 10 camadas ativas'), findsOneWidget);
 
     // Acionar botão "Salvar filtro"
     await tester.tap(find.text('Salvar filtro'));
@@ -99,5 +109,6 @@ void main() {
 
     expect(camadasSalvas, isNotNull);
     expect(camadasSalvas![TipoAtivo.poste], isTrue);
+    expect(camadasSalvas![TipoAtivo.transformador], isFalse);
   });
 }

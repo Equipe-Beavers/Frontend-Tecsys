@@ -1,4 +1,5 @@
 class PerfilRf {
+  final int? idPerfilRf;
   final String nome;
   final String modeloGateway;
   final double frequenciaMhz;
@@ -8,6 +9,7 @@ class PerfilRf {
   final double alturaDispositivoM;
 
   const PerfilRf({
+    this.idPerfilRf,
     required this.nome,
     required this.modeloGateway,
     required this.frequenciaMhz,
@@ -28,4 +30,19 @@ class PerfilRf {
   );
 
   static const List<PerfilRf> disponiveis = [padrao];
+
+  factory PerfilRf.fromJson(Map<String, dynamic> json) {
+    return PerfilRf(
+      idPerfilRf: (json['id_perfil_rf'] as num?)?.toInt(),
+      nome: json['nome']?.toString() ?? 'Perfil sem nome',
+      modeloGateway: json['modelo_gateway']?.toString() ?? 'Não informado',
+      frequenciaMhz: (json['frequencia_mhz'] as num?)?.toDouble() ?? 0,
+      potenciaTransmissaoDbm:
+          (json['potencia_transmissao_dbm'] as num?)?.toDouble() ?? 0,
+      sensibilidadeRecepcaoDbm:
+          (json['sensibilidade_recepcao_dbm'] as num?)?.toDouble() ?? 0,
+      alturaGatewayM: (json['altura_gateway_m'] as num?)?.toDouble() ?? 0,
+      alturaDispositivoM: (json['altura_dispositivo_m'] as num?)?.toDouble() ?? 0,
+    );
+  }
 }

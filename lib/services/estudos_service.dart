@@ -1,20 +1,95 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:frontend_tecsys/config/api_config.dart';
+import 'package:frontend_tecsys/models/estudo.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
+
+class ContagemPontos {
+  const ContagemPontos({required this.interesse, required this.candidato});
+
+  final int interesse;
+  final int candidato;
+
+  bool get completa => interesse > 0 && candidato > 0;
+}
 
 class EstudosService {
   EstudosService({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
       _baseUrl =
-          baseUrl ??
-          const String.fromEnvironment(
-            'API_BASE_URL',
-            defaultValue: 'http://localhost:3000',
-          );
+          (baseUrl ?? ApiConfig.baseUrl).replaceFirst(RegExp(r'/+$'), '');
 
   final http.Client _client;
   final String _baseUrl;
+
+  Future<List<EstudoResumo>> getEstudos() async {
+    final resposta = await _client
+        .get(Uri.parse('$_baseUrl/estudos'))
+        .timeout(const Duration(seconds: 15));
+
+    if (resposta.statusCode != 200) {
+      throw StateError(
+        'A API de estudos respondeu com HTTP ${resposta.statusCode}.',
+      );
+    }
+
+    final corpo = jsonDecode(resposta.body);
+
+    if (corpo is! Map || corpo['estudos'] is! List) {
+      throw const FormatException('Resposta da listagem de estudos inválida.');
+    }
+
+    return (corpo['estudos'] as List)
+        .map((item) => EstudoResumo.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList();
+  }
+
+  Future<Map<int, ContagemPontos>> getContagemPontos() async {
+    final resposta = await _client
+        .get(Uri.parse('$_baseUrl/estudo-pontos'))
+        .timeout(const Duration(seconds: 15));
+
+    if (resposta.statusCode != 200) {
+      throw StateError(
+        'A API de pontos respondeu com HTTP ${resposta.statusCode}.',
+      );
+    }
+
+    final corpo = jsonDecode(resposta.body);
+
+    if (corpo is! Map || corpo['pontos'] is! List) {
+      throw const FormatException('Resposta dos pontos do estudo inválida.');
+    }
+
+    final contagens = <int, ContagemPontos>{};
+    final acumulado = <int, List<int>>{};
+
+    for (final item in corpo['pontos'] as List) {
+      final ponto = Map<String, dynamic>.from(item as Map);
+      final idEstudo = (ponto['id_estudo'] as num?)?.toInt();
+      if (idEstudo == null) continue;
+
+      final papel = ponto['papel']?.toString();
+      final conta = acumulado.putIfAbsent(idEstudo, () => [0, 0]);
+
+      if (papel == 'interesse' || papel == 'ambos') {
+        conta[0] += 1;
+      }
+      if (papel == 'candidato' || papel == 'ambos') {
+        conta[1] += 1;
+      }
+    }
+
+    acumulado.forEach((idEstudo, conta) {
+      contagens[idEstudo] = ContagemPontos(
+        interesse: conta[0],
+        candidato: conta[1],
+      );
+    });
+
+    return contagens;
+  }
 
   Future<Map<String, dynamic>> criarEstudo(NovoEstudo estudo) async {
     final resposta = await _client
@@ -38,4 +113,6 @@ class EstudosService {
     }
     return Map<String, dynamic>.from(corpo['estudo'] as Map);
   }
+
+  void dispose() => _client.close();
 }

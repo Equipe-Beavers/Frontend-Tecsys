@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:frontend_tecsys/config/api_config.dart';
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 
 class DistribuidoraResumo {
@@ -9,12 +9,20 @@ class DistribuidoraResumo {
     required this.nome,
     required this.uf,
     required this.anoBdgd,
+    this.totalAtivos = 0,
+    this.latitude,
+    this.longitude,
   });
 
   final int id;
   final String nome;
   final String? uf;
   final int anoBdgd;
+  final int totalAtivos;
+  final double? latitude;
+  final double? longitude;
+
+  bool get possuiAtivosLocais => totalAtivos > 0;
 
   factory DistribuidoraResumo.fromJson(Map<String, dynamic> json) {
     return DistribuidoraResumo(
@@ -22,6 +30,58 @@ class DistribuidoraResumo {
       nome: json['nome']?.toString() ?? '',
       uf: json['uf']?.toString(),
       anoBdgd: (json['anoBdgd'] as num?)?.toInt() ?? 0,
+      totalAtivos: (json['totalAtivos'] as num?)?.toInt() ?? 0,
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+    );
+  }
+}
+
+class MunicipioResumo {
+  const MunicipioResumo({
+    required this.nome,
+    required this.totalAtivos,
+    this.uf,
+    this.latitude,
+    this.longitude,
+  });
+
+  final String nome;
+  final String? uf;
+  final int totalAtivos;
+  final double? latitude;
+  final double? longitude;
+
+  factory MunicipioResumo.fromJson(Map<String, dynamic> json) {
+    return MunicipioResumo(
+      nome: json['nome']?.toString() ?? '',
+      uf: json['uf']?.toString(),
+      totalAtivos: (json['totalAtivos'] as num?)?.toInt() ?? 0,
+      latitude: (json['lat'] as num?)?.toDouble(),
+      longitude: (json['lng'] as num?)?.toDouble(),
+    );
+  }
+}
+
+class BairroResumo {
+  const BairroResumo({
+    required this.nome,
+    required this.totalAtivos,
+    this.municipio,
+    this.uf,
+  });
+
+  final String nome;
+  final String? municipio;
+  final String? uf;
+  final int totalAtivos;
+
+  factory BairroResumo.fromJson(Map<String, dynamic> json) {
+    return BairroResumo(
+      nome: json['nome']?.toString() ?? '',
+      municipio: json['municipio']?.toString(),
+      uf: json['uf']?.toString(),
+      totalAtivos: (json['totalAtivos'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -41,28 +101,15 @@ class AtivosService {
     http.Client? client,
     String? baseUrl,
   })  : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ??
-            const String.fromEnvironment(
-              'API_BASE_URL',
-              defaultValue: kIsWeb
-                  ? 'http://localhost:3000'
-                  : 'http://10.0.2.2:3000',
-            );
+        _baseUrl = (baseUrl ?? ApiConfig.baseUrl)
+            .replaceFirst(RegExp(r'/+$'), '');
 
   final http.Client _client;
   final String _baseUrl;
 
-  static String _normalizarMunicipio(String? valor) {
-    final texto = (valor ?? '').trim();
-
-    if (texto.isEmpty || texto == 'Não informado') {
-      return '';
-    }
-
-    final parte = texto.split('-').first.trim();
-
-    return parte.isEmpty ? texto : parte;
-  }
+  // O backend limita a 100 registros por página nas consultas de região.
+  static const int _limitePaginaRegiao = 100;
+  static const int _maxPaginasRegiao = 10;
 
   static String _normalizarEstado(String? valor) {
     final texto = (valor ?? '').trim();
@@ -84,10 +131,12 @@ class AtivosService {
     Set<String>? tipos,
     String? estado,
     String? municipio,
+    String? bairro,
     String? busca,
   }) {
     final estadoFiltro = estado?.trim();
     final municipioFiltro = municipio?.trim();
+    final bairroFiltro = bairro?.trim();
     final buscaFiltro = busca?.trim().toLowerCase();
 
     return ativos.where((ativo) {
@@ -113,15 +162,21 @@ class AtivosService {
       }
 
       if (municipioFiltro != null && municipioFiltro.isNotEmpty) {
-        final nomeMunicipio =
-            _normalizarMunicipio(ativo.municipio).toLowerCase();
-        final nomeBairro = ativo.bairro.trim().toLowerCase();
+        // O backend já resolve o nome do município (IBGE) e filtra;
+        // aqui só garantimos a coerência com o que veio na resposta.
+        final nomeMunicipio = ativo.municipio.trim().toLowerCase();
         final alvo = municipioFiltro.toLowerCase();
 
-        if (nomeMunicipio != alvo &&
-            nomeBairro != alvo &&
-            !nomeMunicipio.contains(alvo) &&
-            !nomeBairro.contains(alvo)) {
+        if (nomeMunicipio != alvo && !nomeMunicipio.contains(alvo)) {
+          return false;
+        }
+      }
+
+      if (bairroFiltro != null && bairroFiltro.isNotEmpty) {
+        final nomeBairro = ativo.bairro.trim().toLowerCase();
+        final alvo = bairroFiltro.toLowerCase();
+
+        if (nomeBairro != alvo && !nomeBairro.contains(alvo)) {
           return false;
         }
       }
@@ -153,13 +208,19 @@ class AtivosService {
 
     final decoded = jsonDecode(response.body);
 
-    if (decoded is! List) {
+    final List<dynamic>? lista = decoded is List
+        ? decoded
+        : (decoded is Map && decoded['data'] is List)
+            ? decoded['data'] as List
+            : null;
+
+    if (lista == null) {
       throw const FormatException(
         'Resposta de distribuidoras inválida.',
       );
     }
 
-    return decoded
+    return lista
         .map(
           (item) => DistribuidoraResumo.fromJson(
             Map<String, dynamic>.from(item as Map),
@@ -178,6 +239,7 @@ class AtivosService {
     Set<String>? tipos,
     String? estado,
     String? municipio,
+    String? bairro,
     String? busca,
   }) async {
     final query = <String, String>{
@@ -202,6 +264,10 @@ class AtivosService {
 
     if (municipio != null && municipio.isNotEmpty) {
       query['municipio'] = municipio;
+    }
+
+    if (bairro != null && bairro.isNotEmpty) {
+      query['bairro'] = bairro;
     }
 
     if (busca != null && busca.isNotEmpty) {
@@ -244,6 +310,7 @@ class AtivosService {
       tipos: tipos,
       estado: estado,
       municipio: municipio,
+      bairro: bairro,
       busca: busca,
     );
 
@@ -257,6 +324,85 @@ class AtivosService {
       ativos: filtered,
       total: total,
     );
+  }
+
+  Future<List<MunicipioResumo>> getMunicipios({
+    required String distribuidora,
+    String? busca,
+  }) {
+    return _buscarPaginas(
+      path: '/api/municipios',
+      filtros: {
+        'distribuidora': distribuidora,
+        if (busca != null && busca.isNotEmpty) 'busca': busca,
+      },
+      fromJson: MunicipioResumo.fromJson,
+    );
+  }
+
+  Future<List<BairroResumo>> getBairros({
+    required String distribuidora,
+    String? municipio,
+    String? busca,
+  }) {
+    return _buscarPaginas(
+      path: '/api/bairros',
+      filtros: {
+        'distribuidora': distribuidora,
+        if (municipio != null && municipio.isNotEmpty) 'municipio': municipio,
+        if (busca != null && busca.isNotEmpty) 'busca': busca,
+      },
+      fromJson: BairroResumo.fromJson,
+    );
+  }
+
+  Future<List<T>> _buscarPaginas<T>({
+    required String path,
+    required Map<String, String> filtros,
+    required T Function(Map<String, dynamic>) fromJson,
+  }) async {
+    final itens = <T>[];
+
+    for (var pagina = 1; pagina <= _maxPaginasRegiao; pagina++) {
+      final uri = Uri.parse('$_baseUrl$path').replace(
+        queryParameters: {
+          ...filtros,
+          'pagina': '$pagina',
+          'limite': '$_limitePaginaRegiao',
+        },
+      );
+
+      final response = await _client
+          .get(uri)
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode != 200) {
+        throw StateError(
+          'A API de regiões respondeu com HTTP ${response.statusCode}.',
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+
+      if (decoded is! Map || decoded['dados'] is! List) {
+        throw const FormatException('Resposta da API de regiões inválida.');
+      }
+
+      itens.addAll(
+        (decoded['dados'] as List).map(
+          (item) => fromJson(Map<String, dynamic>.from(item as Map)),
+        ),
+      );
+
+      final paginacao = decoded['paginacao'];
+      final totalPaginas = paginacao is Map
+          ? ((paginacao['totalPaginas'] as num?)?.toInt() ?? 1)
+          : 1;
+
+      if (pagina >= totalPaginas) break;
+    }
+
+    return itens;
   }
 
   void dispose() {

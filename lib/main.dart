@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:frontend_tecsys/pages/estudos_page.dart';
 import 'package:frontend_tecsys/pages/map_page.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
-import 'package:frontend_tecsys/widgets/appbar.dart';
-import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 
 void main() {
@@ -21,6 +20,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  static const int _totalAbas = 2;
+
   int _abaSelecionada = 0;
 
   @override
@@ -36,14 +37,16 @@ class _MyAppState extends State<MyApp> {
       ),
       home: Scaffold(
         body: IndexedStack(
-          index: 0,
-          children: [
-            const MapPage(),
+          index: _abaSelecionada,
+          children: const [
+            MapPage(),
+            EstudosPage(),
           ],
         ),
         bottomNavigationBar: Navbar(
-          currentIndex: 0,
+          currentIndex: _abaSelecionada,
           onTap: (index) {
+            if (index >= _totalAbas) return;
             setState(() {
               _abaSelecionada = index;
             });
@@ -52,6 +55,4 @@ class _MyAppState extends State<MyApp> {
       ),
     );
   }
-
-
 }

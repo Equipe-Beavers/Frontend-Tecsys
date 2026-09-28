@@ -26,8 +26,6 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
-  static const _fallbackCenter = LatLng(-23.4532, -46.4438);
-
   final MapController _mapController = MapController();
   final AtivosService _ativosService = AtivosService();
   final TextEditingController _buscaController = TextEditingController();
@@ -35,21 +33,26 @@ class _MapPageState extends State<MapPage> {
   List<DistribuidoraResumo> _distribuidoras = [];
   String? _distribuidoraSelecionada;
   String? _municipioSelecionado;
+  String? _bairroSelecionado;
+  bool _regiaoConfirmada = false;
   double _currentZoom = 3.8;
   String _textoBusca = '';
+
+  List<MunicipioResumo> _municipiosDaRegiao = [];
+  Map<String, List<String>> _bairrosPorCidade = {};
+  bool _carregandoRegiao = false;
+  String? _erroRegiao;
 
   List<AtivoBdgd> _todosAtivos = [];
   Map<TipoAtivo, bool> _camadasAtivas =
       CatalogoCamadas.obterEstadoInicialPadrao();
   AtivoBdgd? _ativoSelecionado;
-  bool _carregando = true;
+  bool _carregando = false;
   String? _erro;
 
   Timer? _debounceTimer;
   int _sequenciaRequisicao = 0;
   bool _mapaPronto = false;
-  bool _distribuidorasProntas = false;
-  bool _cargaInicialFeita = false;
 
   static const int _limiteAtivos = 3000;
 
@@ -74,20 +77,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _aoMapaPronto() {
-    _mapaPronto = true;
-    _tentarCargaInicial();
-  }
-
-  void _tentarCargaInicial() {
-    if (!_mapaPronto ||
-        !_distribuidorasProntas ||
-        _cargaInicialFeita ||
-        _distribuidoraSelecionada == null) {
-      return;
-    }
-
-    _cargaInicialFeita = true;
-    _agendarCarregamento();
+    setState(() => _mapaPronto = true);
   }
 
   void _agendarCarregamento() {
@@ -95,8 +85,33 @@ class _MapPageState extends State<MapPage> {
     _debounceTimer = Timer(const Duration(milliseconds: 400), _carregarDados);
   }
 
+  /// A região só fica pronta depois de distribuidora + cidade/bairro,
+  /// e os ativos só são buscados quando há camada marcada nessa região.
+  bool get _podeExibirBotaoCamadas => _regiaoConfirmada;
+
+  bool get _podeCarregarAtivos =>
+      _regiaoConfirmada &&
+      _distribuidoraSelecionada != null &&
+      _totalCamadasAtivas > 0;
+
+  String get _rotuloRegiao {
+    final cidade = _municipioSelecionado;
+    final bairro = _bairroSelecionado;
+
+    if (cidade == null || cidade.isEmpty) return 'Região inteira';
+    if (bairro == null || bairro.isEmpty) return cidade;
+    return '$cidade · $bairro';
+  }
+
   Future<void> _carregarDados() async {
-    if (!_mapaPronto || _distribuidoraSelecionada == null) {
+    if (!_mapaPronto || !_podeCarregarAtivos) {
+      if (_todosAtivos.isNotEmpty) {
+        setState(() {
+          _todosAtivos = [];
+          _carregando = false;
+          _erro = null;
+        });
+      }
       return;
     }
 
@@ -104,15 +119,6 @@ class _MapPageState extends State<MapPage> {
       for (final entry in _camadasAtivas.entries)
         if (entry.value) entry.key.apiValue,
     };
-
-    if (camadasApi.isEmpty) {
-      setState(() {
-        _todosAtivos = [];
-        _carregando = false;
-        _erro = null;
-      });
-      return;
-    }
 
     final sequencia = ++_sequenciaRequisicao;
     final bounds = _mapController.camera.visibleBounds;
@@ -132,6 +138,8 @@ class _MapPageState extends State<MapPage> {
         maxLongitude: bounds.east,
         distribuidora: _distribuidoraSelecionada,
         tipos: camadasApi,
+        municipio: _municipioSelecionado,
+        bairro: _bairroSelecionado,
         limit: _limiteAtivos,
       );
 
@@ -142,6 +150,12 @@ class _MapPageState extends State<MapPage> {
       setState(() {
         _todosAtivos = resultado.ativos;
         _carregando = false;
+        _erro = resultado.ativos.isEmpty
+            ? 'Nenhum ativo do banco local para '
+                '${_distribuidoraSelecionada ?? 'esta distribuidora'}'
+                '${_municipioSelecionado != null ? ' em $_municipioSelecionado' : ''} '
+                'nesta região do mapa.'
+            : null;
       });
     } catch (error) {
       if (!mounted || sequencia != _sequenciaRequisicao) {
@@ -159,22 +173,31 @@ class _MapPageState extends State<MapPage> {
     try {
       final distribuidoras = await _ativosService.getDistribuidoras();
 
-      if (!mounted || distribuidoras.isEmpty) {
+      if (!mounted) {
         return;
       }
 
+      if (distribuidoras.isEmpty) {
+        setState(() {
+          _carregando = false;
+          _erro = 'Nenhuma distribuidora foi retornada pela API.';
+        });
+        return;
+      }
+
+      // Nenhuma distribuidora é escolhida automaticamente: o fluxo exige
+      // que o usuário selecione distribuidora e depois a cidade/bairro
+      // antes de liberar o carregamento de ativos.
       setState(() {
         _distribuidoras = distribuidoras;
-        _distribuidoraSelecionada = distribuidoras.first.nome;
-        _distribuidorasProntas = true;
         _carregando = false;
+        _erro = null;
       });
-
-      _tentarCargaInicial();
     } catch (error) {
       if (mounted) {
         setState(() {
           _carregando = false;
+          _erro = 'Não foi possível carregar as distribuidoras.';
         });
       }
     }
@@ -183,101 +206,125 @@ class _MapPageState extends State<MapPage> {
   int get _totalCamadasAtivas =>
       _camadasAtivas.values.where((ativa) => ativa).length;
 
-  Future<void> _selecionarDistribuidora(String? distribuidora) async {
-    if (distribuidora == null || distribuidora == _distribuidoraSelecionada) {
+  bool get _nenhumaCamadaAtiva =>
+      _camadasAtivas.values.every((ativa) => !ativa);
+
+  String _rotuloAtivos(DistribuidoraResumo dist) {
+    if (dist.totalAtivos <= 0) {
+      return 'Sem ativos no banco local';
+    }
+    return '${_formatarContagem(dist.totalAtivos)} ativos no banco local';
+  }
+
+  String _formatarContagem(int valor) {
+    final texto = valor.toString();
+    final buffer = StringBuffer();
+
+    for (int i = 0; i < texto.length; i++) {
+      if (i > 0 && (texto.length - i) % 3 == 0) {
+        buffer.write('.');
+      }
+      buffer.write(texto[i]);
+    }
+
+    return buffer.toString();
+  }
+
+  Future<void> _selecionarDistribuidora(
+    String? distribuidora, {
+    String? stepLabel,
+  }) async {
+    if (distribuidora == null || distribuidora.isEmpty) {
+      return;
+    }
+
+    final mudou = distribuidora != _distribuidoraSelecionada;
+
+    if (mudou) {
+      _debounceTimer?.cancel();
+      // Invalida qualquer requisição de ativos ainda em andamento.
+      _sequenciaRequisicao++;
+
+      setState(() {
+        _distribuidoraSelecionada = distribuidora;
+        _municipioSelecionado = null;
+        _bairroSelecionado = null;
+        _regiaoConfirmada = false;
+        _municipiosDaRegiao = [];
+        _bairrosPorCidade = {};
+        _camadasAtivas = CatalogoCamadas.obterEstadoInicialPadrao();
+        _todosAtivos = [];
+        _ativoSelecionado = null;
+        _textoBusca = '';
+        _buscaController.clear();
+        _erro = null;
+        _carregando = false;
+      });
+    }
+
+    await _abrirSelecaoCidade(stepLabel: stepLabel);
+  }
+
+  /// PASSO 2: busca as cidades/bairros da distribuidora (consulta leve,
+  /// sem tocar na tabela de ativos) e abre o sheet de seleção.
+  Future<void> _abrirSelecaoCidade({String? stepLabel}) async {
+    final distribuidora = _distribuidoraSelecionada;
+    if (distribuidora == null || !mounted) {
       return;
     }
 
     setState(() {
-      _distribuidoraSelecionada = distribuidora;
-      _todosAtivos = [];
-      _ativoSelecionado = null;
-      _municipioSelecionado = null;
-      _textoBusca = '';
-      _buscaController.clear();
-      _carregando = true;
+      _carregandoRegiao = true;
+      _erroRegiao = null;
     });
 
-    _agendarCarregamento();
-  }
-
-  Future<void> _iniciarEstudo() async {
-    await SelectionBottomSheet.show<String>(
-      context: context,
-      title: 'Selecionar distribuidora',
-      subtitle: 'Os ativos serão recarregados para a região escolhida.',
-      stepLabel: 'PASSO 1 DE 4',
-      searchHint: 'Buscar distribuidora',
-      notFoundMessage: _distribuidoras.isEmpty
-          ? 'Não foi possível carregar as distribuidoras.'
-          : 'Não encontrada',
-      items: _distribuidoras
-          .map((dist) => SelectionItem(title: dist.nome, value: dist.nome))
-          .toList(),
-      selectedValue: _distribuidoraSelecionada,
-      onSelected: (distribuidoraNome) async {
-        if (distribuidoraNome == null) {
-          // Nenhuma distribuidora disponível (lista vazia);
-          // o usuário optou por prosseguir mesmo assim.
-          await _abrirCidadeBairroDoEstudo();
-          return;
-        }
-
-        await _selecionarDistribuidoraParaEstudo(distribuidoraNome);
-      },
-    );
-  }
-
-  Future<void> _selecionarDistribuidoraParaEstudo(String distribuidora) async {
-    if (!mounted) return;
-
-    _debounceTimer?.cancel();
-
-    setState(() {
-      _distribuidoraSelecionada = distribuidora;
-      _todosAtivos = [];
-      _ativoSelecionado = null;
-      _municipioSelecionado = null;
-      _textoBusca = '';
-      _buscaController.clear();
-      _carregando = true;
-    });
+    List<MunicipioResumo> municipios = [];
+    List<BairroResumo> bairros = [];
+    String? erroRegiao;
 
     try {
-      await _carregarDados();
-
-      if (!mounted) return;
-
-      await _abrirCidadeBairroDoEstudo();
-    } finally {
-      if (mounted) {
-        setState(() {
-          _carregando = false;
-        });
-      }
+      municipios = await _ativosService.getMunicipios(
+        distribuidora: distribuidora,
+      );
+      bairros = await _ativosService.getBairros(distribuidora: distribuidora);
+    } catch (_) {
+      erroRegiao =
+          'Não foi possível carregar as cidades da distribuidora selecionada.';
     }
-  }
 
-  Future<void> _abrirCidadeBairroDoEstudo() async {
-    final cidades = _municipiosDisponiveis;
+    if (!mounted) {
+      return;
+    }
 
     final bairrosPorCidade = <String, List<String>>{};
-
-    for (final cidade in cidades) {
-      final bairros =
-          _todosAtivos
-              .where((ativo) => ativo.municipio == cidade)
-              .map((ativo) => ativo.bairro.trim())
-              .where((bairro) => bairro.isNotEmpty && bairro != 'Não informado')
-              .toSet()
-              .toList()
-            ..sort();
-
-      bairrosPorCidade[cidade] = bairros;
+    for (final bairro in bairros) {
+      final cidade = bairro.municipio?.trim() ?? '';
+      if (cidade.isEmpty) continue;
+      (bairrosPorCidade[cidade] ??= <String>[]).add(bairro.nome);
+    }
+    for (final lista in bairrosPorCidade.values) {
+      lista.sort();
     }
 
-    // Mesma regra: o sheet abre mesmo com "cidades" vazia,
-    // mostrando a mensagem de "não encontrada" no lugar da lista.
+    setState(() {
+      _municipiosDaRegiao = municipios;
+      _bairrosPorCidade = bairrosPorCidade;
+      _carregandoRegiao = false;
+      _erroRegiao = erroRegiao;
+    });
+
+    await _mostrarSheetCidade(stepLabel: stepLabel);
+  }
+
+  Future<void> _mostrarSheetCidade({String? stepLabel}) async {
+    final cidades = _municipiosDaRegiao
+        .map((municipio) => municipio.nome)
+        .toSet()
+        .toList();
+    var prosseguiu = false;
+    String? cidadeEscolhida;
+    String? bairroEscolhido;
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -285,25 +332,108 @@ class _MapPageState extends State<MapPage> {
       builder: (context) {
         return CidadeBairroBottomSheet(
           cidades: cidades,
-          bairrosPorCidade: bairrosPorCidade,
+          bairrosPorCidade: _bairrosPorCidade,
           cidadeSelecionada: _municipioSelecionado,
-          stepLabel: 'PASSO 2 DE 4',
+          bairroSelecionado: _bairroSelecionado,
+          stepLabel: stepLabel,
           breadcrumb: _distribuidoraSelecionada != null
               ? '$_distribuidoraSelecionada · Selecione o município'
               : null,
-          notFoundMessage: cidades.isEmpty
-              ? 'Nenhuma cidade encontrada para a distribuidora selecionada.'
-              : 'Não encontrada',
+          notFoundMessage: _erroRegiao ??
+              'Nenhuma cidade encontrada para a distribuidora selecionada.',
           onProsseguir: (cidade, bairro) {
-            // Reaproveita o mesmo filtro local que o chip
-            // "Cidade / bairro" já usa (_ativosVisiveis),
-            // então isso já atualiza o mapa automaticamente.
-            setState(() {
-              _municipioSelecionado = cidade;
-            });
+            prosseguiu = true;
+            cidadeEscolhida = cidade;
+            bairroEscolhido = bairro;
           },
         );
       },
+    );
+
+    if (!prosseguiu || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _municipioSelecionado = cidadeEscolhida;
+      _bairroSelecionado = bairroEscolhido;
+      _regiaoConfirmada = true;
+      _erro = null;
+    });
+
+    _centralizarNaCidade(cidadeEscolhida);
+    _agendarCarregamento();
+  }
+
+  void _centralizarNaCidade(String? cidade) {
+    if (cidade == null || !_mapaPronto) {
+      return;
+    }
+
+    MunicipioResumo? alvo;
+    for (final municipio in _municipiosDaRegiao) {
+      if (municipio.nome == cidade) {
+        alvo = municipio;
+        break;
+      }
+    }
+
+    final latitude = alvo?.latitude;
+    final longitude = alvo?.longitude;
+    if (latitude == null || longitude == null) {
+      return;
+    }
+
+    _currentZoom = 11.0;
+    _mapController.move(LatLng(latitude, longitude), _currentZoom);
+  }
+
+  /// PASSO 1: escolha da distribuidora. Ao confirmar, abre direto o
+  /// PASSO 2 (cidade/bairro) — só então o botão de camadas aparece.
+  Future<void> _abrirSelecaoDistribuidora({
+    String? stepLabel,
+    String? proximoStepLabel,
+  }) async {
+    if (_distribuidoras.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível carregar as distribuidoras.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    await SelectionBottomSheet.show<String>(
+      context: context,
+      title: 'Selecionar distribuidora',
+      subtitle: 'Os ativos só serão carregados após escolher a cidade.',
+      stepLabel: stepLabel,
+      searchHint: 'Buscar distribuidora',
+      notFoundMessage: 'Não encontrada',
+      items: _distribuidoras
+          .map(
+            (dist) => SelectionItem(
+              title: dist.nome,
+              subtitle: _rotuloAtivos(dist),
+              value: dist.nome,
+            ),
+          )
+          .toList(),
+      selectedValue: _distribuidoraSelecionada,
+      onSelected: (distribuidoraNome) async {
+        await _selecionarDistribuidora(
+          distribuidoraNome,
+          stepLabel: proximoStepLabel,
+        );
+      },
+    );
+  }
+
+  Future<void> _iniciarEstudo() async {
+    await _abrirSelecaoDistribuidora(
+      stepLabel: 'PASSO 1 DE 4',
+      proximoStepLabel: 'PASSO 2 DE 4',
     );
   }
 
@@ -312,6 +442,7 @@ class _MapPageState extends State<MapPage> {
       _currentZoom = (_mapController.camera.zoom + 1).clamp(3.8, 18.0);
       _mapController.move(_mapController.camera.center, _currentZoom);
     });
+    _agendarCarregamento();
   }
 
   void _zoomOut() {
@@ -319,28 +450,14 @@ class _MapPageState extends State<MapPage> {
       _currentZoom = (_mapController.camera.zoom - 1).clamp(3.8, 18.0);
       _mapController.move(_mapController.camera.center, _currentZoom);
     });
+    _agendarCarregamento();
   }
 
   void _onLocationPressed() {}
 
-  List<String> get _municipiosDisponiveis {
-    final municipios =
-        _todosAtivos
-            .map((ativo) => ativo.municipio)
-            .where((municipio) => municipio != 'Não informado')
-            .toSet()
-            .toList()
-          ..sort();
-    return municipios.toList();
-  }
-
   List<AtivoBdgd> get _ativosVisiveis {
     final termo = _textoBusca.trim().toLowerCase();
     return _todosAtivos.where((ativo) {
-      final correspondeMunicipio =
-          _municipioSelecionado == null ||
-          ativo.municipio == _municipioSelecionado;
-      if (!correspondeMunicipio) return false;
       if (termo.isEmpty) return true;
       return ativo.codId.toLowerCase().contains(termo) ||
           ativo.id.toLowerCase().contains(termo) ||
@@ -355,68 +472,15 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
-  void _abrirFiltroMunicipio() {
-    final municipios = _municipiosDisponiveis;
+  /// Chip "Cidade / bairro": se ainda não há distribuidora escolhida,
+  /// começa pelo PASSO 1; caso contrário vai direto ao PASSO 2.
+  Future<void> _trocarCidade() async {
+    if (_distribuidoraSelecionada == null) {
+      await _abrirSelecaoDistribuidora();
+      return;
+    }
 
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.7,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ListTile(
-                title: Text('Filtrar por cidade'),
-                subtitle: Text(
-                  'Selecione um município para filtrar os ativos no mapa.',
-                ),
-              ),
-              const Divider(height: 1),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: EdgeInsets.zero,
-                  children: [
-                    ListTile(
-                      title: const Text('Todos os municípios'),
-                      leading: Icon(
-                        _municipioSelecionado == null
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_unchecked,
-                        color: AppColors.primaryLime,
-                      ),
-                      onTap: () {
-                        Navigator.pop(context);
-                        setState(() => _municipioSelecionado = null);
-                      },
-                    ),
-                    ...municipios.map(
-                      (municipio) => ListTile(
-                        title: Text(municipio),
-                        leading: Icon(
-                          municipio == _municipioSelecionado
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                          color: AppColors.primaryLime,
-                        ),
-                        onTap: () {
-                          Navigator.pop(context);
-                          setState(() => _municipioSelecionado = municipio);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    await _abrirSelecaoCidade();
   }
 
   void _abrirPainelCamadas() {
@@ -492,6 +556,14 @@ class _MapPageState extends State<MapPage> {
 
     if (estudoCriado == true && mounted) {
       setState(() => polygonPoints = []);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Estudo criado e salvo no banco. Acompanhe na aba Estudos.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -556,7 +628,10 @@ class _MapPageState extends State<MapPage> {
         point: LatLng(ativo.latitude, ativo.longitude),
         width: isSelected ? 42 : 32,
         height: isSelected ? 42 : 32,
-        child: _buildIconeMarcador(ativo, isSelected, cor),
+        child: GestureDetector(
+          onTap: () => _selecionarAtivo(ativo),
+          child: _buildIconeMarcador(ativo, isSelected, cor),
+        ),
       );
 
       _markerAtivoMap[marker] = ativo;
@@ -609,6 +684,16 @@ class _MapPageState extends State<MapPage> {
               initialZoom: _currentZoom,
               minZoom: 2.0,
               maxZoom: 18.0,
+              onMapReady: _aoMapaPronto,
+              onPositionChanged: (camera, hasGesture) {
+                // Só recarrega quando o usuário navega de fato (pan/zoom).
+                // Movimentos programáticos (fly-to, seleção de marcador)
+                // não devem descartar os ativos já carregados.
+                if (!hasGesture || !_podeCarregarAtivos) {
+                  return;
+                }
+                _agendarCarregamento();
+              },
               cameraConstraint: CameraConstraint.contain(
                 bounds: LatLngBounds(
                   LatLng(-89.9, -180.0),
@@ -670,6 +755,7 @@ class _MapPageState extends State<MapPage> {
                   );
                 }).toList(),
               ),
+              MarkerLayer(markers: marcadores),
             ],
           ),
           Positioned(
@@ -689,42 +775,29 @@ class _MapPageState extends State<MapPage> {
                         onChanged: _aplicarBusca,
                       ),
                     ),
-                    LayerFilterButton(
-                      onPressed: _abrirPainelCamadas,
-                      activeLayersCount: _totalCamadasAtivas,
-                    ),
+                    // O botão de camadas só existe depois que a região
+                    // (distribuidora + cidade/bairro) foi confirmada.
+                    if (_podeExibirBotaoCamadas)
+                      LayerFilterButton(
+                        onPressed: _abrirPainelCamadas,
+                        activeLayersCount: _totalCamadasAtivas,
+                      ),
                   ],
                 ),
                 Row(
                   spacing: 10,
                   children: [
                     FilterChipWidget(
-                      label: _distribuidoraSelecionada ?? 'DIST.',
-                      isSelected: true,
-                      onTap: () {
-                        SelectionBottomSheet.show<String>(
-                          context: context,
-                          title: 'Selecionar distribuidora',
-                          subtitle:
-                              'Os ativos serão recarregados para a região escolhida.',
-                          items: _distribuidoras
-                              .map(
-                                (dist) => SelectionItem(
-                                  title: dist.nome,
-                                  value: dist.nome,
-                                ),
-                              )
-                              .toList(),
-                          selectedValue: _distribuidoraSelecionada,
-                          onSelected: (distribuidoraNome) {
-                            _selecionarDistribuidora(distribuidoraNome);
-                          },
-                        );
-                      },
+                      label: _distribuidoraSelecionada ?? 'Distribuidora',
+                      isSelected: _distribuidoraSelecionada != null,
+                      onTap: () => _abrirSelecaoDistribuidora(),
                     ),
                     FilterChipWidget(
-                      label: _municipioSelecionado ?? 'Cidade / bairro',
-                      onTap: _abrirFiltroMunicipio,
+                      label: _regiaoConfirmada
+                          ? _rotuloRegiao
+                          : 'Cidade / bairro',
+                      isSelected: _regiaoConfirmada,
+                      onTap: _trocarCidade,
                     ),
                   ],
                 ),
@@ -780,7 +853,16 @@ class _MapPageState extends State<MapPage> {
                     ),
                   ),
           ),
-          if (_carregando && _todosAtivos.isEmpty)
+          if (_carregandoRegiao)
+            Container(
+              color: Colors.black45,
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: AppColors.primaryLime,
+                ),
+              ),
+            ),
+          if (_carregando && _todosAtivos.isEmpty && !_carregandoRegiao)
             Container(
               color: Colors.black45,
               child: const Center(
@@ -802,6 +884,48 @@ class _MapPageState extends State<MapPage> {
                     _erro!,
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: AppColors.textWhite),
+                  ),
+                ),
+              ),
+            ),
+          // Aviso guiando o fluxo: distribuidora -> cidade/bairro -> camadas.
+          if (!_regiaoConfirmada && _erro == null && !_carregandoRegiao)
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 100,
+              child: Card(
+                color: AppColors.surfaceCard,
+                child: const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Selecione a distribuidora e depois a cidade/bairro. '
+                    'O painel de camadas só aparece depois dessa seleção, '
+                    'para não carregar os ativos da rede inteira.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textWhite),
+                  ),
+                ),
+              ),
+            ),
+          if (_regiaoConfirmada &&
+              _erro == null &&
+              !_carregando &&
+              _todosAtivos.isEmpty &&
+              _nenhumaCamadaAtiva)
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 100,
+              child: Card(
+                color: AppColors.surfaceCard,
+                child: const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Nenhuma camada ativa. Toque no ícone de camadas e marque '
+                    'os tipos de ativo que deseja exibir no mapa.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textWhite),
                   ),
                 ),
               ),
