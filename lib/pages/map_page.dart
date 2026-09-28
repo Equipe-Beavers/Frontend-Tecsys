@@ -35,7 +35,7 @@ class _MapPageState extends State<MapPage> {
   String? _municipioSelecionado;
   double _currentZoom = 3.8;
   String _textoBusca = '';
-  
+
   List<AtivoBdgd> _todosAtivos = [];
   Map<TipoAtivo, bool> _camadasAtivas =
       CatalogoCamadas.obterEstadoInicialPadrao();
@@ -90,10 +90,7 @@ class _MapPageState extends State<MapPage> {
 
   void _agendarCarregamento() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(
-      const Duration(milliseconds: 400),
-      _carregarDados,
-    );
+    _debounceTimer = Timer(const Duration(milliseconds: 400), _carregarDados);
   }
 
   Future<void> _carregarDados() async {
@@ -185,8 +182,7 @@ class _MapPageState extends State<MapPage> {
       _camadasAtivas.values.where((ativa) => ativa).length;
 
   Future<void> _selecionarDistribuidora(String? distribuidora) async {
-    if (distribuidora == null ||
-        distribuidora == _distribuidoraSelecionada) {
+    if (distribuidora == null || distribuidora == _distribuidoraSelecionada) {
       return;
     }
 
@@ -204,24 +200,17 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _iniciarEstudo() async {
-  
     await SelectionBottomSheet.show<String>(
       context: context,
       title: 'Selecionar distribuidora',
-      subtitle:
-          'Os ativos serão recarregados para a região escolhida.',
+      subtitle: 'Os ativos serão recarregados para a região escolhida.',
       stepLabel: 'PASSO 1 DE 4',
       searchHint: 'Buscar distribuidora',
       notFoundMessage: _distribuidoras.isEmpty
           ? 'Não foi possível carregar as distribuidoras.'
           : 'Não encontrada',
       items: _distribuidoras
-          .map(
-            (dist) => SelectionItem(
-              title: dist.nome,
-              value: dist.nome,
-            ),
-          )
+          .map((dist) => SelectionItem(title: dist.nome, value: dist.nome))
           .toList(),
       selectedValue: _distribuidoraSelecionada,
       onSelected: (distribuidoraNome) async {
@@ -237,14 +226,8 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  Future<void> _selecionarDistribuidoraParaEstudo(
-    String distribuidora,
-  ) async {
+  Future<void> _selecionarDistribuidoraParaEstudo(String distribuidora) async {
     if (!mounted) return;
-
-    final resumo = _distribuidoras.firstWhere(
-      (item) => item.nome == distribuidora,
-    );
 
     _debounceTimer?.cancel();
 
@@ -258,12 +241,19 @@ class _MapPageState extends State<MapPage> {
       _carregando = true;
     });
 
+    try {
+      await _carregarDados();
 
-    await _carregarDados();
+      if (!mounted) return;
 
-    if (!mounted) return;
-
-    await _abrirCidadeBairroDoEstudo();
+      await _abrirCidadeBairroDoEstudo();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _carregando = false;
+        });
+      }
+    }
   }
 
   Future<void> _abrirCidadeBairroDoEstudo() async {
@@ -272,15 +262,14 @@ class _MapPageState extends State<MapPage> {
     final bairrosPorCidade = <String, List<String>>{};
 
     for (final cidade in cidades) {
-      final bairros = _todosAtivos
-          .where((ativo) => ativo.municipio == cidade)
-          .map((ativo) => ativo.bairro.trim())
-          .where(
-            (bairro) => bairro.isNotEmpty && bairro != 'Não informado',
-          )
-          .toSet()
-          .toList()
-        ..sort();
+      final bairros =
+          _todosAtivos
+              .where((ativo) => ativo.municipio == cidade)
+              .map((ativo) => ativo.bairro.trim())
+              .where((bairro) => bairro.isNotEmpty && bairro != 'Não informado')
+              .toSet()
+              .toList()
+            ..sort();
 
       bairrosPorCidade[cidade] = bairros;
     }
@@ -318,23 +307,15 @@ class _MapPageState extends State<MapPage> {
 
   void _zoomIn() {
     setState(() {
-      _currentZoom =
-          (_mapController.camera.zoom + 1).clamp(3.8, 18.0);
-      _mapController.move(
-        _mapController.camera.center,
-        _currentZoom,
-      );
+      _currentZoom = (_mapController.camera.zoom + 1).clamp(3.8, 18.0);
+      _mapController.move(_mapController.camera.center, _currentZoom);
     });
   }
 
   void _zoomOut() {
     setState(() {
-      _currentZoom =
-          (_mapController.camera.zoom - 1).clamp(3.8, 18.0);
-      _mapController.move(
-        _mapController.camera.center,
-        _currentZoom,
-      );
+      _currentZoom = (_mapController.camera.zoom - 1).clamp(3.8, 18.0);
+      _mapController.move(_mapController.camera.center, _currentZoom);
     });
   }
 
@@ -574,10 +555,8 @@ class _MapPageState extends State<MapPage> {
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName:
-                    'com.example.frontend_tecsys',
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.frontend_tecsys',
               ),
               PolygonLayer(
                 polygons: polygonPoints.length >= 3
@@ -587,9 +566,7 @@ class _MapPageState extends State<MapPage> {
                           color: AppColors.navBarBackground.withAlpha(100),
                           borderColor: AppColors.navBarBackground,
                           borderStrokeWidth: 2.5,
-                          pattern: StrokePattern.dashed(
-                            segments: [10, 5],
-                          ),
+                          pattern: StrokePattern.dashed(segments: [10, 5]),
                         ),
                       ]
                     : <Polygon<Object>>[],
@@ -656,8 +633,7 @@ class _MapPageState extends State<MapPage> {
                         SelectionBottomSheet.show<String>(
                           context: context,
                           title: 'Selecionar distribuidora',
-                          subtitle:
-                              'Os ativos serão recarregados para a região escolhida.',
+                          subtitle: 'Os ativos serão recarregados para a região escolhida.',
                           items: _distribuidoras
                               .map(
                                 (dist) => SelectionItem(
@@ -668,9 +644,7 @@ class _MapPageState extends State<MapPage> {
                               .toList(),
                           selectedValue: _distribuidoraSelecionada,
                           onSelected: (distribuidoraNome) {
-                            _selecionarDistribuidora(
-                              distribuidoraNome,
-                            );
+                            _selecionarDistribuidora(distribuidoraNome);
                           },
                         );
                       },
@@ -706,8 +680,7 @@ class _MapPageState extends State<MapPage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                shadowColor:
-                    AppColors.primaryLime.withValues(alpha: 0.4),
+                shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
               ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -735,9 +708,7 @@ class _MapPageState extends State<MapPage> {
             Container(
               color: Colors.black45,
               child: const Center(
-                child: CircularProgressIndicator(
-                  color: AppColors.primaryLime,
-                ),
+                child: CircularProgressIndicator(color: AppColors.primaryLime),
               ),
             ),
           if (_erro != null)
