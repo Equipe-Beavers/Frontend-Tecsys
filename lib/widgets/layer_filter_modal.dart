@@ -49,10 +49,12 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
 
   int get _totalCamadas => _estadoRascunho.length;
 
-  void _limparGrupo(GrupoCamadasFiltro grupo) {
+  void _limparTodas() {
     setState(() {
-      for (final item in grupo.itens) {
-        _estadoRascunho[item.tipo] = false;
+      for (final grupo in _grupos) {
+        for (final item in grupo.itens) {
+          _estadoRascunho[item.tipo] = false;
+        }
       }
     });
   }
@@ -220,7 +222,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
               ),
 if (podeLimpar)
                   GestureDetector(
-                    onTap: () => _limparGrupo(grupo),
+                    onTap: _limparTodas,
                     child: const Text(
                       'Limpar',
                       style: TextStyle(

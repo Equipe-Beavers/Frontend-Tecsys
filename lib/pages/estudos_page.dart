@@ -5,14 +5,18 @@ import 'package:frontend_tecsys/services/estudos_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 
 class EstudosPage extends StatefulWidget {
-  const EstudosPage({super.key});
+  const EstudosPage({super.key, this.estudosService});
+
+  /// Permite injetar um serviço em testes; em produção usa o padrão.
+  final EstudosService? estudosService;
 
   @override
   State<EstudosPage> createState() => EstudosPageState();
 }
 
 class EstudosPageState extends State<EstudosPage> {
-  final EstudosService _estudosService = EstudosService();
+  late final EstudosService _estudosService =
+      widget.estudosService ?? EstudosService();
 
   late Future<_DadosEstudos> _dados;
   bool _atualizando = false;
@@ -49,7 +53,11 @@ class EstudosPageState extends State<EstudosPage> {
 
     setState(() => _atualizando = true);
     final busca = _buscarDados();
-    setState(() => _dados = busca);
+    // Precisa de bloco {}: com "=>" o callback devolveria a Future e o Flutter
+    // lança erro de assert ANTES do try, travando _atualizando em true.
+    setState(() {
+      _dados = busca;
+    });
 
     try {
       await busca;

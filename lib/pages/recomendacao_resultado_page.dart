@@ -146,16 +146,19 @@ class _RecomendacaoResultadoPageState
         ],
         const SizedBox(height: 24),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Gateways propostos',
-              style: TextStyle(
-                color: AppColors.textWhite,
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
+            const Expanded(
+              child: Text(
+                'Gateways propostos',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.textWhite,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
+            const SizedBox(width: 12),
             Text(
               '${r.gateways.length} de ${r.quantidadeGateways}',
               style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
@@ -251,12 +254,15 @@ class _RecomendacaoResultadoPageState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Ativos elétricos cobertos',
-                style: TextStyle(color: AppColors.textWhite, fontSize: 13, fontWeight: FontWeight.w600),
+              const Expanded(
+                child: Text(
+                  'Ativos elétricos cobertos',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: AppColors.textWhite, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
               ),
+              const SizedBox(width: 12),
               Text(
                 '${r.pontosCobertos} de ${r.pontosInteresse}',
                 style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
@@ -301,16 +307,25 @@ class _RecomendacaoResultadoPageState
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(c.tipo.icone, color: c.tipo.cor, size: 16),
-                  const SizedBox(width: 8),
-                  Text(c.tipo.label, style: const TextStyle(color: AppColors.textWhite, fontSize: 13)),
-                ],
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(c.tipo.icone, color: c.tipo.cor, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        c.tipo.label,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppColors.textWhite, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     '${c.cobertos}',
@@ -346,15 +361,30 @@ class _RecomendacaoResultadoPageState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                g.rotulo ?? 'Gateway ${g.idEstudoPonto}',
-                style: const TextStyle(color: AppColors.textWhite, fontSize: 14, fontWeight: FontWeight.bold),
-              ),
-              if (g.idAtivoBdgd != null)
-                Text(
-                  g.idAtivoBdgd!,
-                  style: const TextStyle(color: AppColors.secondaryTeal, fontSize: 12, fontWeight: FontWeight.w600),
+              Flexible(
+                child: Text(
+                  g.rotulo ?? 'Gateway ${g.idEstudoPonto}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: AppColors.textWhite,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold),
                 ),
+              ),
+              if (g.idAtivoBdgd != null) ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    g.idAtivoBdgd!,
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: AppColors.secondaryTeal,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 10),
