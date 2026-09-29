@@ -465,18 +465,30 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       }
 
       if (widget.ativos.isNotEmpty) {
-        final criados = await _estudosService.criarPontosEstudoParaAtivos(
-          idEstudo,
-          widget.ativos,
-        );
-        if (!mounted) return;
-
-        if (criados < widget.ativos.length) {
+        final candidatos = widget.ativos
+            .where((a) => a.tipo == TipoAtivo.poste || a.tipo == TipoAtivo.subestacao)
+            .toList();
+        final interesse = widget.ativos
+            .where((a) => a.tipo != TipoAtivo.poste && a.tipo != TipoAtivo.subestacao)
+            .toList();
+      
+        final criadosCandidatos = candidatos.isEmpty
+            ? 0
+            : await _estudosService.criarPontosEstudoParaAtivos(
+                idEstudo, candidatos, papel: 'candidato');
+        final criadosInteresse = interesse.isEmpty
+            ? 0
+            : await _estudosService.criarPontosEstudoParaAtivos(
+                idEstudo, interesse, papel: 'interesse');
+      
+        final criados = criadosCandidatos + criadosInteresse;
+        final totalAtivos = widget.ativos.length;
+      
+        if (criados < totalAtivos) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                '$criados de ${widget.ativos.length} ativos foram salvos '
-                'como pontos de interesse do estudo.',
+                '$criados de $totalAtivos ativos foram salvos como pontos do estudo.',
               ),
               behavior: SnackBarBehavior.floating,
             ),
