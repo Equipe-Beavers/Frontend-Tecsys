@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend_tecsys/services/ativos_service.dart';
+import 'package:frontend_tecsys/services/estudos_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -54,7 +55,10 @@ void main() {
         baseUrl: 'http://localhost:3000',
         client: MockClient((request) async {
           expect(request.url.path, '/api/ativos');
-          expect(request.url.queryParameters['distribuidoras'], 'CEMIG Distribuição');
+          expect(
+            request.url.queryParameters['distribuidoras'],
+            'CEMIG Distribuição',
+          );
 
           return http.Response(
             jsonEncode({
@@ -140,51 +144,58 @@ void main() {
       expect(result.ativos, hasLength(1));
     });
 
-    test('descarrega os municípios da distribuidora sem tocar em /api/ativos',
-        () async {
-      final service = AtivosService(
-        baseUrl: 'http://localhost:3000',
-        client: MockClient((request) async {
-          expect(request.url.path, '/api/municipios');
-          expect(request.url.queryParameters['distribuidora'], 'Enel SP');
-          expect(request.url.queryParameters['pagina'], '1');
-          expect(request.url.queryParameters['limite'], '100');
-          expect(request.url.queryParameters.containsKey('minLatitude'), isFalse);
+    test(
+      'descarrega os municípios da distribuidora sem tocar em /api/ativos',
+      () async {
+        final service = AtivosService(
+          baseUrl: 'http://localhost:3000',
+          client: MockClient((request) async {
+            expect(request.url.path, '/api/municipios');
+            expect(request.url.queryParameters['distribuidora'], 'Enel SP');
+            expect(request.url.queryParameters['pagina'], '1');
+            expect(request.url.queryParameters['limite'], '100');
+            expect(
+              request.url.queryParameters.containsKey('minLatitude'),
+              isFalse,
+            );
 
-          return http.Response(
-            jsonEncode({
-              'dados': [
-                {
-                  'nome': 'São Paulo',
-                  'uf': 'SP',
-                  'totalAtivos': 1141235,
-                  'lat': -23.55,
-                  'lng': -46.63,
+            return http.Response(
+              jsonEncode({
+                'dados': [
+                  {
+                    'nome': 'São Paulo',
+                    'uf': 'SP',
+                    'totalAtivos': 1141235,
+                    'lat': -23.55,
+                    'lng': -46.63,
+                  },
+                  {'nome': 'Osasco', 'uf': 'SP', 'totalAtivos': 57202},
+                ],
+                'paginacao': {
+                  'pagina': 1,
+                  'limite': 100,
+                  'total': 2,
+                  'totalPaginas': 1,
                 },
-                {'nome': 'Osasco', 'uf': 'SP', 'totalAtivos': 57202},
-              ],
-              'paginacao': {
-                'pagina': 1,
-                'limite': 100,
-                'total': 2,
-                'totalPaginas': 1,
-              },
-            }),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }),
-      );
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }),
+        );
 
-      final municipios = await service.getMunicipios(distribuidora: 'Enel SP');
+        final municipios = await service.getMunicipios(
+          distribuidora: 'Enel SP',
+        );
 
-      expect(municipios, hasLength(2));
-      expect(municipios.first.nome, 'São Paulo');
-      expect(municipios.first.latitude, -23.55);
-      expect(municipios.first.longitude, -46.63);
-      expect(municipios.first.totalAtivos, 1141235);
-      expect(municipios.last.latitude, isNull);
-    });
+        expect(municipios, hasLength(2));
+        expect(municipios.first.nome, 'São Paulo');
+        expect(municipios.first.latitude, -23.55);
+        expect(municipios.first.longitude, -46.63);
+        expect(municipios.first.totalAtivos, 1141235);
+        expect(municipios.last.latitude, isNull);
+      },
+    );
 
     test('repasses erro do backend como StateError', () async {
       final service = AtivosService(
@@ -198,6 +209,38 @@ void main() {
         () => service.getMunicipios(distribuidora: 'Enel SP'),
         throwsA(isA<StateError>()),
       );
+    });
+  });
+
+  group('EstudosService', () {
+    test('conta apenas os papéis que participam de cada grupo', () async {
+      final service = EstudosService(
+        baseUrl: 'http://localhost:3000',
+        client: MockClient((request) async {
+          expect(request.url.path, '/estudo-pontos');
+          return http.Response(
+            jsonEncode({
+              'pontos': [
+                {'id_estudo': 1, 'papel': 'candidato'},
+                {'id_estudo': 2, 'papel': 'interesse'},
+                {'id_estudo': 3, 'papel': 'ambos'},
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+      addTearDown(service.dispose);
+
+      final contagens = await service.getContagemPontos();
+
+      expect(contagens[1]!.candidato, 1);
+      expect(contagens[1]!.interesse, 0);
+      expect(contagens[2]!.candidato, 0);
+      expect(contagens[2]!.interesse, 1);
+      expect(contagens[3]!.candidato, 1);
+      expect(contagens[3]!.interesse, 1);
     });
   });
 }

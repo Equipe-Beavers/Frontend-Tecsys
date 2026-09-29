@@ -441,6 +441,12 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
 
   Future<void> _criarEstudo() async {
     if (_salvando || !_formKey.currentState!.validate()) return;
+    if (widget.ativos.isEmpty) {
+      _mostrarMensagem(
+        'Não há ativos na área para criar os pontos do estudo e gerar a recomendação.',
+      );
+      return;
+    }
 
     setState(() => _salvando = true);
     try {
@@ -464,36 +470,36 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
         return;
       }
 
-      if (widget.ativos.isNotEmpty) {
-        final candidatos = widget.ativos
-            .where((a) => a.tipo == TipoAtivo.poste || a.tipo == TipoAtivo.subestacao)
-            .toList();
-        final interesse = widget.ativos
-            .where((a) => a.tipo != TipoAtivo.poste && a.tipo != TipoAtivo.subestacao)
-            .toList();
-      
-        final criadosCandidatos = candidatos.isEmpty
-            ? 0
-            : await _estudosService.criarPontosEstudoParaAtivos(
-                idEstudo, candidatos, papel: 'candidato');
-        final criadosInteresse = interesse.isEmpty
-            ? 0
-            : await _estudosService.criarPontosEstudoParaAtivos(
-                idEstudo, interesse, papel: 'interesse');
-      
-        final criados = criadosCandidatos + criadosInteresse;
-        final totalAtivos = widget.ativos.length;
-      
-        if (criados < totalAtivos) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '$criados de $totalAtivos ativos foram salvos como pontos do estudo.',
-              ),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
+      final candidato = widget.ativos.firstWhere(
+        (ativo) =>
+            ativo.tipo == TipoAtivo.poste || ativo.tipo == TipoAtivo.subestacao,
+        orElse: () => widget.ativos.first,
+      );
+      final interesse = [...widget.ativos]..remove(candidato);
+
+      final pontosCandidatoCriados = await _estudosService
+          .criarPontosEstudoParaAtivos(idEstudo, [
+            candidato,
+          ], papel: interesse.isEmpty ? 'ambos' : 'candidato');
+      var pontosInteresseCriados = 0;
+      if (interesse.isNotEmpty) {
+        pontosInteresseCriados = await _estudosService
+            .criarPontosEstudoParaAtivos(
+              idEstudo,
+              interesse,
+              papel: 'interesse',
+            );
+      } else {
+        pontosInteresseCriados = pontosCandidatoCriados;
+      }
+
+      if (!mounted) return;
+      if (pontosCandidatoCriados == 0 || pontosInteresseCriados == 0) {
+        setState(() => _salvando = false);
+        _mostrarMensagem(
+          'O estudo foi salvo, mas não há pontos suficientes com os papéis candidato e interesse. Verifique os ativos da área e tente novamente.',
+        );
+        return;
       }
 
       await Navigator.pushReplacement(

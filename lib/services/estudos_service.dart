@@ -80,8 +80,9 @@ class EstudosService {
       final papel = ponto['papel']?.toString();
       final conta = acumulado.putIfAbsent(idEstudo, () => [0, 0]);
 
-      // Qualquer ponto cadastrado para o estudo já conta como interesse.
-      conta[0] += 1;
+      if (papel == 'interesse' || papel == 'ambos') {
+        conta[0] += 1;
+      }
       if (papel == 'candidato' || papel == 'ambos') {
         conta[1] += 1;
       }
