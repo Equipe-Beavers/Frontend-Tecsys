@@ -155,7 +155,6 @@ class AtivoBdgd {
   final String situacaoAtivo;
   final String subestacaoConectada; // ex: 'DMBE'
   final String municipio;
-  final String bairro;
   final String distribuidora; // ex: 'Enel SP'
   final int? tipoDispositivoId;
   final String? tipoDispositivoNome;
@@ -175,7 +174,6 @@ class AtivoBdgd {
     this.situacaoAtivo = 'Não informado',
     this.subestacaoConectada = 'Não informado',
     this.municipio = 'Não informado',
-    this.bairro = 'Não informado',
     this.distribuidora = 'Não informada',
     this.tipoDispositivoId,
     this.tipoDispositivoNome,
@@ -193,7 +191,6 @@ class AtivoBdgd {
       latitude: _asDouble(json['latitude']),
       longitude: _asDouble(json['longitude']),
       municipio: _asString(json['municipio'], fallback: 'Não informado'),
-      bairro: _asString(json['bairro'], fallback: 'Não informado'),
       tipoDispositivoId: _asInt(
         json['tipoDispositivoId'] ?? atributos['tip_unid'],
       ),

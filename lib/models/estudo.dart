@@ -9,7 +9,6 @@ class EstudoResumo {
     this.distribuidora,
     this.municipio,
     this.uf,
-    this.bairro,
     this.criadoEm,
     this.totalPontosInteresse = 0,
     this.totalPontosCandidato = 0,
@@ -23,7 +22,6 @@ class EstudoResumo {
   final String? distribuidora;
   final String? municipio;
   final String? uf;
-  final String? bairro;
   final String? criadoEm;
   final int totalPontosInteresse;
   final int totalPontosCandidato;
@@ -72,7 +70,6 @@ class EstudoResumo {
       distribuidora: json['distribuidora']?.toString(),
       municipio: json['municipio']?.toString(),
       uf: json['uf']?.toString(),
-      bairro: json['bairro']?.toString(),
       criadoEm: json['criado_em']?.toString(),
       pontosArea: _pontosAreaFromGeom(json['geom']),
     );

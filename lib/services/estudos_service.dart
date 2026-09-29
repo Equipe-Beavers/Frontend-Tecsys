@@ -166,7 +166,6 @@ class EstudosService {
                 longitude: ativo.longitude,
                 atributos: {
                   'municipio': ativo.municipio,
-                  'bairro': ativo.bairro,
                   'distribuidora': ativo.distribuidora,
                   'status_operacional': ativo.statusOperacional,
                 },

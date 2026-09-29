@@ -5,7 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
-import 'package:frontend_tecsys/widgets/city_bairro_bottom_sheet.dart';
+import 'package:frontend_tecsys/widgets/cidade_bottom_sheet.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/models/layer_filter.dart';
@@ -33,13 +33,11 @@ class _MapPageState extends State<MapPage> {
   List<DistribuidoraResumo> _distribuidoras = [];
   String? _distribuidoraSelecionada;
   String? _municipioSelecionado;
-  String? _bairroSelecionado;
   bool _regiaoConfirmada = false;
   double _currentZoom = 3.8;
   String _textoBusca = '';
 
   List<MunicipioResumo> _municipiosDaRegiao = [];
-  Map<String, List<String>> _bairrosPorCidade = {};
   bool _carregandoRegiao = false;
   String? _erroRegiao;
 
@@ -85,7 +83,7 @@ class _MapPageState extends State<MapPage> {
     _debounceTimer = Timer(const Duration(milliseconds: 400), _carregarDados);
   }
 
-  /// A região só fica pronta depois de distribuidora + cidade/bairro,
+  /// A região só fica pronta depois de distribuidora + cidade,
   /// e os ativos só são buscados quando há camada marcada nessa região.
   bool get _podeExibirBotaoCamadas => _regiaoConfirmada;
 
@@ -96,11 +94,9 @@ class _MapPageState extends State<MapPage> {
 
   String get _rotuloRegiao {
     final cidade = _municipioSelecionado;
-    final bairro = _bairroSelecionado;
 
     if (cidade == null || cidade.isEmpty) return 'Região inteira';
-    if (bairro == null || bairro.isEmpty) return cidade;
-    return '$cidade · $bairro';
+    return cidade;
   }
 
   Future<void> _carregarDados() async {
@@ -139,7 +135,6 @@ class _MapPageState extends State<MapPage> {
         distribuidora: _distribuidoraSelecionada,
         tipos: camadasApi,
         municipio: _municipioSelecionado,
-        bairro: _bairroSelecionado,
         limit: _limiteAtivos,
       );
 
@@ -186,7 +181,7 @@ class _MapPageState extends State<MapPage> {
       }
 
       // Nenhuma distribuidora é escolhida automaticamente: o fluxo exige
-      // que o usuário selecione distribuidora e depois a cidade/bairro
+      // que o usuário selecione distribuidora e depois a cidade
       // antes de liberar o carregamento de ativos.
       setState(() {
         _distribuidoras = distribuidoras;
@@ -211,9 +206,9 @@ class _MapPageState extends State<MapPage> {
 
   String _rotuloAtivos(DistribuidoraResumo dist) {
     if (dist.totalAtivos <= 0) {
-      return 'Sem ativos no banco local';
+      return 'Sem ativos';
     }
-    return '${_formatarContagem(dist.totalAtivos)} ativos no banco local';
+    return '${_formatarContagem(dist.totalAtivos)} ativos';
   }
 
   String _formatarContagem(int valor) {
@@ -248,10 +243,8 @@ class _MapPageState extends State<MapPage> {
       setState(() {
         _distribuidoraSelecionada = distribuidora;
         _municipioSelecionado = null;
-        _bairroSelecionado = null;
         _regiaoConfirmada = false;
         _municipiosDaRegiao = [];
-        _bairrosPorCidade = {};
         _camadasAtivas = CatalogoCamadas.obterEstadoInicialPadrao();
         _todosAtivos = [];
         _ativoSelecionado = null;
@@ -265,7 +258,7 @@ class _MapPageState extends State<MapPage> {
     await _abrirSelecaoCidade(stepLabel: stepLabel);
   }
 
-  /// PASSO 2: busca as cidades/bairros da distribuidora (consulta leve,
+  /// PASSO 2: busca as cidades da distribuidora (consulta leve,
   /// sem tocar na tabela de ativos) e abre o sheet de seleção.
   Future<void> _abrirSelecaoCidade({String? stepLabel}) async {
     final distribuidora = _distribuidoraSelecionada;
@@ -279,14 +272,12 @@ class _MapPageState extends State<MapPage> {
     });
 
     List<MunicipioResumo> municipios = [];
-    List<BairroResumo> bairros = [];
     String? erroRegiao;
 
     try {
       municipios = await _ativosService.getMunicipios(
         distribuidora: distribuidora,
       );
-      bairros = await _ativosService.getBairros(distribuidora: distribuidora);
     } catch (_) {
       erroRegiao =
           'Não foi possível carregar as cidades da distribuidora selecionada.';
@@ -296,19 +287,8 @@ class _MapPageState extends State<MapPage> {
       return;
     }
 
-    final bairrosPorCidade = <String, List<String>>{};
-    for (final bairro in bairros) {
-      final cidade = bairro.municipio?.trim() ?? '';
-      if (cidade.isEmpty) continue;
-      (bairrosPorCidade[cidade] ??= <String>[]).add(bairro.nome);
-    }
-    for (final lista in bairrosPorCidade.values) {
-      lista.sort();
-    }
-
     setState(() {
       _municipiosDaRegiao = municipios;
-      _bairrosPorCidade = bairrosPorCidade;
       _carregandoRegiao = false;
       _erroRegiao = erroRegiao;
     });
@@ -323,18 +303,15 @@ class _MapPageState extends State<MapPage> {
         .toList();
     var prosseguiu = false;
     String? cidadeEscolhida;
-    String? bairroEscolhido;
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return CidadeBairroBottomSheet(
+        return CidadeBottomSheet(
           cidades: cidades,
-          bairrosPorCidade: _bairrosPorCidade,
           cidadeSelecionada: _municipioSelecionado,
-          bairroSelecionado: _bairroSelecionado,
           stepLabel: stepLabel,
           breadcrumb: _distribuidoraSelecionada != null
               ? '$_distribuidoraSelecionada · Selecione o município'
@@ -342,10 +319,9 @@ class _MapPageState extends State<MapPage> {
           notFoundMessage:
               _erroRegiao ??
               'Nenhuma cidade encontrada para a distribuidora selecionada.',
-          onProsseguir: (cidade, bairro) {
+          onProsseguir: (cidade) {
             prosseguiu = true;
             cidadeEscolhida = cidade;
-            bairroEscolhido = bairro;
           },
         );
       },
@@ -357,7 +333,6 @@ class _MapPageState extends State<MapPage> {
 
     setState(() {
       _municipioSelecionado = cidadeEscolhida;
-      _bairroSelecionado = bairroEscolhido;
       _regiaoConfirmada = true;
       _erro = null;
     });
@@ -404,7 +379,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   /// PASSO 1: escolha da distribuidora. Ao confirmar, abre direto o
-  /// PASSO 2 (cidade/bairro) — só então o botão de camadas aparece.
+  /// PASSO 2 (cidade) — só então o botão de camadas aparece.
   Future<void> _abrirSelecaoDistribuidora({
     String? stepLabel,
     String? proximoStepLabel,
@@ -499,7 +474,7 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
-  /// Chip "Cidade / bairro": se ainda não há distribuidora escolhida,
+  /// Chip "Cidade": se ainda não há distribuidora escolhida,
   /// começa pelo PASSO 1; caso contrário vai direto ao PASSO 2.
   Future<void> _trocarCidade() async {
     if (_distribuidoraSelecionada == null) {
@@ -826,7 +801,7 @@ class _MapPageState extends State<MapPage> {
                       ),
                     ),
                     // O botão de camadas só existe depois que a região
-                    // (distribuidora + cidade/bairro) foi confirmada.
+                    // (distribuidora + cidade) foi confirmada.
                     if (_podeExibirBotaoCamadas)
                       LayerFilterButton(
                         onPressed: _abrirPainelCamadas,
@@ -845,7 +820,7 @@ class _MapPageState extends State<MapPage> {
                     FilterChipWidget(
                       label: _regiaoConfirmada
                           ? _rotuloRegiao
-                          : 'Cidade / bairro',
+                          : 'Cidade',
                       isSelected: _regiaoConfirmada,
                       onTap: _trocarCidade,
                     ),
@@ -933,7 +908,7 @@ class _MapPageState extends State<MapPage> {
                 ),
               ),
             ),
-          // Aviso guiando o fluxo: distribuidora -> cidade/bairro -> camadas.
+          // Aviso guiando o fluxo: distribuidora -> cidade -> camadas.
           if (!_regiaoConfirmada && _erro == null && !_carregandoRegiao)
             Positioned(
               left: 24,
@@ -944,7 +919,7 @@ class _MapPageState extends State<MapPage> {
                 child: const Padding(
                   padding: EdgeInsets.all(16),
                   child: Text(
-                    'Selecione a distribuidora e depois a cidade/bairro. '
+                    'Selecione a distribuidora e depois a cidade. '
                     'O painel de camadas só aparece depois dessa seleção, '
                     'para não carregar os ativos da rede inteira.',
                     textAlign: TextAlign.center,

@@ -66,7 +66,6 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   final _descricaoController = TextEditingController();
   late final _cidadeController = TextEditingController(text: widget.municipio);
   final _estadoController = TextEditingController();
-  final _bairroController = TextEditingController();
 
   List<PerfilRf> _perfis = PerfilRf.disponiveis;
   List<CriterioInstalacao> _criterios = CriterioInstalacao.disponiveis;
@@ -88,7 +87,6 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       final estudo = widget.estudo!;
       _nomeController.text = estudo.nome;
       _descricaoController.text = estudo.descricao ?? '';
-      _bairroController.text = estudo.bairro ?? '';
       _carregarAtivosDaArea();
     }
     _estadoController.text = widget.uf ?? '';
@@ -135,7 +133,6 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     _descricaoController.dispose();
     _cidadeController.dispose();
     _estadoController.dispose();
-    _bairroController.dispose();
     super.dispose();
   }
 
@@ -453,7 +450,6 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           descricao: _textoOuNulo(_descricaoController),
           uf: _textoOuNulo(_estadoController)?.toUpperCase(),
           municipio: _textoOuNulo(_cidadeController),
-          bairro: _textoOuNulo(_bairroController),
           distribuidora: widget.distribuidora.isEmpty
               ? null
               : widget.distribuidora,
@@ -619,12 +615,6 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 20),
-                    _buildRotulo('BAIRRO'),
-                    _buildCampoTexto(
-                      controller: _bairroController,
-                      dica: 'Ex.: Zona Oeste',
                     ),
                     const SizedBox(height: 20),
                     _buildRotulo('PERFIL DE RF E GATEWAY'),

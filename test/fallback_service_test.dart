@@ -67,7 +67,6 @@ void main() {
                   'latitude': -19.45,
                   'longitude': -47.92,
                   'municipio': 'Uberaba',
-                  'bairro': 'Santa Mônica',
                   'distribuidora': 'CEMIG Distribuição',
                 },
                 {
@@ -77,7 +76,6 @@ void main() {
                   'latitude': -19.46,
                   'longitude': -47.93,
                   'municipio': 'Uberlândia',
-                  'bairro': 'Centro',
                   'distribuidora': 'CEMIG Distribuição',
                 },
               ],
@@ -102,13 +100,12 @@ void main() {
       expect(result.total, 2);
     });
 
-    test('envia município e bairro para o backend filtrar', () async {
+    test('envia município para o backend filtrar', () async {
       final service = AtivosService(
         baseUrl: 'http://localhost:3000',
         client: MockClient((request) async {
           expect(request.url.path, '/api/ativos');
           expect(request.url.queryParameters['municipio'], 'Uberaba');
-          expect(request.url.queryParameters['bairro'], 'Santa Mônica');
 
           return http.Response(
             jsonEncode({
@@ -121,7 +118,6 @@ void main() {
                   'latitude': -19.45,
                   'longitude': -47.92,
                   'municipio': 'Uberaba',
-                  'bairro': 'Santa Mônica',
                   'distribuidora': 'CEMIG Distribuição',
                 },
               ],
@@ -139,7 +135,6 @@ void main() {
         maxLongitude: -40,
         distribuidora: 'CEMIG Distribuição',
         municipio: 'Uberaba',
-        bairro: 'Santa Mônica',
       );
 
       expect(result.ativos, hasLength(1));
@@ -189,40 +184,6 @@ void main() {
       expect(municipios.first.longitude, -46.63);
       expect(municipios.first.totalAtivos, 1141235);
       expect(municipios.last.latitude, isNull);
-    });
-
-    test('agrupa os bairros por município a partir da resposta paginada',
-        () async {
-      final service = AtivosService(
-        baseUrl: 'http://localhost:3000',
-        client: MockClient((request) async {
-          expect(request.url.path, '/api/bairros');
-          expect(request.url.queryParameters['distribuidora'], 'Enel SP');
-
-          return http.Response(
-            jsonEncode({
-              'dados': [
-                {'nome': 'Centro', 'municipio': 'São Paulo', 'uf': 'SP', 'totalAtivos': 10},
-                {'nome': 'Jardins', 'municipio': 'São Paulo', 'uf': 'SP', 'totalAtivos': 5},
-              ],
-              'paginacao': {
-                'pagina': 1,
-                'limite': 100,
-                'total': 2,
-                'totalPaginas': 1,
-              },
-            }),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }),
-      );
-
-      final bairros = await service.getBairros(distribuidora: 'Enel SP');
-
-      expect(bairros, hasLength(2));
-      expect(bairros.first.nome, 'Centro');
-      expect(bairros.first.municipio, 'São Paulo');
     });
 
     test('repasses erro do backend como StateError', () async {

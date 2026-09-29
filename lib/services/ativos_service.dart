@@ -63,29 +63,6 @@ class MunicipioResumo {
   }
 }
 
-class BairroResumo {
-  const BairroResumo({
-    required this.nome,
-    required this.totalAtivos,
-    this.municipio,
-    this.uf,
-  });
-
-  final String nome;
-  final String? municipio;
-  final String? uf;
-  final int totalAtivos;
-
-  factory BairroResumo.fromJson(Map<String, dynamic> json) {
-    return BairroResumo(
-      nome: json['nome']?.toString() ?? '',
-      municipio: json['municipio']?.toString(),
-      uf: json['uf']?.toString(),
-      totalAtivos: (json['totalAtivos'] as num?)?.toInt() ?? 0,
-    );
-  }
-}
-
 class AtivosResult {
   const AtivosResult({
     required this.ativos,
@@ -131,12 +108,10 @@ class AtivosService {
     Set<String>? tipos,
     String? estado,
     String? municipio,
-    String? bairro,
     String? busca,
   }) {
     final estadoFiltro = estado?.trim();
     final municipioFiltro = municipio?.trim();
-    final bairroFiltro = bairro?.trim();
     final buscaFiltro = busca?.trim().toLowerCase();
 
     return ativos.where((ativo) {
@@ -172,19 +147,9 @@ class AtivosService {
         }
       }
 
-      if (bairroFiltro != null && bairroFiltro.isNotEmpty) {
-        final nomeBairro = ativo.bairro.trim().toLowerCase();
-        final alvo = bairroFiltro.toLowerCase();
-
-        if (nomeBairro != alvo && !nomeBairro.contains(alvo)) {
-          return false;
-        }
-      }
-
       if (buscaFiltro != null && buscaFiltro.isNotEmpty) {
         final textoBusca =
-            '${ativo.municipio} ${ativo.bairro} ${ativo.distribuidora}'
-                .toLowerCase();
+            '${ativo.municipio} ${ativo.distribuidora}'.toLowerCase();
 
         if (!textoBusca.contains(buscaFiltro)) {
           return false;
@@ -239,7 +204,6 @@ class AtivosService {
     Set<String>? tipos,
     String? estado,
     String? municipio,
-    String? bairro,
     String? busca,
   }) async {
     final query = <String, String>{
@@ -264,10 +228,6 @@ class AtivosService {
 
     if (municipio != null && municipio.isNotEmpty) {
       query['municipio'] = municipio;
-    }
-
-    if (bairro != null && bairro.isNotEmpty) {
-      query['bairro'] = bairro;
     }
 
     if (busca != null && busca.isNotEmpty) {
@@ -310,7 +270,6 @@ class AtivosService {
       tipos: tipos,
       estado: estado,
       municipio: municipio,
-      bairro: bairro,
       busca: busca,
     );
 
@@ -337,22 +296,6 @@ class AtivosService {
         if (busca != null && busca.isNotEmpty) 'busca': busca,
       },
       fromJson: MunicipioResumo.fromJson,
-    );
-  }
-
-  Future<List<BairroResumo>> getBairros({
-    required String distribuidora,
-    String? municipio,
-    String? busca,
-  }) {
-    return _buscarPaginas(
-      path: '/api/bairros',
-      filtros: {
-        'distribuidora': distribuidora,
-        if (municipio != null && municipio.isNotEmpty) 'municipio': municipio,
-        if (busca != null && busca.isNotEmpty) 'busca': busca,
-      },
-      fromJson: BairroResumo.fromJson,
     );
   }
 

@@ -32,7 +32,6 @@ class NovoEstudo {
   final String tipoDelimitacao;
   final String? uf;
   final String? municipio;
-  final String? bairro;
   final List<LatLng> pontosArea;
   final String nome;
   final String? descricao;
@@ -47,7 +46,6 @@ class NovoEstudo {
     this.tipoDelimitacao = 'desenho',
     this.uf,
     this.municipio,
-    this.bairro,
     required this.pontosArea,
     required this.nome,
     this.descricao,
@@ -76,7 +74,6 @@ class NovoEstudo {
     'tipo_delimitacao': tipoDelimitacao,
     'uf': uf,
     'municipio': municipio,
-    'bairro': bairro,
     'geom': _geometria,
     'nome': nome,
     'descricao': descricao,
