@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
@@ -55,6 +56,12 @@ class _MapPageState extends State<MapPage> {
   static const int _limiteAtivos = 3000;
 
   final Map<Marker, AtivoBdgd> _markerAtivoMap = {};
+
+  /// Cache dos marcadores: recalculado só quando muda algo que interfere
+  /// (ativos, busca, camadas, área desenhada ou seleção). Evita que a
+  /// camada de clusters seja reconstruída a cada frame do pan/zoom.
+  List<Marker> _marcadoresCache = const [];
+  String? _assinaturaMarcadoresCache;
 
   List<LatLng> polygonPoints = [];
   bool isDrawing = true;
@@ -638,14 +645,27 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
+  String _assinaturaMarcadores() {
+    final camadas = _camadasAtivas.values.map((ativa) => ativa ? '1' : '0').join();
+
+    return '${identityHashCode(_todosAtivos)}:${_todosAtivos.length}:'
+        '$_textoBusca:${polygonPoints.length}:$camadas:'
+        '${_ativoSelecionado?.id ?? ''}';
+  }
+
   List<Marker> _gerarMarcadores() {
+    final assinatura = _assinaturaMarcadores();
+    if (assinatura == _assinaturaMarcadoresCache) {
+      return _marcadoresCache;
+    }
+
     _markerAtivoMap.clear();
 
     final ativosFiltrados = _ativosVisiveis.where((a) {
       return _camadasAtivas[a.tipo] ?? false;
     }).toList();
 
-    return ativosFiltrados.map((ativo) {
+    final marcadores = ativosFiltrados.map((ativo) {
       final isSelected = _ativoSelecionado?.id == ativo.id;
       final cor = ativo.tipo.cor;
 
@@ -653,15 +673,63 @@ class _MapPageState extends State<MapPage> {
         point: LatLng(ativo.latitude, ativo.longitude),
         width: isSelected ? 42 : 32,
         height: isSelected ? 42 : 32,
-        child: GestureDetector(
-          onTap: () => _selecionarAtivo(ativo),
-          child: _buildIconeMarcador(ativo, isSelected, cor),
-        ),
+        child: _buildIconeMarcador(ativo, isSelected, cor),
       );
 
       _markerAtivoMap[marker] = ativo;
       return marker;
     }).toList();
+
+    _marcadoresCache = marcadores;
+    _assinaturaMarcadoresCache = assinatura;
+    return marcadores;
+  }
+
+  void _aoTocarMarcador(Marker marker) {
+    final ativo = _markerAtivoMap[marker];
+    if (ativo == null) return;
+    _selecionarAtivo(ativo);
+  }
+
+  double _tamanhoCluster(int total) {
+    if (total >= 1000) return 56;
+    if (total >= 100) return 50;
+    if (total >= 10) return 44;
+    return 38;
+  }
+
+  Widget _buildCluster(List<Marker> marcadores) {
+    final total = marcadores.length;
+    final tamanho = _tamanhoCluster(total);
+    final rotulo = total >= 1000
+        ? '${(total / 1000).toStringAsFixed(1)}k'
+        : '$total';
+
+    return Container(
+      width: tamanho,
+      height: tamanho,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.navBarBackground,
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.primaryLime, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryLime.withValues(alpha: 0.35),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Text(
+        rotulo,
+        style: const TextStyle(
+          color: AppColors.primaryLime,
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
   }
 
   Widget _buildIconeMarcador(AtivoBdgd ativo, bool isSelected, Color cor) {
@@ -780,7 +848,25 @@ class _MapPageState extends State<MapPage> {
                   );
                 }).toList(),
               ),
-              MarkerLayer(markers: marcadores),
+              MarkerClusterLayerWidget(
+                options: MarkerClusterLayerOptions(
+                  markers: marcadores,
+                  size: const Size(48, 48),
+                  computeSize: (marcadoresDoCluster) => Size.square(
+                    _tamanhoCluster(marcadoresDoCluster.length),
+                  ),
+                  maxClusterRadius: 55,
+                  disableClusteringAtZoom: 16,
+                  zoomToBoundsOnClick: true,
+                  spiderfyCluster: true,
+                  centerMarkerOnClick: false,
+                  showPolygon: false,
+                  padding: const EdgeInsets.all(48),
+                  onMarkerTap: _aoTocarMarcador,
+                  builder: (context, marcadoresDoCluster) =>
+                      _buildCluster(marcadoresDoCluster),
+                ),
+              ),
             ],
           ),
           Positioned(
