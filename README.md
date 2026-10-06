@@ -1,5 +1,7 @@
 # Frontend Tecsys
 
+Consulte a [documentação da interface de critérios de instalação](docs/InstallCriteriaInterface.md) para executar e validar a biblioteca de critérios.
+
 ## Requisitos
 
 - Windows 10 ou superior
