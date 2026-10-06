@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/models/criterio_instalacao.dart';
+import 'package:frontend_tecsys/models/estudo.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
 import 'package:frontend_tecsys/models/perfil_rf.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
+import 'package:frontend_tecsys/services/perfis_rf_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
+import 'package:frontend_tecsys/utils/map_utils.dart';
 import 'package:latlong2/latlong.dart';
 
 class NovoEstudoPage extends StatefulWidget {
@@ -13,6 +16,7 @@ class NovoEstudoPage extends StatefulWidget {
   final String? municipio;
   final double areaKm2;
   final List<LatLng> pontosArea;
+  final EstudoResumo? estudo;
 
   const NovoEstudoPage({
     super.key,
@@ -20,7 +24,15 @@ class NovoEstudoPage extends StatefulWidget {
     required this.municipio,
     required this.areaKm2,
     required this.pontosArea,
-  });
+  }) : estudo = null;
+
+  NovoEstudoPage.edicao({super.key, required EstudoResumo this.estudo})
+    : distribuidora = estudo.distribuidora ?? '',
+      municipio = estudo.municipio,
+      pontosArea = estudo.pontosArea,
+      areaKm2 = estudo.pontosArea.length >= 3
+          ? calculatePolygonAreaKm2(estudo.pontosArea)
+          : 0;
 
   @override
   State<NovoEstudoPage> createState() => _NovoEstudoPageState();
@@ -29,18 +41,57 @@ class NovoEstudoPage extends StatefulWidget {
 class _NovoEstudoPageState extends State<NovoEstudoPage> {
   final EstudosService _estudosService = EstudosService();
   final _formKey = GlobalKey<FormState>();
-  final _nomeController = TextEditingController();
-  final _descricaoController = TextEditingController();
+  late final _nomeController = TextEditingController(text: widget.estudo?.nome);
+  late final _descricaoController = TextEditingController(
+    text: widget.estudo?.descricao,
+  );
   late final _cidadeController = TextEditingController(text: widget.municipio);
-  final _estadoController = TextEditingController();
-  final _bairroController = TextEditingController();
+  late final _estadoController = TextEditingController(text: widget.estudo?.uf);
+  late final _bairroController = TextEditingController(
+    text: widget.estudo?.bairro,
+  );
 
-  PerfilRf _perfilSelecionado = PerfilRf.padrao;
+  final PerfisRfService _perfisService = PerfisRfService();
+  List<PerfilRf> _perfis = [];
+  PerfilRf? _perfilSelecionado;
+  bool _carregandoPerfis = true;
+  String? _erroPerfis;
   CriterioInstalacao _criterioSelecionado = CriterioInstalacao.padrao;
   bool _salvando = false;
+  bool get _emEdicao => widget.estudo != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarPerfis();
+  }
+
+  Future<void> _carregarPerfis() async {
+    setState(() {
+      _carregandoPerfis = true;
+      _erroPerfis = null;
+    });
+    try {
+      final perfis = await _perfisService.listar();
+      if (!mounted) return;
+      setState(() {
+        _perfis = perfis;
+        _perfilSelecionado = perfis.isEmpty ? null : perfis.first;
+        _carregandoPerfis = false;
+      });
+    } catch (erro) {
+      if (!mounted) return;
+      setState(() {
+        _erroPerfis = erro.toString();
+        _carregandoPerfis = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
+    _estudosService.dispose();
+    _perfisService.dispose();
     _nomeController.dispose();
     _descricaoController.dispose();
     _cidadeController.dispose();
@@ -58,6 +109,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
 
   String get _descricaoArea {
     final local = widget.municipio ?? widget.distribuidora;
+    if (widget.areaKm2 == 0) return local;
     return '$local · ${_formatarNumero(widget.areaKm2)} km²';
   }
 
@@ -65,7 +117,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     SelectionBottomSheet.show<PerfilRf>(
       context: context,
       title: 'Selecionar perfil RF e gateway',
-      items: PerfilRf.disponiveis
+      items: _perfis
           .map(
             (perfil) => SelectionItem(
               title: '${perfil.nome} · ${perfil.modeloGateway}',
@@ -74,7 +126,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           )
           .toList(),
       selectedValue: _perfilSelecionado,
-      onSelected: (perfil) => setState(() => _perfilSelecionado = perfil),
+      onSelected: (perfil) {
+        if (perfil != null) setState(() => _perfilSelecionado = perfil);
+      },
     );
   }
 
@@ -88,7 +142,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           )
           .toList(),
       selectedValue: _criterioSelecionado,
-      onSelected: (criterio) => setState(() => _criterioSelecionado = criterio),
+      onSelected: (criterio) {
+        if (criterio != null) setState(() => _criterioSelecionado = criterio);
+      },
     );
   }
 
@@ -99,22 +155,35 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
 
   Future<void> _criarEstudo() async {
     if (_salvando || !_formKey.currentState!.validate()) return;
+    if (_perfilSelecionado?.id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecione um perfil RF cadastrado na Biblioteca.'),
+        ),
+      );
+      return;
+    }
 
     setState(() => _salvando = true);
     try {
-      await _estudosService.criarEstudo(
-        NovoEstudo(
-          nome: _nomeController.text.trim(),
-          descricao: _textoOuNulo(_descricaoController),
-          uf: _textoOuNulo(_estadoController)?.toUpperCase(),
-          municipio: _textoOuNulo(_cidadeController),
-          bairro: _textoOuNulo(_bairroController),
-          distribuidora: widget.distribuidora.isEmpty
-              ? null
-              : widget.distribuidora,
-          pontosArea: widget.pontosArea,
-        ),
+      final novo = NovoEstudo(
+        idPerfilRf: _perfilSelecionado!.id,
+        nome: _nomeController.text.trim(),
+        descricao: _textoOuNulo(_descricaoController),
+        uf: _textoOuNulo(_estadoController)?.toUpperCase(),
+        municipio: _textoOuNulo(_cidadeController),
+        bairro: _textoOuNulo(_bairroController),
+        distribuidora: widget.distribuidora.isEmpty
+            ? null
+            : widget.distribuidora,
+        tipoDelimitacao: widget.estudo?.tipoDelimitacao ?? 'desenho',
+        pontosArea: widget.pontosArea,
       );
+      if (_emEdicao) {
+        await _estudosService.atualizarEstudo(widget.estudo!.id, novo);
+      } else {
+        await _estudosService.criarEstudo(novo);
+      }
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (erro) {
@@ -122,7 +191,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       setState(() => _salvando = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Não foi possível criar o estudo: $erro'),
+          content: Text(
+            'Não foi possível ${_emEdicao ? 'atualizar' : 'criar'} o estudo: $erro',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -202,33 +273,57 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                     ),
                     const SizedBox(height: 20),
                     _buildRotulo('PERFIL DE RF E GATEWAY'),
-                    _buildCardSelecao(
-                      titulo:
-                          '${_perfilSelecionado.nome} · ${_perfilSelecionado.modeloGateway}',
-                      onTap: _selecionarPerfil,
-                      conteudo: Wrap(
-                        spacing: 12,
-                        runSpacing: 4,
+                    if (_carregandoPerfis)
+                      const LinearProgressIndicator(
+                        color: AppColors.primaryLime,
+                      )
+                    else if (_erroPerfis != null)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildDetalhe(
-                            '${_formatarNumero(_perfilSelecionado.frequenciaMhz)} MHz',
+                          Text(
+                            'Não foi possível carregar os perfis: $_erroPerfis',
                           ),
-                          _buildDetalhe(
-                            '${_formatarNumero(_perfilSelecionado.potenciaTransmissaoDbm)} dBm TX',
-                          ),
-                          _buildDetalhe(
-                            '${_formatarNumero(_perfilSelecionado.sensibilidadeRecepcaoDbm)} dBm RX',
-                          ),
-                          _buildDetalhe(
-                            'Gateway ${_formatarNumero(_perfilSelecionado.alturaGatewayM)} m',
-                            destaque: true,
-                          ),
-                          _buildDetalhe(
-                            'Dispositivo ${_formatarNumero(_perfilSelecionado.alturaDispositivoM)} m',
+                          TextButton.icon(
+                            onPressed: _carregarPerfis,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Tentar novamente'),
                           ),
                         ],
+                      )
+                    else if (_perfilSelecionado == null)
+                      const Text(
+                        'Nenhum perfil RF cadastrado na Biblioteca.',
+                        style: TextStyle(color: AppColors.textMuted),
+                      )
+                    else
+                      _buildCardSelecao(
+                        titulo:
+                            '${_perfilSelecionado!.nome} · ${_perfilSelecionado!.modeloGateway}',
+                        onTap: _selecionarPerfil,
+                        conteudo: Wrap(
+                          spacing: 12,
+                          runSpacing: 4,
+                          children: [
+                            _buildDetalhe(
+                              '${_formatarNumero(_perfilSelecionado!.frequenciaMhz)} MHz',
+                            ),
+                            _buildDetalhe(
+                              '${_formatarNumero(_perfilSelecionado!.potenciaTransmissaoDbm)} dBm TX',
+                            ),
+                            _buildDetalhe(
+                              '${_formatarNumero(_perfilSelecionado!.sensibilidadeRecepcaoDbm)} dBm RX',
+                            ),
+                            _buildDetalhe(
+                              'Gateway ${_formatarNumero(_perfilSelecionado!.alturaGatewayM)} m',
+                              destaque: true,
+                            ),
+                            _buildDetalhe(
+                              'Dispositivo ${_formatarNumero(_perfilSelecionado!.alturaDispositivoM)} m',
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 20),
                     _buildRotulo('CRITÉRIOS DE INSTALAÇÃO'),
                     _buildCardSelecao(
@@ -276,10 +371,10 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
               size: 18,
             ),
           ),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Novo estudo',
-              style: TextStyle(
+              _emEdicao ? 'Editar estudo' : 'Novo estudo',
+              style: const TextStyle(
                 color: AppColors.textWhite,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -512,7 +607,10 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       child: SizedBox(
         width: double.infinity,
         child: ElevatedButton(
-          onPressed: _salvando ? null : _criarEstudo,
+          onPressed:
+              _salvando || _carregandoPerfis || _perfilSelecionado == null
+              ? null
+              : _criarEstudo,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryLime,
             foregroundColor: AppColors.textDark,
@@ -533,9 +631,12 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                     color: AppColors.textDark,
                   ),
                 )
-              : const Text(
-                  'Criar estudo e simular',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              : Text(
+                  _emEdicao ? 'Salvar alterações' : 'Criar estudo e simular',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
         ),
       ),

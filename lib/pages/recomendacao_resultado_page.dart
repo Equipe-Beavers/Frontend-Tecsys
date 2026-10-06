@@ -12,7 +12,6 @@ class RecomendacaoResultadoPage extends StatefulWidget {
   final String? titulo;
   final String? subtitulo;
 
-
   final ResultadoRecomendacao? resultadoInicial;
 
   const RecomendacaoResultadoPage({
@@ -31,15 +30,14 @@ class RecomendacaoResultadoPage extends StatefulWidget {
       _RecomendacaoResultadoPageState();
 }
 
-class _RecomendacaoResultadoPageState
-    extends State<RecomendacaoResultadoPage> {
+class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
   final _service = RecomendacaoService();
   late Future<ResultadoRecomendacao> _futureResultado;
 
   @override
   void initState() {
     super.initState();
-  
+
     if (widget.resultadoInicial != null) {
       _futureResultado = Future.value(widget.resultadoInicial);
     } else {
@@ -108,7 +106,11 @@ class _RecomendacaoResultadoPageState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, color: AppColors.textMuted, size: 32),
+            const Icon(
+              Icons.error_outline,
+              color: AppColors.textMuted,
+              size: 32,
+            ),
             const SizedBox(height: 12),
             Text(
               'Não foi possível gerar a recomendação.\n$mensagem',
@@ -191,7 +193,7 @@ class _RecomendacaoResultadoPageState
           child: _kpiCard(
             'Custo Total',
             'R\$ ${_formatarValor(r.custoTotalEstimado)}',
-            AppColors.layerChaveFusivel, 
+            AppColors.layerChaveFusivel,
           ),
         ),
       ],
@@ -238,8 +240,9 @@ class _RecomendacaoResultadoPageState
   }
 
   Widget _buildCoberturaGeral(ResultadoRecomendacao r) {
-    final progresso =
-        r.pontosInteresse > 0 ? r.pontosCobertos / r.pontosInteresse : 0.0;
+    final progresso = r.pontosInteresse > 0
+        ? r.pontosCobertos / r.pontosInteresse
+        : 0.0;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -255,11 +258,18 @@ class _RecomendacaoResultadoPageState
             children: [
               const Text(
                 'Ativos elétricos cobertos',
-                style: TextStyle(color: AppColors.textWhite, fontSize: 13, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: AppColors.textWhite,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               Text(
                 '${r.pontosCobertos} de ${r.pontosInteresse}',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                ),
               ),
             ],
           ),
@@ -289,7 +299,10 @@ class _RecomendacaoResultadoPageState
       child: Column(
         children: [
           for (int i = 0; i < r.porCategoria.length; i++)
-            _buildLinhaCategoria(r.porCategoria[i], i != r.porCategoria.length - 1),
+            _buildLinhaCategoria(
+              r.porCategoria[i],
+              i != r.porCategoria.length - 1,
+            ),
         ],
       ),
     );
@@ -307,26 +320,40 @@ class _RecomendacaoResultadoPageState
                 children: [
                   Icon(c.tipo.icone, color: c.tipo.cor, size: 16),
                   const SizedBox(width: 8),
-                  Text(c.tipo.label, style: const TextStyle(color: AppColors.textWhite, fontSize: 13)),
+                  Text(
+                    c.tipo.label,
+                    style: const TextStyle(
+                      color: AppColors.textWhite,
+                      fontSize: 13,
+                    ),
+                  ),
                 ],
               ),
               Row(
                 children: [
                   Text(
                     '${c.cobertos}',
-                    style: const TextStyle(color: AppColors.textWhite, fontSize: 13, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: AppColors.textWhite,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   if (c.naoCobertos > 0)
                     Text(
                       ' / ${c.naoCobertos} sem cobertura',
-                      style: const TextStyle(color: AppColors.layerChaveFusivel, fontSize: 12),
+                      style: const TextStyle(
+                        color: AppColors.layerChaveFusivel,
+                        fontSize: 12,
+                      ),
                     ),
                 ],
               ),
             ],
           ),
         ),
-        if (mostrarDivisor) const Divider(color: AppColors.borderSubtle, height: 1),
+        if (mostrarDivisor)
+          const Divider(color: AppColors.borderSubtle, height: 1),
       ],
     );
   }
@@ -348,19 +375,32 @@ class _RecomendacaoResultadoPageState
             children: [
               Text(
                 g.rotulo ?? 'Gateway ${g.idEstudoPonto}',
-                style: const TextStyle(color: AppColors.textWhite, fontSize: 14, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: AppColors.textWhite,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               if (g.idAtivoBdgd != null)
                 Text(
                   g.idAtivoBdgd!,
-                  style: const TextStyle(color: AppColors.secondaryTeal, fontSize: 12, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    color: AppColors.secondaryTeal,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
             ],
           ),
           const SizedBox(height: 10),
-          _linhaAtributo('Coordenadas', '${g.latitude.toStringAsFixed(4)}, ${g.longitude.toStringAsFixed(4)}'),
-          if (g.descricaoAtivo != null) _linhaAtributo('Ativo elétrico', g.descricaoAtivo!),
-          if (g.alimentador != null) _linhaAtributo('Alimentador', g.alimentador!),
+          _linhaAtributo(
+            'Coordenadas',
+            '${g.latitude.toStringAsFixed(4)}, ${g.longitude.toStringAsFixed(4)}',
+          ),
+          if (g.descricaoAtivo != null)
+            _linhaAtributo('Ativo elétrico', g.descricaoAtivo!),
+          if (g.alimentador != null)
+            _linhaAtributo('Alimentador', g.alimentador!),
           _linhaAtributo('Atende', '${g.quantidadeAtendidos} ativo(s)'),
         ],
       ),
@@ -373,12 +413,19 @@ class _RecomendacaoResultadoPageState
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(rotulo, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+          Text(
+            rotulo,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
           Flexible(
             child: Text(
               valor,
               textAlign: TextAlign.right,
-              style: const TextStyle(color: AppColors.textWhite, fontSize: 12, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                color: AppColors.textWhite,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

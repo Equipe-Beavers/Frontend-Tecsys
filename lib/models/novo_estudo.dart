@@ -28,6 +28,7 @@ class TipoAtivoSelecionado {
 }
 
 class NovoEstudo {
+  final int? idPerfilRf;
   final int idUsuario;
   final String tipoDelimitacao;
   final String? uf;
@@ -43,6 +44,7 @@ class NovoEstudo {
   final String status;
 
   const NovoEstudo({
+    this.idPerfilRf,
     this.idUsuario = 1,
     this.tipoDelimitacao = 'desenho',
     this.uf,
@@ -72,6 +74,7 @@ class NovoEstudo {
   }
 
   Map<String, dynamic> toJson() => {
+    if (idPerfilRf != null) 'id_perfil_rf': idPerfilRf,
     'id_usuario': idUsuario,
     'tipo_delimitacao': tipoDelimitacao,
     'uf': uf,

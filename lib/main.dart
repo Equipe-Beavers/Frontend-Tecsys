@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:frontend_tecsys/pages/biblioteca_page.dart';
+import 'package:frontend_tecsys/pages/estudos_page.dart';
 import 'package:frontend_tecsys/pages/map_page.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
-import 'package:frontend_tecsys/widgets/appbar.dart';
-import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 
 void main() {
@@ -36,13 +36,21 @@ class _MyAppState extends State<MyApp> {
       ),
       home: Scaffold(
         body: IndexedStack(
-          index: 0,
+          index: _abaSelecionada == 1 ? 1 : (_abaSelecionada == 2 ? 2 : 0),
           children: [
             const MapPage(),
+            if (_abaSelecionada == 1)
+              const EstudosPage()
+            else
+              const SizedBox.shrink(),
+            if (_abaSelecionada == 2)
+              const BibliotecaPage()
+            else
+              const SizedBox.shrink(),
           ],
         ),
         bottomNavigationBar: Navbar(
-          currentIndex: 0,
+          currentIndex: _abaSelecionada,
           onTap: (index) {
             setState(() {
               _abaSelecionada = index;
@@ -52,6 +60,4 @@ class _MyAppState extends State<MyApp> {
       ),
     );
   }
-
-
 }
