@@ -44,17 +44,17 @@ O contrato completo está em [InstallCriteriaApi.md](../../backend/docs/InstallC
 
 ## Executar localmente
 
-Inicie o backend com suas variáveis de ambiente configuradas e o banco compatível com a estrutura atual de `criterios_instalacao`. Nenhuma migração é executada pelo frontend.
+Para testar sem AWS ou Supabase, use o [ambiente PostgreSQL local](../../backend/docs/LocalCriteriaDatabase.md): na pasta `backend`, execute `npm run db:local:up` e `npm run dev:local`. A API local usa a porta 3001. Nenhuma migração é executada pelo frontend.
 
 Na pasta `frontend`:
 
 ```bash
-flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3000 --dart-define=APP_USER_ID=1
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3001 --dart-define=APP_USER_ID=1
 ```
 
 Substitua `1` pelo ID de um usuário existente no banco. Enquanto não houver autenticação integrada, `APP_USER_ID` é uma configuração de desenvolvimento e tem padrão `1`; não representa uma sessão autenticada ou controle de acesso. O vínculo com o usuário autenticado deve substituir essa configuração quando o login for integrado.
 
-Sem `API_BASE_URL`, a biblioteca usa `http://localhost:3000` no navegador/desktop e `http://10.0.2.2:3000` no emulador Android. Em celular físico, configure o endereço acessível do servidor. Essas configurações são definidas na compilação.
+Sem `API_BASE_URL`, a biblioteca usa `http://localhost:3000` no navegador/desktop e `http://10.0.2.2:3000` no emulador Android. Em celular físico, configure o endereço acessível do servidor. Essas configurações são definidas na compilação. Para o novo ambiente isolado de testes, configure explicitamente a porta **3001**; os padrões da porta 3000 não foram alterados.
 
 O backend permite CORS para origens HTTP/HTTPS em `localhost` e `127.0.0.1`. Para outra origem, configure `CORS_ORIGINS` com URLs separadas por vírgula e reinicie o backend, por exemplo:
 
