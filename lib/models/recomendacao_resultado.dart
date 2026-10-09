@@ -53,7 +53,8 @@ class AtendimentoGateway {
       idEstudoPonto: (json['id_estudo_ponto'] as num).toInt(),
       tipoAtivo: tipoAtivoFromApiValue(json['tipo_ativo']?.toString()),
       distanciaM: (json['distancia_m'] as num).toInt(),
-      nivelSinalEstimadoDbm: (json['nivel_sinal_estimado_dbm'] as num).toDouble(),
+      nivelSinalEstimadoDbm: (json['nivel_sinal_estimado_dbm'] as num)
+          .toDouble(),
       atributos: _asAttrMap(json['atributos']),
     );
   }
@@ -93,7 +94,11 @@ class GatewayProposto {
       quantidadeAtendidos: (json['quantidade_atendidos'] as num).toInt(),
       atributos: _asAttrMap(json['atributos']),
       atendidos: (json['atendidos'] as List? ?? [])
-          .map((e) => AtendimentoGateway.fromJson(Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) => AtendimentoGateway.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
           .toList(),
     );
   }
@@ -132,11 +137,18 @@ class ResultadoRecomendacao {
       pontosCobertos: (json['pontos_cobertos'] as num).toInt(),
       pontosNaoCobertos: (json['pontos_nao_cobertos'] as num).toInt(),
       porCategoria: (json['por_categoria'] as List? ?? [])
-          .map((e) => CategoriaCobertura.fromJson(Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) => CategoriaCobertura.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ),
+          )
           .toList(),
       gateways: (json['gateways'] as List? ?? [])
-          .map((e) => GatewayProposto.fromJson(Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) =>
+                GatewayProposto.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
           .toList(),
-    ); 
+    );
   }
 }
