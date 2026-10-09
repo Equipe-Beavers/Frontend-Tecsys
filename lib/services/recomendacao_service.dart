@@ -28,9 +28,8 @@ class RecomendacaoService {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'id_perfil_rf': idPerfilRf,
-            if (idCriterioInstalacao != null)
-              'id_criterio_instalacao': idCriterioInstalacao,
-            if (nomeCenario != null) 'nome_cenario': nomeCenario,
+            'id_criterio_instalacao': ?idCriterioInstalacao,
+            'nome_cenario': ?nomeCenario,
           }),
         )
         .timeout(const Duration(seconds: 30));
