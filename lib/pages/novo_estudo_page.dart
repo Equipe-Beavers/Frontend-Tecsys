@@ -265,7 +265,13 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                             ),
                           if (_criterioSelecionado?.requiresPower == true)
                             _buildEtiqueta('Requer alimentação'),
-                          if (_criterioSelecionado?.maxDistanceMeters != null)
+                          if (_criterioSelecionado?.minDistanceMeters != null &&
+                              _criterioSelecionado?.maxDistanceMeters != null)
+                            _buildEtiqueta(
+                              'Dist. ${_formatarNumero(_criterioSelecionado!.minDistanceMeters!)}–${_formatarNumero(_criterioSelecionado!.maxDistanceMeters!)} m',
+                            )
+                          else if (_criterioSelecionado?.maxDistanceMeters !=
+                              null)
                             _buildEtiqueta(
                               'Dist. máx. ${_formatarNumero(_criterioSelecionado!.maxDistanceMeters!)} m',
                             ),

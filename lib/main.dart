@@ -74,16 +74,18 @@ class _MyAppState extends State<MyApp> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.symmetric(
                                 horizontal: 24,
                                 vertical: 28,
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    Icons.sensors,
-                                    color: AppColors.primaryLime,
+                                  Image.asset(
+                                    'assets/images/logo_geomash.png',
+                                    width: 24,
+                                    height: 24,
+                                    semanticLabel: 'Símbolo da Geomash',
                                   ),
                                   SizedBox(width: 10),
                                   Text(
