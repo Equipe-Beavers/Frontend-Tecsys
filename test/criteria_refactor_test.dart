@@ -28,23 +28,30 @@ void main() {
       ...fixture,
       'id_criterio_instalacao': '7',
       'distancia_maxima_ativos_m': '1500.25',
+      'distancia_minima_ativos_m': '250.5',
+      'altura_minima_local_m': '5.5',
       'requer_alimentacao_eletrica': false,
+      'acesso_manutencao': false,
       'criado_em': '2026-10-06T10:00:00',
-      'locais_autorizados': {
+      'tipos_elementos_permitidos': {
         'ids': [10, 20],
       },
     });
     expect(criterion.id, 7);
     expect(criterion.maxDistanceMeters, 1500.25);
+    expect(criterion.minDistanceMeters, 250.5);
+    expect(criterion.minHeight, 5.5);
     expect(criterion.requiresPower, false);
+    expect(criterion.maintenanceAccess, false);
     expect(criterion.createdAt?.year, 2026);
     final draft = InstallCriterionDraft(original: criterion)
       ..name = 'Nome revisado';
-    expect(draft.toPayload(userId: 1).containsKey('locais_autorizados'), false);
     expect(
-      draft.preservesStructuredSelection(
-        CriterionCollection.authorizedLocations,
-      ),
+      draft.toPayload(userId: 1).containsKey('tipos_elementos_permitidos'),
+      false,
+    );
+    expect(
+      draft.preservesStructuredSelection(CriterionCollection.allowedTypes),
       true,
     );
     expect(
@@ -63,22 +70,16 @@ void main() {
     );
   });
 
-  test('draft moves conflicting types, normalizes locations and preserves unrelated JSON', () {
+  test('draft updates asset types and preserves unrelated values', () {
     final draft = InstallCriterionDraft(
-      original: InstallCriterion.fromJson({
-        ...fixture,
-        'locais_proibidos': {'custom': true},
-      }),
+      original: InstallCriterion.fromJson(fixture),
     );
-    draft.selectType('POSTE', blocked: true, selected: true);
-    draft.setLocations(
-      CriterionCollection.authorizedLocations,
-      ' POSTE:1\n\nPOSTE:1\nTORRE:2 ',
-    );
+    draft.setTypes(CriterionCollection.allowedTypes, ['POSTE', 'SUBESTACAO']);
     final payload = draft.toPayload(userId: 1);
-    expect(payload['tipos_elementos_permitidos'], ['SUBESTACAO']);
-    expect(payload['tipos_elementos_proibidos'], contains('POSTE'));
-    expect(payload['locais_autorizados'], ['POSTE:1', 'TORRE:2']);
+    expect(payload['tipos_elementos_permitidos'], ['POSTE', 'SUBESTACAO']);
+    expect(payload.containsKey('tipos_elementos_proibidos'), false);
+    expect(payload.containsKey('locais_autorizados'), false);
+    expect(payload.containsKey('locais_obrigatorios'), false);
     expect(payload.containsKey('locais_proibidos'), false);
     expect(payload.containsKey('id_usuario'), false);
     expect(InstallCriterionDraft.validateGatewayLimit('2147483648'), isNotNull);
@@ -241,6 +242,7 @@ void main() {
       await tester.tap(find.text('Critério 21'));
       await tester.pumpAndSettle();
       expect(find.text('Critério 21'), findsOneWidget);
+      expect(find.text('Dist. 0–1500 m'), findsOneWidget);
       expect(find.textContaining('Altura mín.'), findsNothing);
       expect(
         const NovoEstudo(

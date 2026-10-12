@@ -6,6 +6,7 @@ import '../widgets/criteria_pagination.dart';
 import '../services/install_criterion_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/criterion_components.dart';
+import '../widgets/primary_button.dart';
 import 'install_criterion_form.dart';
 
 class CriteriaLibraryPage extends StatefulWidget {
@@ -132,24 +133,19 @@ class _CriteriaLibraryPageState extends State<CriteriaLibraryPage> {
     final tags = <Widget>[
       for (final type in criterion.labels(CriterionCollection.allowedTypes))
         CriterionTag(criterionAssetTypes[type] ?? type.replaceAll('_', ' ')),
-      for (final type in criterion.labels(CriterionCollection.blockedTypes))
-        CriterionTag(
-          'Bloqueado: ${criterionAssetTypes[type] ?? type.replaceAll('_', ' ')}',
-          warning: true,
-        ),
       if (criterion.requiresPower == true)
         const CriterionTag('Requer alimentação'),
       if (criterion.requiresPower == false)
         const CriterionTag('Alimentação não obrigatória'),
-      if (criterion.maxDistanceMeters != null)
+      if (criterion.minDistanceMeters != null &&
+          criterion.maxDistanceMeters != null)
+        CriterionTag(
+          'Dist. ${criterion.minDistanceMetersLabel}–${criterion.distanceMetersLabel} m',
+        )
+      else if (criterion.maxDistanceMeters != null)
         CriterionTag('Dist. máx. ${criterion.distanceMetersLabel} m'),
       if (criterion.gatewayLimit != null)
         CriterionTag('Máx. ${criterion.gatewayLimit} gateways', warning: true),
-      for (final field in CriterionCollection.values.where(
-        (field) => field.isLocation,
-      ))
-        if (criterion.selectionCount(field) > 0)
-          CriterionTag('${field.label}: ${criterion.selectionCount(field)}'),
     ];
     return SizedBox(
       width: width,
@@ -239,7 +235,7 @@ class _CriteriaLibraryPageState extends State<CriteriaLibraryPage> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
               );
-              final create = CriterionPrimaryButton(
+              final create = PrimaryButton(
                 label: compact ? 'Novo' : 'Novo critério',
                 icon: Icons.add,
                 onPressed: _busy ? null : () => _open(),
@@ -426,7 +422,7 @@ class _CriteriaLibraryPageState extends State<CriteriaLibraryPage> {
               style: const TextStyle(color: AppColors.textMuted, height: 1.5),
             ),
             const SizedBox(height: 24),
-            CriterionPrimaryButton(label: action, onPressed: onTap),
+            PrimaryButton(label: action, onPressed: onTap),
           ],
         ),
       ),

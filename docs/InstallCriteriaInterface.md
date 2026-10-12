@@ -20,15 +20,13 @@ Acesse **Biblioteca → Critérios** pela navegação lateral no desktop ou pela
 | Ativos permitidos | `tipos_elementos_permitidos` | Lista de códigos; seleção por chips e inclusão de tipos personalizados |
 | Ativos bloqueados | `tipos_elementos_proibidos` | Lista de códigos; selecionar um tipo remove sua seleção na lista oposta |
 | Necessita alimentação elétrica | `requer_alimentacao_eletrica` | Interruptor: ligado (`true`) ou desligado (`false`) |
-| Distância máxima aos ativos | `distancia_maxima_ativos_m` | Controle deslizante de 0 a 5 km, em passos de 0,1 km; exibe quilômetros e salva metros |
+| Distância mínima/máxima aos ativos | `distancia_minima_ativos_m`, `distancia_maxima_ativos_m` | Controle de intervalo de 0 a 5 km, em passos de 0,1 km; exibe e salva ambos os limites em metros |
 | Máximo de gateways | `limite_gateways` | Inteiro positivo; em branco envia `null` |
-| Locais autorizados, obrigatórios e proibidos | `locais_autorizados`, `locais_obrigatorios`, `locais_proibidos` | Um identificador por linha; salva uma lista de strings sem duplicatas |
-
-Os identificadores de locais são informados manualmente. Ainda não existe seleção no mapa, busca de locais nem validação da existência desses identificadores. Os tipos predefinidos são `POSTE`, `SUBESTACAO`, `TORRE`, `EDIFICACAO_PROPRIA` e `RESERVATORIO`.
+Os tipos predefinidos são `POSTES`, `SUBESTACOES`, `TORRES`, `EDIFICACOES_PROPRIAS` e `RESERVATORIOS`.
 
 Como os campos JSON da API aceitam estruturas variadas, a edição envia apenas as coleções alteradas. Valores existentes em outro formato são preservados e a interface avisa antes de substituí-los por uma nova seleção.
 
-Novos critérios iniciam com alimentação elétrica ligada e distância de 1,5 km, conforme o protótipo. Ao editar, valores anteriores nulos ou distâncias fora do intervalo do controle são preservados até a alteração do respectivo controle. Distância nula aparece como “Não definida”; alimentação nula aparece desligada. Uma distância acima de 5 km é exibida no valor numérico, com o indicador no fim da escala.
+Novos critérios iniciam com alimentação elétrica ligada, distância mínima de 0 km e máxima de 1,5 km. Ao editar, valores anteriores nulos ou distâncias fora do intervalo do controle são preservados até a alteração do controle. Uma distância máxima nula aparece como “Não definida”; alimentação nula aparece desligada. Distâncias acima de 5 km são exibidas com os indicadores limitados ao fim da escala.
 
 ## API utilizada
 

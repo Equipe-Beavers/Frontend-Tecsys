@@ -6,7 +6,10 @@ class InstallCriterionDraft {
     : name = original?.name ?? '',
       gatewayLimitText = original?.gatewayLimit?.toString() ?? '',
       requiresPower = original == null ? true : original.requiresPower,
+      maintenanceAccess = original == null ? true : original.maintenanceAccess,
+      minDistanceMeters = original?.minDistanceMeters ?? 0,
       maxDistanceMeters = original == null ? 1500 : original.maxDistanceMeters,
+      minHeight = original == null ? 5 : original.minHeight,
       _selections = {
         for (final field in CriterionCollection.values)
           field: {...?original?.labels(field)},
@@ -16,7 +19,10 @@ class InstallCriterionDraft {
   String name;
   String gatewayLimitText;
   bool? requiresPower;
+  bool? maintenanceAccess;
+  double? minDistanceMeters;
   double? maxDistanceMeters;
+  double? minHeight;
   final Map<CriterionCollection, Set<String>> _selections;
   final Set<CriterionCollection> _changedCollections = {};
 
@@ -26,30 +32,8 @@ class InstallCriterionDraft {
       !_changedCollections.contains(field) &&
       (original?.hasStructuredSelection(field) ?? false);
 
-  void selectType(
-    String type, {
-    required bool blocked,
-    required bool selected,
-  }) {
-    final field = blocked
-        ? CriterionCollection.blockedTypes
-        : CriterionCollection.allowedTypes;
-    final opposite = blocked
-        ? CriterionCollection.allowedTypes
-        : CriterionCollection.blockedTypes;
-    selected ? _selections[field]!.add(type) : _selections[field]!.remove(type);
-    _changedCollections.add(field);
-    if (selected && _selections[opposite]!.remove(type)) {
-      _changedCollections.add(opposite);
-    }
-  }
-
-  void setLocations(CriterionCollection field, String text) {
-    _selections[field] = text
-        .split('\n')
-        .map((value) => value.trim())
-        .where((value) => value.isNotEmpty)
-        .toSet();
+  void setTypes(CriterionCollection field, Iterable<String> types) {
+    _selections[field] = types.toSet();
     _changedCollections.add(field);
   }
 
@@ -57,7 +41,10 @@ class InstallCriterionDraft {
     if (original == null) 'id_usuario': userId,
     'nome': name.trim(),
     'requer_alimentacao_eletrica': requiresPower,
+    'acesso_manutencao': maintenanceAccess,
+    'distancia_minima_ativos_m': minDistanceMeters,
     'distancia_maxima_ativos_m': maxDistanceMeters,
+    'altura_minima_local_m': minHeight,
     'limite_gateways': gatewayLimitText.trim().isEmpty
         ? null
         : int.parse(gatewayLimitText.trim()),

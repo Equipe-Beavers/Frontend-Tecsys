@@ -1,14 +1,10 @@
 enum CriterionCollection {
   allowedTypes('tipos_elementos_permitidos', 'Ativos permitidos'),
-  blockedTypes('tipos_elementos_proibidos', 'Ativos bloqueados'),
-  authorizedLocations('locais_autorizados', 'Locais autorizados'),
-  requiredLocations('locais_obrigatorios', 'Locais obrigatórios'),
-  forbiddenLocations('locais_proibidos', 'Locais proibidos');
+  blockedTypes('tipos_elementos_bloqueados', 'Ativos bloqueados');
 
   const CriterionCollection(this.jsonKey, this.label);
   final String jsonKey;
   final String label;
-  bool get isLocation => index >= authorizedLocations.index;
 }
 
 class InstallCriterion {
@@ -17,7 +13,10 @@ class InstallCriterion {
     required this.userId,
     required this.name,
     this.requiresPower,
+    this.maintenanceAccess,
+    this.minDistanceMeters,
     this.maxDistanceMeters,
+    this.minHeight,
     this.gatewayLimit,
     this.createdAt,
     this.updatedAt,
@@ -28,7 +27,10 @@ class InstallCriterion {
   final int userId;
   final String name;
   final bool? requiresPower;
+  final bool? maintenanceAccess;
+  final double? minDistanceMeters;
   final double? maxDistanceMeters;
+  final double? minHeight;
   final int? gatewayLimit;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -46,7 +48,10 @@ class InstallCriterion {
       userId: _integer(json['id_usuario'], required: true)!,
       name: name,
       requiresPower: power as bool?,
+      maintenanceAccess: json['acesso_manutencao'] as bool?,
+      minDistanceMeters: _number(json['distancia_minima_ativos_m']),
       maxDistanceMeters: _number(json['distancia_maxima_ativos_m']),
+      minHeight: _number(json['altura_minima_local_m']),
       gatewayLimit: _integer(json['limite_gateways']),
       createdAt: _date(json['criado_em']),
       updatedAt: _date(json['atualizado_em']),
@@ -76,9 +81,12 @@ class InstallCriterion {
         : value.toString().replaceAll('.', ',');
   }
 
-  int selectionCount(CriterionCollection field) {
-    final value = collections[field];
-    return value is List ? value.length : 0;
+  String? get minDistanceMetersLabel {
+    final value = minDistanceMeters;
+    if (value == null) return null;
+    return value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toString().replaceAll('.', ',');
   }
 
   static double? _number(Object? value) {
@@ -117,9 +125,21 @@ class InstallCriterion {
 }
 
 const criterionAssetTypes = <String, String>{
-  'POSTE': 'Postes',
-  'SUBESTACAO': 'Subestações',
-  'TORRE': 'Torres',
-  'EDIFICACAO_PROPRIA': 'Edificações próprias',
-  'RESERVATORIO': 'Reservatórios',
+  'POSTES': 'Postes',
+  'SUBESTACOES': 'Subestações',
+  'TORRES': 'Torres',
+  'EDIFICACOES_PROPRIAS': 'Edificações próprias',
+  'RESERVATORIOS': 'Reservatórios',
+  'POSTES_TERCEIROS': 'Postes de terceiros',
+  'ESTRUTURAS_PROVISORIAS': 'Estruturas provisórias',
+};
+
+const criterionVegetationTypes = <String, String>{
+  'AREA_URBANIZADA': 'Área urbanizada',
+  'PASTAGEM': 'Pastagem',
+  'AGRICULTURA': 'Agricultura',
+  'FORMACAO_FLORESTAL': 'Formação florestal',
+  'MANGUE': 'Mangue',
+  'AREA_ALAGADA': 'Área alagada',
+  'CORPO_DAGUA': "Corpo d'água",
 };
