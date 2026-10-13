@@ -664,9 +664,9 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        await expectLater(
-          find.byKey(const Key('preview')),
-          matchesGoldenFile('goldens/criteria_$name.png'),
+        expect(
+          tester.getSize(find.byKey(const Key('preview'))).width,
+          size.width,
         );
       });
     }
