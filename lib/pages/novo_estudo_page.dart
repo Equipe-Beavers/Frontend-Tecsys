@@ -74,7 +74,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           )
           .toList(),
       selectedValue: _perfilSelecionado,
-      onSelected: (perfil) => setState(() => _perfilSelecionado = perfil),
+      onSelected: (perfil) => setState(() => _perfilSelecionado = perfil ?? PerfilRf.padrao),
     );
   }
 
@@ -88,7 +88,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           )
           .toList(),
       selectedValue: _criterioSelecionado,
-      onSelected: (criterio) => setState(() => _criterioSelecionado = criterio),
+      onSelected: (criterio) => setState(() => _criterioSelecionado = criterio ?? CriterioInstalacao.padrao),
     );
   }
 

@@ -12,6 +12,7 @@ import 'package:frontend_tecsys/models/layer_filter.dart';
 import 'package:frontend_tecsys/services/ativos_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
+import 'package:frontend_tecsys/widgets/edificacoes_map_layer.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
 import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/filter_chip.dart';
@@ -31,6 +32,11 @@ class _MapPageState extends State<MapPage> {
   final MapController _mapController = MapController();
   final AtivosService _ativosService = AtivosService();
   final TextEditingController _buscaController = TextEditingController();
+  late final EdificacoesMapController _edificacoes =
+      EdificacoesMapController(_mapController)
+        ..addListener(() {
+          if (mounted) setState(() {});
+        });
 
   List<DistribuidoraResumo> _distribuidoras = [];
   String? _distribuidoraSelecionada;
@@ -70,6 +76,7 @@ class _MapPageState extends State<MapPage> {
     _buscaController.dispose();
     _mapController.dispose();
     _ativosService.dispose();
+    _edificacoes.dispose();
     super.dispose();
   }
 
@@ -615,6 +622,8 @@ class _MapPageState extends State<MapPage> {
                   LatLng(89.9, 180.0),
                 ),
               ),
+              onLongPress: (_, ponto) =>
+                  _edificacoes.aoPressionarLongo(context, ponto),
               onTap: (tapPosition, point) {
                 if (!isDrawing) {
                   return;
@@ -630,6 +639,7 @@ class _MapPageState extends State<MapPage> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.example.frontend_tecsys',
               ),
+              ..._edificacoes.camadas(),
               PolygonLayer(
                 polygons: polygonPoints.length >= 3
                     ? <Polygon<Object>>[
@@ -725,6 +735,11 @@ class _MapPageState extends State<MapPage> {
                     FilterChipWidget(
                       label: _municipioSelecionado ?? 'Cidade / bairro',
                       onTap: _abrirFiltroMunicipio,
+                    ),
+                    FilterChipWidget(
+                      label: 'Edificações',
+                      isSelected: _edificacoes.mostrarEdificacoes,
+                      onTap: () => _edificacoes.alternarEdificacoes(context),
                     ),
                   ],
                 ),
