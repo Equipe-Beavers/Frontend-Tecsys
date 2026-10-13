@@ -1,6 +1,6 @@
 # Interface de critérios de instalação
 
-Acesse **Biblioteca → Critérios** pela navegação lateral no desktop ou pela barra inferior no celular. O layout segue as cores e a organização do protótipo, adaptado aos campos disponíveis no modelo vigente [DER - Geomash.sql](../../DER%20-%20Geomash.sql) e na API atual.
+Acesse **Biblioteca → Critérios** pela navegação lateral no desktop ou pela barra inferior no celular. O layout segue as cores e a organização do protótipo, adaptado aos campos disponíveis no schema local [novo_schema.sql](../../backend/novo_schema.sql) e na API atual.
 
 ## Funcionalidades
 
@@ -20,13 +20,17 @@ Acesse **Biblioteca → Critérios** pela navegação lateral no desktop ou pela
 | Ativos permitidos | `tipos_elementos_permitidos` | Lista de códigos; seleção por chips e inclusão de tipos personalizados |
 | Ativos bloqueados | `tipos_elementos_proibidos` | Lista de códigos; selecionar um tipo remove sua seleção na lista oposta |
 | Necessita alimentação elétrica | `requer_alimentacao_eletrica` | Interruptor: ligado (`true`) ou desligado (`false`) |
-| Distância mínima/máxima aos ativos | `distancia_minima_ativos_m`, `distancia_maxima_ativos_m` | Controle de intervalo de 0 a 5 km, em passos de 0,1 km; exibe e salva ambos os limites em metros |
+| Distância máxima aos ativos | `distancia_maxima_ativos_m` | Controle de 0 a 5 km, em passos de 0,1 km; salva o valor em metros |
 | Máximo de gateways | `limite_gateways` | Inteiro positivo; em branco envia `null` |
+| Relevo | `relevo` | JSONB com altitude mínima/máxima e declividade máxima |
+| Vegetação | `vegetacoes` | JSONB com listas de tipos permitidos e proibidos |
+| Edificações | `edificacoes` | JSONB com raio, quantidade máxima, altura máxima e distância mínima |
+| Antenas | `antenas` | JSONB com raio, quantidade máxima, distância máxima e controle de conflito de frequência |
 Os tipos predefinidos são `POSTES`, `SUBESTACOES`, `TORRES`, `EDIFICACOES_PROPRIAS` e `RESERVATORIOS`.
 
-Como os campos JSON da API aceitam estruturas variadas, a edição envia apenas as coleções alteradas. Valores existentes em outro formato são preservados e a interface avisa antes de substituí-los por uma nova seleção.
+Os campos JSONB de tipos de ativos aceitam listas ou outras estruturas; as seções avançadas são enviadas como objetos com as chaves acima. Na edição, valores dessas seções são carregados nos controles e enviados novamente.
 
-Novos critérios iniciam com alimentação elétrica ligada, distância mínima de 0 km e máxima de 1,5 km. Ao editar, valores anteriores nulos ou distâncias fora do intervalo do controle são preservados até a alteração do controle. Uma distância máxima nula aparece como “Não definida”; alimentação nula aparece desligada. Distâncias acima de 5 km são exibidas com os indicadores limitados ao fim da escala.
+Novos critérios iniciam com alimentação elétrica ligada e distância máxima de 1,5 km. Ao editar, valores nulos ou distâncias fora do intervalo do controle são preservados até a alteração do controle. Uma distância máxima nula aparece como “Não definida”; alimentação nula aparece desligada. Distâncias acima de 5 km são exibidas com o indicador limitado ao fim da escala.
 
 ## API utilizada
 
@@ -37,6 +41,10 @@ Novos critérios iniciam com alimentação elétrica ligada, distância mínima 
 | Criar | `POST /create-install-criterion` |
 | Editar | `PATCH /update-install-criterion/:id` |
 | Excluir | `DELETE /delete-install-criterion/:id` |
+| Listar perfis RF | `GET /list-rf-profiles?id_usuario=ID&page=N&limit=20` |
+| Carregar perfil RF | `GET /get-rf-profile/:id` |
+| Criar perfil RF | `POST /create-rf-profile` |
+| Atualizar perfil RF | `PATCH /update-rf-profile/:id` |
 
 O contrato completo está em [InstallCriteriaApi.md](../../backend/docs/InstallCriteriaApi.md).
 
@@ -62,14 +70,14 @@ CORS_ORIGINS=http://192.168.1.10:8080,https://app.exemplo.com
 
 ## Limites desta entrega
 
-- Altura mínima, acesso para manutenção, relevo, vegetação, edificações e restrições de antenas do protótipo não têm campos correspondentes no modelo atual de critérios. A interface não oferece esses controles; sua implementação depende da definição da persistência e do contrato da API.
-- A aba de perfis de RF é uma indicação visual, sem funcionalidade nesta tarefa.
+- Os campos avançados são armazenados em JSONB. A API preserva os objetos, sem validar as chaves internas; novos consumidores devem seguir o formato documentado acima.
+- A aba **Perfis de RF** lista os perfis do usuário pela API PostgreSQL, com paginação e estados de carregamento/erro. **Novo Perfil RF** abre um formulário responsivo com preview calculado, validações e gravação em `perfis_rf`; tocar em um perfil abre o mesmo formulário com os dados carregados para edição.
 - Não são apresentados contadores “em uso”, rascunhos ou valores fictícios: esses estados não estão no retorno atual da API.
 - O seletor de critérios em “Novo estudo” usa a mesma API, paginação e modelo da biblioteca; a classe antiga com critérios fixos foi removida. O ID escolhido é incluído em `NovoEstudo.toJson()`. A criação completa de estudos ainda depende da adaptação de seu endpoint/serviço ao DER (o serviço atual usa `/estudos` e os perfis de RF permanecem no fluxo existente). Essa adaptação não foi feita nesta refatoração de critérios.
 
 ## Organização do código
 
-- `InstallCriterion`: campos escalares tipados, conversão de respostas JSON e enumeração única das cinco coleções JSONB, preservando os formatos aceitos pelo DER.
+- `InstallCriterion`: campos escalares tipados, conversão de respostas JSON e coleções JSONB da tabela local.
 - `InstallCriterionDraft`: seleções, validações e montagem do payload; independente dos widgets.
 - `CriteriaPageController`: carregamento de uma página, recuperação de erros e descarte de respostas antigas quando uma nova busca já foi solicitada.
 - `CriteriaPagination` e `InstallCriterionPicker`: paginação reutilizada na biblioteca e no seletor de critérios.

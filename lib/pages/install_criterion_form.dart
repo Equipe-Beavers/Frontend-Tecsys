@@ -47,7 +47,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
   late Map<CriterionCollection, List<String>> _assetChipItems;
   late List<String> _allowedVegetationItems;
   late List<String> _blockedVegetationItems;
-  bool _considerFrequencyConflict = true;
+  late bool _considerFrequencyConflict;
   bool _saving = false;
   bool _dirty = false;
   String? _error;
@@ -58,16 +58,38 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
     _draft = InstallCriterionDraft(original: widget.criterion);
     _name = TextEditingController(text: _draft.name);
     _gatewayLimit = TextEditingController(text: _draft.gatewayLimitText);
-    _minimumAltitude = TextEditingController();
-    _maximumAltitude = TextEditingController();
-    _maximumSlope = TextEditingController();
-    _buildingAnalysisRadius = TextEditingController();
-    _buildingMaximumQuantity = TextEditingController();
-    _buildingMaximumHeight = TextEditingController();
-    _buildingMinimumDistance = TextEditingController();
-    _antennaAnalysisRadius = TextEditingController();
-    _antennaMaximumQuantity = TextEditingController();
-    _antennaMaximumDistance = TextEditingController();
+    _minimumAltitude = TextEditingController(
+      text: _sectionText(_draft.relief, 'altitude_minima_m'),
+    );
+    _maximumAltitude = TextEditingController(
+      text: _sectionText(_draft.relief, 'altitude_maxima_m'),
+    );
+    _maximumSlope = TextEditingController(
+      text: _sectionText(_draft.relief, 'declividade_maxima_graus'),
+    );
+    _buildingAnalysisRadius = TextEditingController(
+      text: _sectionText(_draft.buildings, 'raio_analise_m'),
+    );
+    _buildingMaximumQuantity = TextEditingController(
+      text: _sectionText(_draft.buildings, 'quantidade_maxima'),
+    );
+    _buildingMaximumHeight = TextEditingController(
+      text: _sectionText(_draft.buildings, 'altura_maxima_m'),
+    );
+    _buildingMinimumDistance = TextEditingController(
+      text: _sectionText(_draft.buildings, 'distancia_minima_m'),
+    );
+    _antennaAnalysisRadius = TextEditingController(
+      text: _sectionText(_draft.antennas, 'raio_analise_m'),
+    );
+    _antennaMaximumQuantity = TextEditingController(
+      text: _sectionText(_draft.antennas, 'quantidade_maxima'),
+    );
+    _antennaMaximumDistance = TextEditingController(
+      text: _sectionText(_draft.antennas, 'distancia_maxima_m'),
+    );
+    _considerFrequencyConflict =
+        _draft.antennas['considerar_conflito_frequencia'] as bool? ?? true;
     _assetChipItems = {
       CriterionCollection.allowedTypes: {
         'POSTES',
@@ -83,12 +105,22 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
         ..._draft.selection(CriterionCollection.blockedTypes),
       }.toList(),
     };
-    _allowedVegetationItems = criterionVegetationTypes.keys.take(3).toList();
-    _blockedVegetationItems = criterionVegetationTypes.keys.skip(3).toList();
+    _allowedVegetationItems = _draft.allowedVegetationTypes;
+    _blockedVegetationItems = _draft.blockedVegetationTypes;
     for (final entry in _assetChipItems.entries) {
       _draft.setTypes(entry.key, entry.value);
     }
   }
+
+  String _sectionText(Map<String, dynamic> values, String key) =>
+      values[key]?.toString() ?? '';
+
+  double? _optionalNumber(String text) => text.trim().isEmpty
+      ? null
+      : double.parse(text.trim().replaceAll(',', '.'));
+
+  int? _optionalInteger(String text) =>
+      text.trim().isEmpty ? null : int.parse(text.trim());
 
   @override
   void dispose() {
@@ -146,7 +178,26 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
     });
     _draft.name = _name.text;
     _draft.gatewayLimitText = _gatewayLimit.text;
-    final values = _draft.toPayload(userId: widget.userId);
+    final values = _draft.toPayload(
+      userId: widget.userId,
+      reliefValues: {
+        'altitude_minima_m': _optionalNumber(_minimumAltitude.text),
+        'altitude_maxima_m': _optionalNumber(_maximumAltitude.text),
+        'declividade_maxima_graus': _optionalNumber(_maximumSlope.text),
+      },
+      buildingValues: {
+        'raio_analise_m': _optionalNumber(_buildingAnalysisRadius.text),
+        'quantidade_maxima': _optionalInteger(_buildingMaximumQuantity.text),
+        'altura_maxima_m': _optionalNumber(_buildingMaximumHeight.text),
+        'distancia_minima_m': _optionalNumber(_buildingMinimumDistance.text),
+      },
+      antennaValues: {
+        'raio_analise_m': _optionalNumber(_antennaAnalysisRadius.text),
+        'quantidade_maxima': _optionalInteger(_antennaMaximumQuantity.text),
+        'distancia_maxima_m': _optionalNumber(_antennaMaximumDistance.text),
+        'considerar_conflito_frequencia': _considerFrequencyConflict,
+      },
+    );
     try {
       await widget.onSave(values);
     } catch (error) {
@@ -228,9 +279,18 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
     setState(() {
       if (allowed) {
         _allowedVegetationItems = items;
+        _blockedVegetationItems = _blockedVegetationItems
+            .where((item) => !items.contains(item))
+            .toList();
       } else {
         _blockedVegetationItems = items;
+        _allowedVegetationItems = _allowedVegetationItems
+            .where((item) => !items.contains(item))
+            .toList();
       }
+      _draft
+        ..setVegetationTypes(allowed: true, types: _allowedVegetationItems)
+        ..setVegetationTypes(allowed: false, types: _blockedVegetationItems);
       _dirty = true;
     });
   }
@@ -306,7 +366,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
 
   String get _distanceLabel => _draft.maxDistanceMeters == null
       ? 'Não definida'
-      : '${_formatKilometers(_draft.minDistanceMeters ?? 0)}–${_formatKilometers(_draft.maxDistanceMeters!)} km';
+      : '${_formatKilometers(_draft.maxDistanceMeters!)} km';
 
   Widget _requirements() => Column(
     children: [
@@ -326,22 +386,21 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
             ),
             const SizedBox(height: 8),
             SliderField(
-              label: 'Distância mínima/máxima aos ativos',
+              label: 'Distância máxima aos ativos',
               valueLabel: _distanceLabel,
               minValue: 0,
               maxValue: 5000,
               values: RangeValues(
-                (_draft.minDistanceMeters ?? 0).clamp(0, 5000).toDouble(),
+                0,
                 (_draft.maxDistanceMeters ?? 0).clamp(0, 5000).toDouble(),
               ),
               divisions: 50,
-              enableMin: true,
+              enableMin: false,
               enableMax: true,
               enabled: !_saving,
               rangeLabel: '0–5 km',
               valueFormatter: _formatKilometers,
               onChanged: (values) => setState(() {
-                _draft.minDistanceMeters = (values.start / 100).round() * 100.0;
                 _draft.maxDistanceMeters = (values.end / 100).round() * 100.0;
                 _dirty = true;
               }),
@@ -403,6 +462,11 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                         'Mínima',
                         insideAppPanel: true,
                       ).copyWith(suffixText: 'm'),
+                      validator: (value) =>
+                          InstallCriterionDraft.validateOptionalNumber(
+                            value,
+                            allowNegative: true,
+                          ),
                       onChanged: (_) => _dirty = true,
                     ),
                   ),
@@ -418,6 +482,11 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                         'Máxima',
                         insideAppPanel: true,
                       ).copyWith(suffixText: 'm'),
+                      validator: (value) =>
+                          InstallCriterionDraft.validateOptionalNumber(
+                            value,
+                            allowNegative: true,
+                          ),
                       onChanged: (_) => _dirty = true,
                     ),
                   ),
@@ -436,6 +505,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                     'Máxima',
                     insideAppPanel: true,
                   ).copyWith(suffixText: '°'),
+                  validator: InstallCriterionDraft.validateOptionalNumber,
                   onChanged: (_) => _dirty = true,
                 ),
               ),
@@ -529,6 +599,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                   'Raio de análise',
                   insideAppPanel: true,
                 ).copyWith(suffixText: 'm'),
+                validator: InstallCriterionDraft.validateOptionalNumber,
                 onChanged: (_) => _dirty = true,
               ),
               const SizedBox(height: 12),
@@ -540,6 +611,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                   'Quantidade máxima',
                   insideAppPanel: true,
                 ),
+                validator: InstallCriterionDraft.validateOptionalInteger,
                 onChanged: (_) => _dirty = true,
               ),
               const SizedBox(height: 12),
@@ -553,6 +625,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                   'Altura máxima',
                   insideAppPanel: true,
                 ).copyWith(suffixText: 'm'),
+                validator: InstallCriterionDraft.validateOptionalNumber,
                 onChanged: (_) => _dirty = true,
               ),
               const SizedBox(height: 12),
@@ -566,6 +639,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                   'Distância mínima',
                   insideAppPanel: true,
                 ).copyWith(suffixText: 'm'),
+                validator: InstallCriterionDraft.validateOptionalNumber,
                 onChanged: (_) => _dirty = true,
               ),
             ],
@@ -587,6 +661,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                   'Raio de análise',
                   insideAppPanel: true,
                 ).copyWith(suffixText: 'm'),
+                validator: InstallCriterionDraft.validateOptionalNumber,
                 onChanged: (_) => _dirty = true,
               ),
               const SizedBox(height: 12),
@@ -598,6 +673,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                   'Quantidade máxima',
                   insideAppPanel: true,
                 ),
+                validator: InstallCriterionDraft.validateOptionalInteger,
                 onChanged: (_) => _dirty = true,
               ),
               const SizedBox(height: 12),
@@ -611,6 +687,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                   'Distância máxima',
                   insideAppPanel: true,
                 ).copyWith(suffixText: 'm'),
+                validator: InstallCriterionDraft.validateOptionalNumber,
                 onChanged: (_) => _dirty = true,
               ),
               const SizedBox(height: 12),
