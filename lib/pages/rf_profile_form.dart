@@ -248,7 +248,9 @@ class _RFProfileFormState extends State<RFProfileForm> {
     if (value == null || value.trim().isEmpty) {
       return 'Informe o nome do perfil.';
     }
-    if (value.trim().length > 150) return 'Use até 150 caracteres.';
+    if (value.trim().length > 150) {
+      return 'Use até 150 caracteres.';
+    }
     return null;
   }
 
