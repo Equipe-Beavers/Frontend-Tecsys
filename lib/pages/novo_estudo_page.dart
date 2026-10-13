@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:frontend_tecsys/models/criterio_instalacao.dart';
+import 'package:frontend_tecsys/models/install_criterion.dart';
+import 'package:frontend_tecsys/services/install_criterion_service.dart';
+import 'package:frontend_tecsys/widgets/install_criterion_picker.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
 import 'package:frontend_tecsys/models/perfil_rf.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
@@ -13,6 +15,8 @@ class NovoEstudoPage extends StatefulWidget {
   final String? municipio;
   final double areaKm2;
   final List<LatLng> pontosArea;
+  final InstallCriterionService? criterionService;
+  final int userId;
 
   const NovoEstudoPage({
     super.key,
@@ -20,6 +24,8 @@ class NovoEstudoPage extends StatefulWidget {
     required this.municipio,
     required this.areaKm2,
     required this.pontosArea,
+    this.criterionService,
+    this.userId = const int.fromEnvironment('APP_USER_ID', defaultValue: 1),
   });
 
   @override
@@ -36,7 +42,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   final _bairroController = TextEditingController();
 
   PerfilRf _perfilSelecionado = PerfilRf.padrao;
-  CriterioInstalacao _criterioSelecionado = CriterioInstalacao.padrao;
+  InstallCriterion? _criterioSelecionado;
+  late final InstallCriterionService _criterionService =
+      widget.criterionService ?? InstallCriterionService();
   bool _salvando = false;
 
   @override
@@ -46,6 +54,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     _cidadeController.dispose();
     _estadoController.dispose();
     _bairroController.dispose();
+    if (widget.criterionService == null) _criterionService.dispose();
     super.dispose();
   }
 
@@ -74,22 +83,25 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           )
           .toList(),
       selectedValue: _perfilSelecionado,
-      onSelected: (perfil) => setState(() => _perfilSelecionado = perfil),
+      onSelected: (perfil) =>
+          setState(() => _perfilSelecionado = perfil ?? _perfilSelecionado),
     );
   }
 
-  void _selecionarCriterio() {
-    SelectionBottomSheet.show<CriterioInstalacao>(
+  Future<void> _selecionarCriterio() async {
+    if (_salvando) return;
+    final selected = await showModalBottomSheet<InstallCriterion>(
       context: context,
-      title: 'Selecionar critério de instalação',
-      items: CriterioInstalacao.disponiveis
-          .map(
-            (criterio) => SelectionItem(title: criterio.nome, value: criterio),
-          )
-          .toList(),
-      selectedValue: _criterioSelecionado,
-      onSelected: (criterio) => setState(() => _criterioSelecionado = criterio),
+      isScrollControlled: true,
+      builder: (_) => InstallCriterionPicker(
+        service: _criterionService,
+        userId: widget.userId,
+        selectedId: _criterioSelecionado?.id,
+      ),
     );
+    if (selected != null && mounted) {
+      setState(() => _criterioSelecionado = selected);
+    }
   }
 
   String? _textoOuNulo(TextEditingController controller) {
@@ -100,10 +112,18 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   Future<void> _criarEstudo() async {
     if (_salvando || !_formKey.currentState!.validate()) return;
 
+    if (_criterioSelecionado == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecione um critério de instalação.')),
+      );
+      return;
+    }
     setState(() => _salvando = true);
     try {
       await _estudosService.criarEstudo(
         NovoEstudo(
+          idUsuario: widget.userId,
+          idCriterioInstalacao: _criterioSelecionado!.id,
           nome: _nomeController.text.trim(),
           descricao: _textoOuNulo(_descricaoController),
           uf: _textoOuNulo(_estadoController)?.toUpperCase(),
@@ -232,21 +252,28 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                     const SizedBox(height: 20),
                     _buildRotulo('CRITÉRIOS DE INSTALAÇÃO'),
                     _buildCardSelecao(
-                      titulo: _criterioSelecionado.nome,
+                      titulo:
+                          _criterioSelecionado?.name ?? 'Selecionar critério',
                       onTap: _selecionarCriterio,
                       conteudo: Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          _buildEtiqueta(
-                            'Altura mín. ${_formatarNumero(_criterioSelecionado.alturaMinimaM)} m',
-                          ),
-                          if (_criterioSelecionado.requerAlimentacaoEletrica)
+                          if (_criterioSelecionado == null)
+                            _buildDetalhe(
+                              'Escolha um critério cadastrado na Biblioteca.',
+                            ),
+                          if (_criterioSelecionado?.requiresPower == true)
                             _buildEtiqueta('Requer alimentação'),
-                          _buildEtiqueta(
-                            'Máx. ${_criterioSelecionado.limiteGateways} gateways',
-                            destaque: true,
-                          ),
+                          if (_criterioSelecionado?.maxDistanceMeters != null)
+                            _buildEtiqueta(
+                              'Dist. máx. ${_formatarNumero(_criterioSelecionado!.maxDistanceMeters!)} m',
+                            ),
+                          if (_criterioSelecionado?.gatewayLimit != null)
+                            _buildEtiqueta(
+                              'Máx. ${_criterioSelecionado!.gatewayLimit} gateways',
+                              destaque: true,
+                            ),
                         ],
                       ),
                     ),

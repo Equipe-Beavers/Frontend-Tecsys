@@ -1,0 +1,18 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Validate install criterion Flutter tests",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"test",
+				"--no-pub",
+				"test/install_criterion_test.dart",
+				"test/criteria_refactor_test.dart"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
