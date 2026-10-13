@@ -73,8 +73,9 @@ class _CriteriaLibraryPageState extends State<CriteriaLibraryPage> {
       });
       widget.onEditingChanged?.call(true);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         _message('Não foi possível abrir o perfil RF. Tente novamente.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
