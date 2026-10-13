@@ -1,6 +1,6 @@
 enum CriterionCollection {
   allowedTypes('tipos_elementos_permitidos', 'Ativos permitidos'),
-  blockedTypes('tipos_elementos_bloqueados', 'Ativos bloqueados');
+  blockedTypes('tipos_elementos_proibidos', 'Ativos bloqueados');
 
   const CriterionCollection(this.jsonKey, this.label);
   final String jsonKey;
@@ -13,11 +13,12 @@ class InstallCriterion {
     required this.userId,
     required this.name,
     this.requiresPower,
-    this.maintenanceAccess,
-    this.minDistanceMeters,
     this.maxDistanceMeters,
-    this.minHeight,
     this.gatewayLimit,
+    this.relief,
+    this.vegetation,
+    this.buildings,
+    this.antennas,
     this.createdAt,
     this.updatedAt,
     Map<CriterionCollection, Object?> collections = const {},
@@ -27,11 +28,12 @@ class InstallCriterion {
   final int userId;
   final String name;
   final bool? requiresPower;
-  final bool? maintenanceAccess;
-  final double? minDistanceMeters;
   final double? maxDistanceMeters;
-  final double? minHeight;
   final int? gatewayLimit;
+  final Object? relief;
+  final Object? vegetation;
+  final Object? buildings;
+  final Object? antennas;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   // JSONB has no prescribed structure in the approved DER.
@@ -48,11 +50,12 @@ class InstallCriterion {
       userId: _integer(json['id_usuario'], required: true)!,
       name: name,
       requiresPower: power as bool?,
-      maintenanceAccess: json['acesso_manutencao'] as bool?,
-      minDistanceMeters: _number(json['distancia_minima_ativos_m']),
       maxDistanceMeters: _number(json['distancia_maxima_ativos_m']),
-      minHeight: _number(json['altura_minima_local_m']),
       gatewayLimit: _integer(json['limite_gateways']),
+      relief: json['relevo'],
+      vegetation: json['vegetacoes'],
+      buildings: json['edificacoes'],
+      antennas: json['antenas'],
       createdAt: _date(json['criado_em']),
       updatedAt: _date(json['atualizado_em']),
       collections: {
@@ -75,14 +78,6 @@ class InstallCriterion {
 
   String? get distanceMetersLabel {
     final value = maxDistanceMeters;
-    if (value == null) return null;
-    return value == value.roundToDouble()
-        ? value.toStringAsFixed(0)
-        : value.toString().replaceAll('.', ',');
-  }
-
-  String? get minDistanceMetersLabel {
-    final value = minDistanceMeters;
     if (value == null) return null;
     return value == value.roundToDouble()
         ? value.toStringAsFixed(0)

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/pages/map_page.dart';
-import 'package:frontend_tecsys/pages/criteria_library_page.dart';
+import 'package:frontend_tecsys/pages/library_page.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 

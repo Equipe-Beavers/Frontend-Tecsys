@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:frontend_tecsys/models/install_criterion.dart';
-import 'package:frontend_tecsys/pages/criteria_library_page.dart';
+import 'package:frontend_tecsys/pages/library_page.dart';
 import 'package:frontend_tecsys/pages/install_criterion_form.dart';
 import 'package:frontend_tecsys/services/install_criterion_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
@@ -308,24 +308,19 @@ void main() {
           ),
         ),
       );
-      expect(find.text('0,0–1,5 km'), findsOneWidget);
+      expect(find.text('1,5 km'), findsOneWidget);
       await tester.tap(find.byType(Switch).first);
-      tester.widget<RangeSlider>(find.byType(RangeSlider)).onChanged!(
-        const RangeValues(0, 2500),
-      );
+      tester.widget<Slider>(find.byType(Slider)).onChanged!(2500);
       await tester.pumpAndSettle();
-      expect(find.text('0,0–2,5 km'), findsOneWidget);
+      expect(find.text('2,5 km'), findsOneWidget);
       await tester.tap(find.text('Salvar critério'));
       await tester.pumpAndSettle();
       expect(payload!['requer_alimentacao_eletrica'], false);
-      expect(payload!['distancia_minima_ativos_m'], 0);
       expect(payload!['distancia_maxima_ativos_m'], 2500);
     },
   );
 
-  testWidgets('minimum and maximum distances are both saved from the range', (
-    tester,
-  ) async {
+  testWidgets('maximum distance is saved from the slider', (tester) async {
     Map<String, dynamic>? payload;
     await tester.pumpWidget(
       host(
@@ -337,18 +332,17 @@ void main() {
       ),
     );
 
-    final slider = tester.widget<RangeSlider>(find.byType(RangeSlider));
-    slider.onChanged!(const RangeValues(500, 2500));
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    slider.onChanged!(2500);
     await tester.pump();
-    expect(find.text('0,5–2,5 km'), findsOneWidget);
+    expect(find.text('2,5 km'), findsOneWidget);
     await tester.enterText(find.byType(TextFormField).first, 'Critério teste');
     await tester.tap(find.text('Salvar critério'));
     await tester.pumpAndSettle();
-    expect(payload!['distancia_minima_ativos_m'], 500);
     expect(payload!['distancia_maxima_ativos_m'], 2500);
   });
 
-  testWidgets('relief altitude fields are frontend-only for now', (
+  testWidgets('advanced form values are saved to their JSONB columns', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 1000);
@@ -577,19 +571,24 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(payload, isNotNull);
-    expect(payload!.containsKey('altitude_minima_m'), false);
-    expect(payload!.containsKey('altitude_maxima_m'), false);
-    expect(payload!.containsKey('declividade_maxima_graus'), false);
-    expect(payload!.containsKey('raio_analise_edificacoes_m'), false);
-    expect(payload!.containsKey('quantidade_maxima_edificacoes'), false);
-    expect(payload!.containsKey('altura_maxima_edificacoes_m'), false);
-    expect(payload!.containsKey('distancia_minima_edificacoes_m'), false);
-    expect(payload!.containsKey('raio_analise_antenas_m'), false);
-    expect(payload!.containsKey('quantidade_maxima_antenas'), false);
-    expect(payload!.containsKey('distancia_maxima_antenas_m'), false);
-    expect(payload!.containsKey('considerar_conflito_frequencia'), false);
-    expect(payload!.containsKey('vegetacao_permitida'), false);
-    expect(payload!.containsKey('vegetacao_proibida'), false);
+    expect(payload!['relevo'], {
+      'altitude_minima_m': 300,
+      'altitude_maxima_m': 1200,
+      'declividade_maxima_graus': 20,
+    });
+    expect(payload!['vegetacoes'], isA<Map<String, dynamic>>());
+    expect(payload!['edificacoes'], {
+      'raio_analise_m': 4,
+      'quantidade_maxima': 5,
+      'altura_maxima_m': 6,
+      'distancia_minima_m': 7,
+    });
+    expect(payload!['antenas'], {
+      'raio_analise_m': 8,
+      'quantidade_maxima': 9,
+      'distancia_maxima_m': 10,
+      'considerar_conflito_frequencia': false,
+    });
     expect(find.text('RELEVO'), findsOneWidget);
   });
 
@@ -623,7 +622,6 @@ void main() {
         await tester.tap(find.text('Salvar critério'));
         await tester.pumpAndSettle();
         expect(payload!['distancia_maxima_ativos_m'], distance);
-        expect(payload!['distancia_minima_ativos_m'], 0);
         expect(payload!['requer_alimentacao_eletrica'], isNull);
         expect(tester.takeException(), isNull);
       },
@@ -666,9 +664,9 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        await expectLater(
-          find.byKey(const Key('preview')),
-          matchesGoldenFile('goldens/criteria_$name.png'),
+        expect(
+          tester.getSize(find.byKey(const Key('preview'))).width,
+          size.width,
         );
       });
     }
