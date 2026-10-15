@@ -91,24 +91,19 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
     _considerFrequencyConflict =
         _draft.antennas['considerar_conflito_frequencia'] as bool? ?? true;
     _assetChipItems = {
-      CriterionCollection.allowedTypes: {
-        'POSTES',
-        'SUBESTACOES',
-        'TORRES',
-        'EDIFICACOES_PROPRIAS',
-        'RESERVATORIOS',
-        ..._draft.selection(CriterionCollection.allowedTypes),
-      }.toList(),
-      CriterionCollection.blockedTypes: {
-        'POSTES_TERCEIROS',
-        'ESTRUTURAS_PROVISORIAS',
-        ..._draft.selection(CriterionCollection.blockedTypes),
-      }.toList(),
+      for (final field in CriterionCollection.values)
+        field: widget.criterion == null
+            ? (field == CriterionCollection.allowedTypes
+                  ? ['POSTES', 'SUBESTACOES']
+                  : ['POSTES_TERCEIROS', 'ESTRUTURAS_PROVISORIAS'])
+            : _draft.selection(field).toList(),
     };
     _allowedVegetationItems = _draft.allowedVegetationTypes;
     _blockedVegetationItems = _draft.blockedVegetationTypes;
-    for (final entry in _assetChipItems.entries) {
-      _draft.setTypes(entry.key, entry.value);
+    if (widget.criterion == null) {
+      for (final entry in _assetChipItems.entries) {
+        _draft.setTypes(entry.key, entry.value);
+      }
     }
   }
 
@@ -198,6 +193,14 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
         'considerar_conflito_frequencia': _considerFrequencyConflict,
       },
     );
+    final validationError = _draft.validatePayload(values);
+    if (validationError != null) {
+      setState(() {
+        _saving = false;
+        _error = validationError;
+      });
+      return;
+    }
     try {
       await widget.onSave(values);
     } catch (error) {
@@ -253,6 +256,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
       existingItems: existingItems,
       itemLabels: itemLabels,
       title: title,
+      allowCustom: identical(itemLabels, criterionAssetTypes),
       existingItemLabels: {
         for (final item in permittedItems) item: 'Permitido',
         for (final item in forbiddenItems) item: 'Bloqueado',
@@ -318,6 +322,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
         child: EditableChipField(
           defaultItems: _assetChipItems[CriterionCollection.allowedTypes]!,
           availableItems: criterionAssetTypes.keys.toList(),
+          allowCustom: true,
           excludedItems: _assetChipItems[CriterionCollection.blockedTypes]!
               .toSet(),
           itemLabels: criterionAssetTypes,
@@ -341,6 +346,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
         child: EditableChipField(
           defaultItems: _assetChipItems[CriterionCollection.blockedTypes]!,
           availableItems: criterionAssetTypes.keys.toList(),
+          allowCustom: true,
           excludedItems: _assetChipItems[CriterionCollection.allowedTypes]!
               .toSet(),
           itemLabels: criterionAssetTypes,
@@ -364,9 +370,20 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
   String _formatKilometers(double meters) =>
       (meters / 1000).toStringAsFixed(1).replaceAll('.', ',');
 
-  String get _distanceLabel => _draft.maxDistanceMeters == null
-      ? 'Não definida'
-      : '${_formatKilometers(_draft.maxDistanceMeters!)} km';
+  String get _distanceLabel {
+    final minimum = _draft.minDistanceMeters;
+    final maximum = _draft.maxDistanceMeters;
+    if (minimum == null && maximum == null) return 'Não definida';
+    if (minimum == null) return 'Até ${_formatKilometers(maximum!)} km';
+    if (maximum == null) return 'A partir de ${_formatKilometers(minimum)} km';
+    return '${_formatKilometers(minimum)}–${_formatKilometers(maximum)} km';
+  }
+
+  double get _distanceScale => [
+    5000.0,
+    _draft.minDistanceMeters ?? 0,
+    _draft.maxDistanceMeters ?? 0,
+  ].reduce((a, b) => a > b ? a : b);
 
   Widget _requirements() => Column(
     children: [
@@ -386,22 +403,27 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
             ),
             const SizedBox(height: 8),
             SliderField(
-              label: 'Distância máxima aos ativos',
+              label: 'Distância aos ativos',
               valueLabel: _distanceLabel,
               minValue: 0,
-              maxValue: 5000,
+              maxValue: _distanceScale,
               values: RangeValues(
-                0,
-                (_draft.maxDistanceMeters ?? 0).clamp(0, 5000).toDouble(),
+                _draft.minDistanceMeters ?? 0,
+                _draft.maxDistanceMeters ?? _distanceScale,
               ),
               divisions: 50,
-              enableMin: false,
+              enableMin: true,
               enableMax: true,
               enabled: !_saving,
-              rangeLabel: '0–5 km',
+              rangeLabel: '0–${_formatKilometers(_distanceScale)} km',
               valueFormatter: _formatKilometers,
               onChanged: (values) => setState(() {
-                _draft.maxDistanceMeters = (values.end / 100).round() * 100.0;
+                _draft.minDistanceMeters = double.parse(
+                  values.start.toStringAsFixed(2),
+                );
+                _draft.maxDistanceMeters = double.parse(
+                  values.end.toStringAsFixed(2),
+                );
                 _dirty = true;
               }),
             ),

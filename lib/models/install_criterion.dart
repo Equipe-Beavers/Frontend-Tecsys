@@ -13,6 +13,7 @@ class InstallCriterion {
     required this.userId,
     required this.name,
     this.requiresPower,
+    this.minDistanceMeters,
     this.maxDistanceMeters,
     this.gatewayLimit,
     this.relief,
@@ -28,6 +29,7 @@ class InstallCriterion {
   final int userId;
   final String name;
   final bool? requiresPower;
+  final double? minDistanceMeters;
   final double? maxDistanceMeters;
   final int? gatewayLimit;
   final Object? relief;
@@ -50,6 +52,7 @@ class InstallCriterion {
       userId: _integer(json['id_usuario'], required: true)!,
       name: name,
       requiresPower: power as bool?,
+      minDistanceMeters: _number(json['distancia_minima_ativos_m']),
       maxDistanceMeters: _number(json['distancia_maxima_ativos_m']),
       gatewayLimit: _integer(json['limite_gateways']),
       relief: json['relevo'],
@@ -67,7 +70,13 @@ class InstallCriterion {
 
   List<String> labels(CriterionCollection field) {
     final value = collections[field];
-    return value is List ? value.whereType<String>().toList() : [];
+    return value is List
+        ? value
+              .whereType<String>()
+              .map(normalizeCriterionAssetType)
+              .toSet()
+              .toList()
+        : [];
   }
 
   bool hasStructuredSelection(CriterionCollection field) {
@@ -138,3 +147,38 @@ const criterionVegetationTypes = <String, String>{
   'AREA_ALAGADA': 'Área alagada',
   'CORPO_DAGUA': "Corpo d'água",
 };
+
+/// Canonical keys keep historical BDGD singulars and display labels equivalent.
+String normalizeCriterionAssetType(String value) {
+  var key = value.trim().toUpperCase();
+  const accents = {
+    'Á': 'A',
+    'À': 'A',
+    'Â': 'A',
+    'Ã': 'A',
+    'É': 'E',
+    'Ê': 'E',
+    'Í': 'I',
+    'Ó': 'O',
+    'Ô': 'O',
+    'Õ': 'O',
+    'Ú': 'U',
+    'Ç': 'C',
+  };
+  for (final entry in accents.entries) {
+    key = key.replaceAll(entry.key, entry.value);
+  }
+  key = key.replaceAll(RegExp(r'[\s-]+'), '_');
+  const aliases = {
+    'POSTE': 'POSTES',
+    'SUBESTACAO': 'SUBESTACOES',
+    'TORRE': 'TORRES',
+    'EDIFICACAO_PROPRIA': 'EDIFICACOES_PROPRIAS',
+    'RESERVATORIO': 'RESERVATORIOS',
+    'POSTE_DE_TERCEIRO': 'POSTES_TERCEIROS',
+    'POSTE_DE_TERCEIROS': 'POSTES_TERCEIROS',
+    'POSTES_DE_TERCEIROS': 'POSTES_TERCEIROS',
+    'ESTRUTURA_PROVISORIA': 'ESTRUTURAS_PROVISORIAS',
+  };
+  return aliases[key] ?? key;
+}

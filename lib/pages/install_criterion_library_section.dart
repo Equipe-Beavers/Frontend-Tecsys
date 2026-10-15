@@ -115,7 +115,13 @@ class _InstallCriterionLibrarySectionState
       const LibraryRecordParameter('Requer alimentação'),
     if (criterion.requiresPower == false)
       const LibraryRecordParameter('Alimentação não obrigatória'),
-    if (criterion.maxDistanceMeters != null)
+    if (criterion.minDistanceMeters != null)
+      LibraryRecordParameter(
+        criterion.maxDistanceMeters == null
+            ? 'Dist. mín. ${criterion.minDistanceMeters} m'
+            : 'Dist. ${criterion.minDistanceMeters}–${criterion.distanceMetersLabel} m',
+      )
+    else if (criterion.maxDistanceMeters != null)
       LibraryRecordParameter('Dist. máx. ${criterion.distanceMetersLabel} m'),
     if (criterion.gatewayLimit != null)
       LibraryRecordParameter(

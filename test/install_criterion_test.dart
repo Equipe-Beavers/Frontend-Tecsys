@@ -117,12 +117,7 @@ void main() {
     await tester.tap(find.text('Salvar critério'));
     await tester.pumpAndSettle();
     expect(payload!['id_usuario'], 9);
-    expect(payload!['tipos_elementos_permitidos'], const [
-      'SUBESTACOES',
-      'TORRES',
-      'EDIFICACOES_PROPRIAS',
-      'RESERVATORIOS',
-    ]);
+    expect(payload!['tipos_elementos_permitidos'], const ['SUBESTACOES']);
     expect(payload!.containsKey('altura_minima_m'), false);
     expect(find.text(fixture['nome'] as String), findsOneWidget);
     await tester.tap(find.text(fixture['nome'] as String));
@@ -308,19 +303,24 @@ void main() {
           ),
         ),
       );
-      expect(find.text('1,5 km'), findsOneWidget);
+      expect(find.text('Até 1,5 km'), findsOneWidget);
       await tester.tap(find.byType(Switch).first);
-      tester.widget<Slider>(find.byType(Slider)).onChanged!(2500);
+      tester.widget<RangeSlider>(find.byType(RangeSlider)).onChanged!(
+        const RangeValues(500, 2500),
+      );
       await tester.pumpAndSettle();
-      expect(find.text('2,5 km'), findsOneWidget);
+      expect(find.text('0,5–2,5 km'), findsOneWidget);
       await tester.tap(find.text('Salvar critério'));
       await tester.pumpAndSettle();
       expect(payload!['requer_alimentacao_eletrica'], false);
+      expect(payload!['distancia_minima_ativos_m'], 500);
       expect(payload!['distancia_maxima_ativos_m'], 2500);
     },
   );
 
-  testWidgets('maximum distance is saved from the slider', (tester) async {
+  testWidgets('both distance limits are saved from the range slider', (
+    tester,
+  ) async {
     Map<String, dynamic>? payload;
     await tester.pumpWidget(
       host(
@@ -332,13 +332,14 @@ void main() {
       ),
     );
 
-    final slider = tester.widget<Slider>(find.byType(Slider));
-    slider.onChanged!(2500);
+    final slider = tester.widget<RangeSlider>(find.byType(RangeSlider));
+    slider.onChanged!(const RangeValues(500, 2500));
     await tester.pump();
-    expect(find.text('2,5 km'), findsOneWidget);
+    expect(find.text('0,5–2,5 km'), findsOneWidget);
     await tester.enterText(find.byType(TextFormField).first, 'Critério teste');
     await tester.tap(find.text('Salvar critério'));
     await tester.pumpAndSettle();
+    expect(payload!['distancia_minima_ativos_m'], 500);
     expect(payload!['distancia_maxima_ativos_m'], 2500);
   });
 
@@ -387,7 +388,7 @@ void main() {
     var assetDialog = find.byType(AlertDialog);
     expect(
       find.descendant(of: assetDialog, matching: find.text('Permitido')),
-      findsNWidgets(5),
+      findsNWidgets(2),
     );
     expect(
       find.descendant(of: assetDialog, matching: find.text('Bloqueado')),
@@ -432,7 +433,7 @@ void main() {
     assetDialog = find.byType(AlertDialog);
     expect(
       find.descendant(of: assetDialog, matching: find.text('Permitido')),
-      findsNWidgets(5),
+      findsNWidgets(2),
     );
     expect(
       find.descendant(of: assetDialog, matching: find.text('Bloqueado')),

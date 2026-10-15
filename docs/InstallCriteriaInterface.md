@@ -20,7 +20,7 @@ Acesse **Biblioteca → Critérios** pela navegação lateral no desktop ou pela
 | Ativos permitidos | `tipos_elementos_permitidos` | Lista de códigos; seleção por chips e inclusão de tipos personalizados |
 | Ativos bloqueados | `tipos_elementos_proibidos` | Lista de códigos; selecionar um tipo remove sua seleção na lista oposta |
 | Necessita alimentação elétrica | `requer_alimentacao_eletrica` | Interruptor: ligado (`true`) ou desligado (`false`) |
-| Distância máxima aos ativos | `distancia_maxima_ativos_m` | Controle de 0 a 5 km, em passos de 0,1 km; salva o valor em metros |
+| Distância aos ativos | `distancia_minima_ativos_m` e `distancia_maxima_ativos_m` | RangeSlider com dois seletores; escala padrão 0–5 km, em passos de 0,1 km; persistência em metros |
 | Máximo de gateways | `limite_gateways` | Inteiro positivo; em branco envia `null` |
 | Relevo | `relevo` | JSONB com altitude mínima/máxima e declividade máxima |
 | Vegetação | `vegetacoes` | JSONB com listas de tipos permitidos e proibidos |
@@ -30,7 +30,7 @@ Os tipos predefinidos são `POSTES`, `SUBESTACOES`, `TORRES`, `EDIFICACOES_PROPR
 
 Os campos JSONB de tipos de ativos aceitam listas ou outras estruturas; as seções avançadas são enviadas como objetos com as chaves acima. Na edição, valores dessas seções são carregados nos controles e enviados novamente.
 
-Novos critérios iniciam com alimentação elétrica ligada e distância máxima de 1,5 km. Ao editar, valores nulos ou distâncias fora do intervalo do controle são preservados até a alteração do controle. Uma distância máxima nula aparece como “Não definida”; alimentação nula aparece desligada. Distâncias acima de 5 km são exibidas com o indicador limitado ao fim da escala.
+Novos critérios iniciam com alimentação ligada e intervalo de 0 a 1,5 km. Ao editar, limites nulos são preservados enquanto o controle não for alterado. O rótulo distingue “Não definida”, “Até” e “A partir de”. Se um limite salvo exceder 5 km, a escala se expande para preservá-lo visualmente; o controle mantém 50 divisões. Ao mover um seletor, os dois limites passam a ser definidos.
 
 ## API utilizada
 
