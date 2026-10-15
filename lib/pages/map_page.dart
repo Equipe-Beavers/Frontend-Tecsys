@@ -1,12 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/city_bairro_bottom_sheet.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' as latlong2;
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/models/layer_filter.dart';
 import 'package:frontend_tecsys/services/ativos_service.dart';
@@ -26,7 +27,11 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
-  final MapController _mapController = MapController();
+  MapboxMap? _mapboxMap;
+  PointAnnotationManager? _pointAnnotationManager;
+  PolygonAnnotationManager? _polygonAnnotationManager;
+  CircleAnnotationManager? _vertexAnnotationManager;
+
   final AtivosService _ativosService = AtivosService();
   final TextEditingController _buscaController = TextEditingController();
 
@@ -51,7 +56,7 @@ class _MapPageState extends State<MapPage> {
 
   static const int _limiteAtivos = 3000;
 
-  List<LatLng> polygonPoints = [];
+  List<latlong2.LatLng> polygonPoints = [];
   bool isDrawing = true;
 
   @override
@@ -64,14 +69,112 @@ class _MapPageState extends State<MapPage> {
   void dispose() {
     _debounceTimer?.cancel();
     _buscaController.dispose();
-    _mapController.dispose();
     _ativosService.dispose();
     super.dispose();
   }
 
-  void _aoMapaPronto() {
+  void _onMapCreated(MapboxMap controller) async {
+    _mapboxMap = controller;
+    controller.scaleBar.updateSettings(ScaleBarSettings(enabled: false));
+    _pointAnnotationManager = await controller.annotations
+        .createPointAnnotationManager();
+
+    if (!kIsWeb) {
+      _vertexAnnotationManager = await controller.annotations
+          .createCircleAnnotationManager();
+      _polygonAnnotationManager = await controller.annotations
+          .createPolygonAnnotationManager();
+    }
+
+    await controller.setBounds(
+      CameraBoundsOptions(minZoom: 3.0, maxZoom: 20.0),
+    );
+
+    controller.addInteraction(
+      TapInteraction.onMap((context) {
+        if (!isDrawing) return;
+        final point = context.point;
+        setState(() {
+          polygonPoints.add(
+            latlong2.LatLng(
+              point.coordinates.lat.toDouble(),
+              point.coordinates.lng.toDouble(),
+            ),
+          );
+        });
+        _atualizarPoligono();
+      }),
+    );
+
     _mapaPronto = true;
     _tentarCargaInicial();
+  }
+
+  Future<void> _atualizarAnnotations() async {
+    if (_pointAnnotationManager == null) return;
+
+    await _pointAnnotationManager!.deleteAll();
+
+    final ativosFiltrados = _ativosVisiveis.where((a) {
+      return _camadasAtivas[a.tipo] ?? false;
+    }).toList();
+
+    List<PointAnnotationOptions> optionsList = [];
+    for (var ativo in ativosFiltrados) {
+      optionsList.add(
+        PointAnnotationOptions(
+          geometry: Point(
+            coordinates: Position(ativo.longitude, ativo.latitude),
+          ),
+          iconSize: _ativoSelecionado?.id == ativo.id ? 1.5 : 1.0,
+        ),
+      );
+    }
+    await _pointAnnotationManager!.createMulti(optionsList);
+  }
+
+  Future<void> _atualizarPoligono() async {
+    if (kIsWeb) return;
+    if (_polygonAnnotationManager == null || _vertexAnnotationManager == null) {
+      return;
+    }
+    await _polygonAnnotationManager!.deleteAll();
+    await _vertexAnnotationManager!.deleteAll();
+
+    if (polygonPoints.length >= 3) {
+      final positions = polygonPoints
+          .map((p) => Position(p.longitude, p.latitude))
+          .toList();
+      if (positions.first != positions.last) {
+        positions.add(positions.first);
+      }
+
+      await _polygonAnnotationManager!.create(
+        PolygonAnnotationOptions(
+          geometry: Polygon(coordinates: [positions]),
+          fillColor: AppColors.navBarBackground.value,
+          fillOpacity: 0.4,
+        ),
+      );
+    }
+
+    if (polygonPoints.isNotEmpty) {
+      List<CircleAnnotationOptions> vertexOptions = [];
+      for (var point in polygonPoints) {
+        vertexOptions.add(
+          CircleAnnotationOptions(
+            geometry: Point(
+              coordinates: Position(point.longitude, point.latitude),
+            ),
+            circleRadius: 6.0,
+            circleColor: AppColors.navBarBackground.value,
+            circleStrokeWidth: 2.0,
+            circleStrokeColor: Colors.white.value,
+          ),
+        );
+      }
+      await _vertexAnnotationManager!.createMulti(vertexOptions);
+    }
   }
 
   void _tentarCargaInicial() {
@@ -92,7 +195,9 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _carregarDados() async {
-    if (!_mapaPronto || _distribuidoraSelecionada == null) {
+    if (!_mapaPronto ||
+        _distribuidoraSelecionada == null ||
+        _mapboxMap == null) {
       return;
     }
 
@@ -107,25 +212,35 @@ class _MapPageState extends State<MapPage> {
         _carregando = false;
         _erro = null;
       });
+      _atualizarAnnotations();
       return;
     }
 
     final sequencia = ++_sequenciaRequisicao;
-    final bounds = _mapController.camera.visibleBounds;
-
-    if (mounted) {
-      setState(() {
-        if (_todosAtivos.isEmpty) _carregando = true;
-        _erro = null;
-      });
-    }
 
     try {
+      final cameraState = await _mapboxMap!.getCameraState();
+      final bounds = await _mapboxMap!.coordinateBoundsForCamera(
+        CameraOptions(
+          center: cameraState.center,
+          zoom: cameraState.zoom,
+          bearing: cameraState.bearing,
+          pitch: cameraState.pitch,
+        ),
+      );
+
+      if (mounted) {
+        setState(() {
+          if (_todosAtivos.isEmpty) _carregando = true;
+          _erro = null;
+        });
+      }
+
       final resultado = await _ativosService.getAtivos(
-        minLatitude: bounds.south,
-        maxLatitude: bounds.north,
-        minLongitude: bounds.west,
-        maxLongitude: bounds.east,
+        minLatitude: bounds.southwest.coordinates.lat.toDouble(),
+        maxLatitude: bounds.northeast.coordinates.lat.toDouble(),
+        minLongitude: bounds.southwest.coordinates.lng.toDouble(),
+        maxLongitude: bounds.northeast.coordinates.lng.toDouble(),
         distribuidora: _distribuidoraSelecionada,
         tipos: camadasApi,
         limit: _limiteAtivos,
@@ -139,6 +254,8 @@ class _MapPageState extends State<MapPage> {
         _todosAtivos = resultado.ativos;
         _carregando = false;
       });
+
+      _atualizarAnnotations();
     } catch (error) {
       if (!mounted || sequencia != _sequenciaRequisicao) {
         return;
@@ -194,6 +311,7 @@ class _MapPageState extends State<MapPage> {
       _carregando = true;
     });
 
+    await _atualizarAnnotations();
     _agendarCarregamento();
   }
 
@@ -213,8 +331,6 @@ class _MapPageState extends State<MapPage> {
       selectedValue: _distribuidoraSelecionada,
       onSelected: (distribuidoraNome) async {
         if (distribuidoraNome == null) {
-          // Nenhuma distribuidora disponível (lista vazia);
-          // o usuário optou por prosseguir mesmo assim.
           await _abrirCidadeBairroDoEstudo();
           return;
         }
@@ -241,9 +357,7 @@ class _MapPageState extends State<MapPage> {
 
     try {
       await _carregarDados();
-
       if (!mounted) return;
-
       await _abrirCidadeBairroDoEstudo();
     } finally {
       if (mounted) {
@@ -256,7 +370,6 @@ class _MapPageState extends State<MapPage> {
 
   Future<void> _abrirCidadeBairroDoEstudo() async {
     final cidades = _municipiosDisponiveis;
-
     final bairrosPorCidade = <String, List<String>>{};
 
     for (final cidade in cidades) {
@@ -272,8 +385,6 @@ class _MapPageState extends State<MapPage> {
       bairrosPorCidade[cidade] = bairros;
     }
 
-    // Mesma regra: o sheet abre mesmo com "cidades" vazia,
-    // mostrando a mensagem de "não encontrada" no lugar da lista.
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -291,9 +402,6 @@ class _MapPageState extends State<MapPage> {
               ? 'Nenhuma cidade encontrada para a distribuidora selecionada.'
               : 'Não encontrada',
           onProsseguir: (cidade, bairro) {
-            // Reaproveita o mesmo filtro local que o chip
-            // "Cidade / bairro" já usa (_ativosVisiveis),
-            // então isso já atualiza o mapa automaticamente.
             setState(() {
               _municipioSelecionado = cidade;
             });
@@ -303,18 +411,24 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  void _zoomIn() {
-    setState(() {
-      _currentZoom = (_mapController.camera.zoom + 1).clamp(3.8, 18.0);
-      _mapController.move(_mapController.camera.center, _currentZoom);
-    });
+  Future<void> _zoomIn() async {
+    if (_mapboxMap == null) return;
+    final cameraState = await _mapboxMap!.getCameraState();
+    _currentZoom = (cameraState.zoom + 1).clamp(3.8, 18.0);
+    _mapboxMap!.flyTo(
+      CameraOptions(zoom: _currentZoom),
+      MapAnimationOptions(duration: 300),
+    );
   }
 
-  void _zoomOut() {
-    setState(() {
-      _currentZoom = (_mapController.camera.zoom - 1).clamp(3.8, 18.0);
-      _mapController.move(_mapController.camera.center, _currentZoom);
-    });
+  Future<void> _zoomOut() async {
+    if (_mapboxMap == null) return;
+    final cameraState = await _mapboxMap!.getCameraState();
+    _currentZoom = (cameraState.zoom - 1).clamp(3.8, 18.0);
+    _mapboxMap!.flyTo(
+      CameraOptions(zoom: _currentZoom),
+      MapAnimationOptions(duration: 300),
+    );
   }
 
   void _onLocationPressed() {}
@@ -327,7 +441,7 @@ class _MapPageState extends State<MapPage> {
             .toSet()
             .toList()
           ..sort();
-    return municipios.toList();
+    return municipios;
   }
 
   List<AtivoBdgd> get _ativosVisiveis {
@@ -349,6 +463,7 @@ class _MapPageState extends State<MapPage> {
     setState(() {
       _textoBusca = valor;
     });
+    _atualizarAnnotations();
   }
 
   void _abrirFiltroMunicipio() {
@@ -425,6 +540,7 @@ class _MapPageState extends State<MapPage> {
         });
 
         _agendarCarregamento();
+        _atualizarAnnotations();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -449,10 +565,15 @@ class _MapPageState extends State<MapPage> {
       _ativoSelecionado = ativo;
     });
 
-    _mapController.move(
-      LatLng(ativo.latitude, ativo.longitude),
-      _mapController.camera.zoom.clamp(15.0, 18.0),
+    _mapboxMap?.flyTo(
+      CameraOptions(
+        center: Point(coordinates: Position(ativo.longitude, ativo.latitude)),
+        zoom: 16.0,
+      ),
+      MapAnimationOptions(duration: 400),
     );
+
+    _atualizarAnnotations();
 
     AssetDetailSheet.exibir(
       context,
@@ -462,6 +583,7 @@ class _MapPageState extends State<MapPage> {
           setState(() {
             _ativoSelecionado = null;
           });
+          _atualizarAnnotations();
         }
       },
     );
@@ -471,6 +593,7 @@ class _MapPageState extends State<MapPage> {
 
   void _cancelarArea() {
     setState(() => polygonPoints = []);
+    _atualizarPoligono();
   }
 
   Future<void> _prosseguirArea() async {
@@ -488,6 +611,7 @@ class _MapPageState extends State<MapPage> {
 
     if (estudoCriado == true && mounted) {
       setState(() => polygonPoints = []);
+      _atualizarPoligono();
     }
   }
 
@@ -537,142 +661,20 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  List<Marker> _gerarMarcadores() {
-    final ativosFiltrados = _ativosVisiveis.where((a) {
-      return _camadasAtivas[a.tipo] ?? false;
-    }).toList();
-
-    return ativosFiltrados.map((ativo) {
-      final isSelected = _ativoSelecionado?.id == ativo.id;
-      final cor = ativo.tipo.cor;
-
-      final marker = Marker(
-        point: LatLng(ativo.latitude, ativo.longitude),
-        width: isSelected ? 42 : 32,
-        height: isSelected ? 42 : 32,
-        child: GestureDetector(
-          onTap: () => _selecionarAtivo(ativo),
-          child: _buildIconeMarcador(ativo, isSelected, cor),
-        ),
-      );
-
-      return marker;
-    }).toList();
-  }
-
-  Widget _buildIconeMarcador(AtivoBdgd ativo, bool isSelected, Color cor) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      decoration: BoxDecoration(
-        color: isSelected ? AppColors.surfaceCardLight : AppColors.surfaceCard,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: isSelected ? AppColors.primaryLime : cor,
-          width: isSelected ? 2.5 : 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (isSelected ? AppColors.primaryLime : cor).withValues(
-              alpha: isSelected ? 0.6 : 0.3,
-            ),
-            blurRadius: isSelected ? 10 : 5,
-            spreadRadius: isSelected ? 2 : 0,
-          ),
-        ],
-      ),
-      child: Center(
-        child: Icon(
-          ativo.tipo.icone,
-          color: isSelected ? AppColors.primaryLime : cor,
-          size: isSelected ? 22 : 16,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final marcadores = _gerarMarcadores();
-
     return Scaffold(
       backgroundColor: AppColors.surfaceBackground,
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: LatLng(-14.2350, -51.9253),
-              initialZoom: _currentZoom,
-              minZoom: 2.0,
-              maxZoom: 18.0,
-              onMapReady: _aoMapaPronto,
-              onPositionChanged: (camera, hasGesture) {
-                _currentZoom = camera.zoom;
-                _agendarCarregamento();
-              },
-              cameraConstraint: CameraConstraint.contain(
-                bounds: LatLngBounds(
-                  LatLng(-89.9, -180.0),
-                  LatLng(89.9, 180.0),
-                ),
-              ),
-              onTap: (tapPosition, point) {
-                if (!isDrawing) {
-                  return;
-                }
-
-                setState(() {
-                  polygonPoints.add(point);
-                });
-              },
+          MapWidget(
+            key: const ValueKey('mapWidget'),
+            styleUri: MapboxStyles.STANDARD,
+            viewport: CameraViewportState(
+              center: Point(coordinates: Position(-51.9253, -14.2350)),
+              zoom: _currentZoom,
             ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.frontend_tecsys',
-              ),
-              PolygonLayer(
-                polygons: polygonPoints.length >= 3
-                    ? <Polygon<Object>>[
-                        Polygon<Object>(
-                          points: polygonPoints,
-                          color: AppColors.navBarBackground.withAlpha(100),
-                          borderColor: AppColors.navBarBackground,
-                          borderStrokeWidth: 2.5,
-                          pattern: StrokePattern.dashed(segments: [10, 5]),
-                        ),
-                      ]
-                    : <Polygon<Object>>[],
-              ),
-              MarkerLayer(markers: marcadores),
-              MarkerLayer(
-                markers: polygonPoints.map((point) {
-                  return Marker(
-                    point: point,
-                    width: 14.0,
-                    height: 14.0,
-                    alignment: Alignment.center,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.navBarBackground,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.navBarBackground,
-                          width: 2.0,
-                        ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black26,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
+            onMapCreated: _onMapCreated,
           ),
           Positioned(
             top: 10,
@@ -787,7 +789,7 @@ class _MapPageState extends State<MapPage> {
               color: Colors.black45,
               child: const Center(
                 child: CircularProgressIndicator(
-                  color: AppColors.primaryLime,
+                    color: AppColors.primaryLime,
                 ),
               ),
             ),
