@@ -29,6 +29,8 @@ class TipoAtivoSelecionado {
 
 class NovoEstudo {
   final int idUsuario;
+  final int idRfProfile;
+  final int idCriterioInstalacao;
   final String tipoDelimitacao;
   final String? uf;
   final String? municipio;
@@ -44,6 +46,8 @@ class NovoEstudo {
 
   const NovoEstudo({
     this.idUsuario = 1,
+    required this.idRfProfile,
+    required this.idCriterioInstalacao,
     this.tipoDelimitacao = 'desenho',
     this.uf,
     this.municipio,
@@ -73,11 +77,13 @@ class NovoEstudo {
 
   Map<String, dynamic> toJson() => {
     'id_usuario': idUsuario,
+    'id_perfil_rf': idRfProfile,
+    'id_criterio_instalacao': idCriterioInstalacao,
     'tipo_delimitacao': tipoDelimitacao,
     'uf': uf,
     'municipio': municipio,
     'bairro': bairro,
-    'geom': _geometria,
+    'geom': pontosArea.isEmpty ? null : _geometria,
     'nome': nome,
     'descricao': descricao,
     'distribuidora': distribuidora,

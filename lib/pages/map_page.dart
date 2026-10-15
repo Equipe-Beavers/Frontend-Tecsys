@@ -15,7 +15,7 @@ import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
 import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/filter_chip.dart';
-import 'package:frontend_tecsys/pages/novo_estudo_page.dart';
+import 'package:frontend_tecsys/pages/study_form.dart';
 import 'package:frontend_tecsys/utils/map_utils.dart';
 
 class MapPage extends StatefulWidget {
@@ -26,8 +26,6 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
-  static const _fallbackCenter = LatLng(-23.4532, -46.4438);
-
   final MapController _mapController = MapController();
   final AtivosService _ativosService = AtivosService();
   final TextEditingController _buscaController = TextEditingController();
@@ -52,8 +50,6 @@ class _MapPageState extends State<MapPage> {
   bool _cargaInicialFeita = false;
 
   static const int _limiteAtivos = 3000;
-
-  final Map<Marker, AtivoBdgd> _markerAtivoMap = {};
 
   List<LatLng> polygonPoints = [];
   bool isDrawing = true;
@@ -542,8 +538,6 @@ class _MapPageState extends State<MapPage> {
   }
 
   List<Marker> _gerarMarcadores() {
-    _markerAtivoMap.clear();
-
     final ativosFiltrados = _ativosVisiveis.where((a) {
       return _camadasAtivas[a.tipo] ?? false;
     }).toList();
@@ -556,10 +550,12 @@ class _MapPageState extends State<MapPage> {
         point: LatLng(ativo.latitude, ativo.longitude),
         width: isSelected ? 42 : 32,
         height: isSelected ? 42 : 32,
-        child: _buildIconeMarcador(ativo, isSelected, cor),
+        child: GestureDetector(
+          onTap: () => _selecionarAtivo(ativo),
+          child: _buildIconeMarcador(ativo, isSelected, cor),
+        ),
       );
 
-      _markerAtivoMap[marker] = ativo;
       return marker;
     }).toList();
   }
@@ -609,6 +605,11 @@ class _MapPageState extends State<MapPage> {
               initialZoom: _currentZoom,
               minZoom: 2.0,
               maxZoom: 18.0,
+              onMapReady: _aoMapaPronto,
+              onPositionChanged: (camera, hasGesture) {
+                _currentZoom = camera.zoom;
+                _agendarCarregamento();
+              },
               cameraConstraint: CameraConstraint.contain(
                 bounds: LatLngBounds(
                   LatLng(-89.9, -180.0),
@@ -643,6 +644,7 @@ class _MapPageState extends State<MapPage> {
                       ]
                     : <Polygon<Object>>[],
               ),
+              MarkerLayer(markers: marcadores),
               MarkerLayer(
                 markers: polygonPoints.map((point) {
                   return Marker(
@@ -705,8 +707,7 @@ class _MapPageState extends State<MapPage> {
                         SelectionBottomSheet.show<String>(
                           context: context,
                           title: 'Selecionar distribuidora',
-                          subtitle:
-                              'Os ativos serão recarregados para a região escolhida.',
+                          subtitle: 'Os ativos serão recarregados para a região escolhida.',
                           items: _distribuidoras
                               .map(
                                 (dist) => SelectionItem(
@@ -755,8 +756,7 @@ class _MapPageState extends State<MapPage> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      shadowColor:
-                          AppColors.primaryLime.withValues(alpha: 0.4),
+                      shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -784,9 +784,7 @@ class _MapPageState extends State<MapPage> {
             Container(
               color: Colors.black45,
               child: const Center(
-                child: CircularProgressIndicator(
-                  color: AppColors.primaryLime,
-                ),
+                child: CircularProgressIndicator(color: AppColors.primaryLime),
               ),
             ),
           if (_erro != null)
