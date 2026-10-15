@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/models/install_criterion.dart';
 import 'package:frontend_tecsys/services/install_criterion_service.dart';
-import 'package:frontend_tecsys/widgets/install_criterion_picker.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
-import 'package:frontend_tecsys/models/perfil_rf.dart';
+import 'package:frontend_tecsys/models/rf_profile.dart';
+import 'package:frontend_tecsys/services/rf_profile_service.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
@@ -16,7 +16,10 @@ class NovoEstudoPage extends StatefulWidget {
   final double areaKm2;
   final List<LatLng> pontosArea;
   final InstallCriterionService? criterionService;
+  final RFProfileService? rfProfileService;
+  final EstudosService? studyService;
   final int userId;
+  final Map<String, dynamic>? study;
 
   const NovoEstudoPage({
     super.key,
@@ -25,6 +28,9 @@ class NovoEstudoPage extends StatefulWidget {
     required this.areaKm2,
     required this.pontosArea,
     this.criterionService,
+    this.rfProfileService,
+    this.studyService,
+    this.study,
     this.userId = const int.fromEnvironment('APP_USER_ID', defaultValue: 1),
   });
 
@@ -33,19 +39,72 @@ class NovoEstudoPage extends StatefulWidget {
 }
 
 class _NovoEstudoPageState extends State<NovoEstudoPage> {
-  final EstudosService _estudosService = EstudosService();
+  late final EstudosService _estudosService =
+      widget.studyService ?? EstudosService();
+  late final RFProfileService _rfProfileService =
+      widget.rfProfileService ?? RFProfileService();
   final _formKey = GlobalKey<FormState>();
-  final _nomeController = TextEditingController();
-  final _descricaoController = TextEditingController();
-  late final _cidadeController = TextEditingController(text: widget.municipio);
-  final _estadoController = TextEditingController();
-  final _bairroController = TextEditingController();
+  late final _nomeController = TextEditingController(
+    text: widget.study?['nome']?.toString(),
+  );
+  late final _descricaoController = TextEditingController(
+    text: widget.study?['descricao']?.toString(),
+  );
+  late final _cidadeController = TextEditingController(
+    text: widget.study?['municipio']?.toString() ?? widget.municipio,
+  );
+  late final _estadoController = TextEditingController(
+    text: widget.study?['uf']?.toString(),
+  );
+  late final _bairroController = TextEditingController(
+    text: widget.study?['bairro']?.toString(),
+  );
 
-  PerfilRf _perfilSelecionado = PerfilRf.padrao;
+  RFProfile? _selectedRfProfile;
+  bool _loadingRfProfiles = false;
+  bool _loadingCriteria = false;
   InstallCriterion? _criterioSelecionado;
   late final InstallCriterionService _criterionService =
       widget.criterionService ?? InstallCriterionService();
   bool _salvando = false;
+  bool _loadingSelections = false;
+
+  bool get _isEditing => widget.study != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isEditing) _loadSelections();
+  }
+
+  Future<void> _loadSelections() async {
+    setState(() => _loadingSelections = true);
+    try {
+      final profile = await _rfProfileService.get(
+        widget.study!['id_perfil_rf'] as int,
+      );
+      final criterion = await _criterionService.get(
+        widget.study!['id_criterio_instalacao'] as int,
+      );
+      if (!mounted) return;
+      setState(() {
+        _selectedRfProfile = profile;
+        _criterioSelecionado = criterion;
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não foi possível carregar as seleções do estudo. Selecione o perfil RF e o critério novamente.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingSelections = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -55,6 +114,8 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     _estadoController.dispose();
     _bairroController.dispose();
     if (widget.criterionService == null) _criterionService.dispose();
+    if (widget.rfProfileService == null) _rfProfileService.dispose();
+    if (widget.studyService == null) _estudosService.dispose();
     super.dispose();
   }
 
@@ -66,41 +127,151 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   }
 
   String get _descricaoArea {
+    if (_isEditing && widget.study!['geom'] != null) {
+      return 'Área do estudo preservada';
+    }
+    if (widget.pontosArea.isEmpty) return 'Área não definida';
     final local = widget.municipio ?? widget.distribuidora;
     return '$local · ${_formatarNumero(widget.areaKm2)} km²';
   }
 
-  void _selecionarPerfil() {
-    SelectionBottomSheet.show<PerfilRf>(
-      context: context,
-      title: 'Selecionar perfil RF e gateway',
-      items: PerfilRf.disponiveis
-          .map(
-            (perfil) => SelectionItem(
-              title: '${perfil.nome} · ${perfil.modeloGateway}',
-              value: perfil,
+  Future<void> _selectRfProfile() async {
+    if (_salvando ||
+        _loadingRfProfiles ||
+        _loadingCriteria ||
+        _loadingSelections) {
+      return;
+    }
+    setState(() => _loadingRfProfiles = true);
+    try {
+      final profiles = <RFProfile>[];
+      int page = 1;
+      while (mounted) {
+        final result = await _rfProfileService.list(
+          userId: widget.userId,
+          page: page,
+          limit: 100,
+        );
+        profiles.addAll(result.items);
+        if (!result.hasNext) break;
+        page++;
+      }
+      if (!mounted) return;
+      setState(() => _loadingRfProfiles = false);
+      if (profiles.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Nenhum perfil RF cadastrado. Crie um na Biblioteca.',
             ),
-          )
-          .toList(),
-      selectedValue: _perfilSelecionado,
-      onSelected: (perfil) =>
-          setState(() => _perfilSelecionado = perfil ?? _perfilSelecionado),
-    );
+          ),
+        );
+        return;
+      }
+      await SelectionBottomSheet.show<int>(
+        context: context,
+        title: 'Selecionar perfil RF e gateway',
+        searchHint: 'Buscar perfil RF pelo nome',
+        notFoundMessage: 'Nenhum perfil RF encontrado',
+        items: profiles
+            .map(
+              (profile) => SelectionItem(
+                title: profile.name,
+                subtitle: '${_formatarNumero(profile.frequencyMhz)} MHz',
+                value: profile.id,
+              ),
+            )
+            .toList(),
+        selectedValue: _selectedRfProfile?.id,
+        onSelected: (id) {
+          if (id != null && mounted) {
+            setState(
+              () => _selectedRfProfile = profiles.firstWhere(
+                (profile) => profile.id == id,
+              ),
+            );
+          }
+        },
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não foi possível carregar os perfis RF. Tente novamente.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingRfProfiles = false);
+    }
   }
 
-  Future<void> _selecionarCriterio() async {
-    if (_salvando) return;
-    final selected = await showModalBottomSheet<InstallCriterion>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => InstallCriterionPicker(
-        service: _criterionService,
-        userId: widget.userId,
-        selectedId: _criterioSelecionado?.id,
-      ),
-    );
-    if (selected != null && mounted) {
-      setState(() => _criterioSelecionado = selected);
+  Future<void> _selectCriterion() async {
+    if (_salvando ||
+        _loadingRfProfiles ||
+        _loadingCriteria ||
+        _loadingSelections) {
+      return;
+    }
+    setState(() => _loadingCriteria = true);
+    try {
+      final criteria = <InstallCriterion>[];
+      int page = 1;
+      while (mounted) {
+        final result = await _criterionService.list(
+          userId: widget.userId,
+          page: page,
+        );
+        criteria.addAll(result.items);
+        if (!result.hasNext) break;
+        page++;
+      }
+      if (!mounted) return;
+      setState(() => _loadingCriteria = false);
+      if (criteria.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Nenhum critério cadastrado. Crie um na Biblioteca.'),
+          ),
+        );
+        return;
+      }
+      await SelectionBottomSheet.show<int>(
+        context: context,
+        title: 'Selecionar critério de instalação',
+        searchHint: 'Buscar critério pelo nome',
+        notFoundMessage: 'Nenhum critério encontrado',
+        items: criteria
+            .map(
+              (criterion) =>
+                  SelectionItem(title: criterion.name, value: criterion.id),
+            )
+            .toList(),
+        selectedValue: _criterioSelecionado?.id,
+        onSelected: (id) {
+          if (id != null && mounted) {
+            setState(
+              () => _criterioSelecionado = criteria.firstWhere(
+                (criterion) => criterion.id == id,
+              ),
+            );
+          }
+        },
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não foi possível carregar os critérios. Tente novamente.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingCriteria = false);
     }
   }
 
@@ -110,7 +281,20 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   }
 
   Future<void> _criarEstudo() async {
-    if (_salvando || !_formKey.currentState!.validate()) return;
+    if (_salvando ||
+        _loadingRfProfiles ||
+        _loadingCriteria ||
+        _loadingSelections ||
+        !_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_selectedRfProfile == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Selecione um perfil RF.')));
+      return;
+    }
 
     if (_criterioSelecionado == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -120,21 +304,34 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     }
     setState(() => _salvando = true);
     try {
-      await _estudosService.criarEstudo(
-        NovoEstudo(
-          idUsuario: widget.userId,
-          idCriterioInstalacao: _criterioSelecionado!.id,
-          nome: _nomeController.text.trim(),
-          descricao: _textoOuNulo(_descricaoController),
-          uf: _textoOuNulo(_estadoController)?.toUpperCase(),
-          municipio: _textoOuNulo(_cidadeController),
-          bairro: _textoOuNulo(_bairroController),
-          distribuidora: widget.distribuidora.isEmpty
-              ? null
-              : widget.distribuidora,
-          pontosArea: widget.pontosArea,
-        ),
-      );
+      if (_isEditing) {
+        await _estudosService.update(widget.study!['id_estudo'] as int, {
+          'id_perfil_rf': _selectedRfProfile!.id,
+          'id_criterio_instalacao': _criterioSelecionado!.id,
+          'nome': _nomeController.text.trim(),
+          'descricao': _textoOuNulo(_descricaoController),
+          'uf': _textoOuNulo(_estadoController)?.toUpperCase(),
+          'municipio': _textoOuNulo(_cidadeController),
+          'bairro': _textoOuNulo(_bairroController),
+        });
+      } else {
+        await _estudosService.criarEstudo(
+          NovoEstudo(
+            idUsuario: widget.userId,
+            idRfProfile: _selectedRfProfile!.id,
+            idCriterioInstalacao: _criterioSelecionado!.id,
+            nome: _nomeController.text.trim(),
+            descricao: _textoOuNulo(_descricaoController),
+            uf: _textoOuNulo(_estadoController)?.toUpperCase(),
+            municipio: _textoOuNulo(_cidadeController),
+            bairro: _textoOuNulo(_bairroController),
+            distribuidora: widget.distribuidora.isEmpty
+                ? null
+                : widget.distribuidora,
+            pontosArea: widget.pontosArea,
+          ),
+        );
+      }
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (erro) {
@@ -142,7 +339,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       setState(() => _salvando = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Não foi possível criar o estudo: $erro'),
+          content: Text(
+            'Não foi possível ${_isEditing ? 'salvar' : 'criar'} o estudo: $erro',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -159,6 +358,8 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           child: Column(
             children: [
               _buildCabecalho(),
+              if (_loadingSelections)
+                const LinearProgressIndicator(color: AppColors.primaryLime),
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -223,38 +424,48 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                     const SizedBox(height: 20),
                     _buildRotulo('PERFIL DE RF E GATEWAY'),
                     _buildCardSelecao(
-                      titulo:
-                          '${_perfilSelecionado.nome} · ${_perfilSelecionado.modeloGateway}',
-                      onTap: _selecionarPerfil,
+                      titulo: _loadingRfProfiles
+                          ? 'Carregando perfis RF...'
+                          : _selectedRfProfile?.name ?? 'Selecionar perfil RF',
+                      onTap: _selectRfProfile,
                       conteudo: Wrap(
                         spacing: 12,
                         runSpacing: 4,
                         children: [
-                          _buildDetalhe(
-                            '${_formatarNumero(_perfilSelecionado.frequenciaMhz)} MHz',
-                          ),
-                          _buildDetalhe(
-                            '${_formatarNumero(_perfilSelecionado.potenciaTransmissaoDbm)} dBm TX',
-                          ),
-                          _buildDetalhe(
-                            '${_formatarNumero(_perfilSelecionado.sensibilidadeRecepcaoDbm)} dBm RX',
-                          ),
-                          _buildDetalhe(
-                            'Gateway ${_formatarNumero(_perfilSelecionado.alturaGatewayM)} m',
-                            destaque: true,
-                          ),
-                          _buildDetalhe(
-                            'Dispositivo ${_formatarNumero(_perfilSelecionado.alturaDispositivoM)} m',
-                          ),
+                          if (_selectedRfProfile == null)
+                            _buildDetalhe(
+                              'Escolha um perfil cadastrado na Biblioteca.',
+                            ),
+                          if (_selectedRfProfile != null) ...[
+                            _buildDetalhe(
+                              '${_formatarNumero(_selectedRfProfile!.frequencyMhz)} MHz',
+                            ),
+                            _buildDetalhe(
+                              '${_formatarNumero(_selectedRfProfile!.transmitPowerDbm)} dBm TX',
+                            ),
+                            _buildDetalhe(
+                              '${_formatarNumero(_selectedRfProfile!.receiveSensitivityDbm)} dBm RX',
+                            ),
+                            if (_selectedRfProfile!.gatewayHeightM != null)
+                              _buildDetalhe(
+                                'Gateway ${_formatarNumero(_selectedRfProfile!.gatewayHeightM!)} m',
+                                destaque: true,
+                              ),
+                            if (_selectedRfProfile!.deviceHeightM != null)
+                              _buildDetalhe(
+                                'Dispositivo ${_formatarNumero(_selectedRfProfile!.deviceHeightM!)} m',
+                              ),
+                          ],
                         ],
                       ),
                     ),
                     const SizedBox(height: 20),
                     _buildRotulo('CRITÉRIOS DE INSTALAÇÃO'),
                     _buildCardSelecao(
-                      titulo:
-                          _criterioSelecionado?.name ?? 'Selecionar critério',
-                      onTap: _selecionarCriterio,
+                      titulo: _loadingCriteria
+                          ? 'Carregando critérios...'
+                          : _criterioSelecionado?.name ?? 'Selecionar critério',
+                      onTap: _selectCriterion,
                       conteudo: Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -303,32 +514,33 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
               size: 18,
             ),
           ),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Novo estudo',
-              style: TextStyle(
+              _isEditing ? 'Editar estudo' : 'Novo estudo',
+              style: const TextStyle(
                 color: AppColors.textWhite,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.secondaryTeal,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Text(
-              'PASSO 4 DE 4',
-              style: TextStyle(
-                color: AppColors.textDark,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
+          if (!_isEditing && widget.pontosArea.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.secondaryTeal,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'PASSO 4 DE 4',
+                style: TextStyle(
+                  color: AppColors.textDark,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -435,16 +647,17 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
               ],
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Editar',
-              style: TextStyle(
-                color: AppColors.secondaryTeal,
-                fontWeight: FontWeight.w600,
+          if (!_isEditing)
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Editar',
+                style: TextStyle(
+                  color: AppColors.secondaryTeal,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -539,7 +752,13 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       child: SizedBox(
         width: double.infinity,
         child: ElevatedButton(
-          onPressed: _salvando ? null : _criarEstudo,
+          onPressed:
+              _salvando ||
+                  _loadingRfProfiles ||
+                  _loadingCriteria ||
+                  _loadingSelections
+              ? null
+              : _criarEstudo,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryLime,
             foregroundColor: AppColors.textDark,
@@ -560,9 +779,12 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                     color: AppColors.textDark,
                   ),
                 )
-              : const Text(
-                  'Criar estudo e simular',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              : Text(
+                  _isEditing ? 'Salvar alterações' : 'Criar estudo e simular',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
         ),
       ),

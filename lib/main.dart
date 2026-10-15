@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/pages/map_page.dart';
 import 'package:frontend_tecsys/pages/library_page.dart';
+import 'package:frontend_tecsys/pages/studies_page.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 
@@ -22,11 +23,12 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   int _abaSelecionada = 0;
   bool _libraryOpened = false;
+  bool _studiesOpened = false;
   bool _editingCriterion = false;
 
   void _selectTab(int index, BuildContext context) {
     if (_editingCriterion) return;
-    if (index == 1 || index == 3) {
+    if (index == 3) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Esta seção ainda não está disponível.')),
       );
@@ -34,6 +36,7 @@ class _MyAppState extends State<MyApp> {
     }
     setState(() {
       _abaSelecionada = index;
+      if (index == 1) _studiesOpened = true;
       if (index == 2) _libraryOpened = true;
     });
   }
@@ -121,21 +124,24 @@ class _MyAppState extends State<MyApp> {
                                   horizontal: 12,
                                   vertical: 3,
                                 ),
-                                child: ListTile(
-                                  enabled: !_editingCriterion,
-                                  selected: _abaSelecionada == item.$1,
-                                  selectedColor: AppColors.primaryLime,
-                                  selectedTileColor: AppColors.primaryLime
-                                      .withValues(alpha: .12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(9),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: ListTile(
+                                    enabled: !_editingCriterion,
+                                    selected: _abaSelecionada == item.$1,
+                                    selectedColor: AppColors.primaryLime,
+                                    selectedTileColor: AppColors.primaryLime
+                                        .withValues(alpha: .12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(9),
+                                    ),
+                                    leading: Icon(item.$2, size: 20),
+                                    title: Text(
+                                      item.$3,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    onTap: () => _selectTab(item.$1, context),
                                   ),
-                                  leading: Icon(item.$2, size: 20),
-                                  title: Text(
-                                    item.$3,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                  onTap: () => _selectTab(item.$1, context),
                                 ),
                               ),
                           ],
@@ -143,9 +149,13 @@ class _MyAppState extends State<MyApp> {
                       ),
                     Expanded(
                       child: IndexedStack(
-                        index: _abaSelecionada == 2 ? 1 : 0,
+                        index: _abaSelecionada,
                         children: [
                           const MapPage(),
+                          if (_studiesOpened)
+                            StudiesPage(isActive: _abaSelecionada == 1)
+                          else
+                            const SizedBox.shrink(),
                           if (_libraryOpened)
                             CriteriaLibraryPage(
                               onEditingChanged: (editing) =>

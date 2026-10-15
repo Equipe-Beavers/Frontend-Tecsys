@@ -10,11 +10,12 @@ import 'package:frontend_tecsys/models/install_criterion.dart';
 import 'package:frontend_tecsys/models/install_criterion_draft.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
 import 'package:frontend_tecsys/pages/library_page.dart';
-import 'package:frontend_tecsys/pages/novo_estudo_page.dart';
+import 'package:frontend_tecsys/pages/study_form.dart';
 import 'package:frontend_tecsys/pages/rf_profile_form.dart';
 import 'package:frontend_tecsys/services/install_criterion_service.dart';
 import 'package:frontend_tecsys/services/rf_profile_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
+import 'package:frontend_tecsys/widgets/name_filter_field.dart';
 
 import 'support/criterion_test_support.dart';
 
@@ -27,6 +28,125 @@ List<Map<String, dynamic>> firstPage() =>
     List.generate(20, (index) => item(index + 1));
 
 void main() {
+  for (final rfProfiles in [false, true]) {
+    testWidgets(
+      '${rfProfiles ? 'RF' : 'criteria'} shared filter searches all pages by name and clears',
+      (tester) async {
+        final requestedPages = <int>[];
+        final criteriaService = InstallCriterionService(
+          client: MockClient((request) async {
+            final page = int.parse(request.url.queryParameters['page']!);
+            if (!rfProfiles) requestedPages.add(page);
+            return jsonResponse({
+              'data': page == 1
+                  ? firstPage()
+                  : [
+                      {...item(21), 'nome': 'Alvo remoto'},
+                    ],
+            }, 200);
+          }),
+        );
+        final rfService = RFProfileService(
+          client: MockClient((request) async {
+            final page = int.parse(request.url.queryParameters['page']!);
+            requestedPages.add(page);
+            Map<String, dynamic> profile(int id, String name) => {
+              'id_perfil_rf': id,
+              'id_usuario': 1,
+              'nome': name,
+              'frequencia_mhz': 915,
+              'potencia_transmissao_dbm': 14,
+              'sensibilidade_recepcao_dbm': -120,
+            };
+            return jsonResponse({
+              'data': page == 1
+                  ? List.generate(
+                      20,
+                      (index) => profile(index + 1, 'Perfil ${index + 1}'),
+                    )
+                  : [profile(21, 'Alvo remoto')],
+            }, 200);
+          }),
+        );
+        addTearDown(criteriaService.dispose);
+        addTearDown(rfService.dispose);
+        await tester.pumpWidget(
+          host(
+            CriteriaLibraryPage(
+              service: criteriaService,
+              rfProfileService: rfService,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        if (rfProfiles) {
+          await tester.tap(find.text('Perfis de RF'));
+          await tester.pumpAndSettle();
+        }
+        expect(requestedPages, [1]);
+        expect(find.byType(NameFilterField), findsOneWidget);
+        await tester.enterText(find.byType(TextField), '  ALVO  ');
+        await tester.pumpAndSettle();
+        expect(requestedPages, [1, 1, 2]);
+        expect(find.text('Alvo remoto'), findsOneWidget);
+        expect(find.text(rfProfiles ? 'Perfil 1' : 'Critério 1'), findsNothing);
+        expect(find.byTooltip('Próxima página'), findsNothing);
+        await tester.enterText(
+          find.byType(TextField),
+          rfProfiles ? '915' : '1500',
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Alvo remoto'), findsNothing);
+        expect(
+          find.text(
+            rfProfiles
+                ? 'Nenhum perfil RF encontrado'
+                : 'Nenhum critério encontrado',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(find.byTooltip('Limpar busca'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(rfProfiles ? 'Perfil 1' : 'Critério 1'),
+          findsOneWidget,
+        );
+        expect(find.byTooltip('Próxima página'), findsOneWidget);
+        expect(find.byTooltip('Limpar busca'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  test(
+    'newer name search supersedes a pending search and stops paging',
+    () async {
+      final pending = Completer<http.Response>();
+      var requests = 0;
+      final service = InstallCriterionService(
+        client: MockClient((_) async {
+          requests++;
+          if (requests == 1) return pending.future;
+          return jsonResponse({
+            'data': [
+              {...item(22), 'nome': 'Busca recente'},
+            ],
+          }, 200);
+        }),
+      );
+      final controller = CriteriaPageController(service: service, userId: 1);
+      addTearDown(controller.dispose);
+      addTearDown(service.dispose);
+      final oldSearch = controller.search('Critério');
+      await controller.search('recente');
+      pending.complete(jsonResponse({'data': firstPage()}, 200));
+      await oldSearch;
+      expect(controller.items.single.name, 'Busca recente');
+      expect(requests, 2);
+      expect(controller.loading, false);
+    },
+  );
+
   test('typed model parses database scalars and preserves unedited JSON', () {
     final criterion = InstallCriterion.fromJson({
       ...fixture,
@@ -238,15 +358,18 @@ void main() {
       );
       await tester.tap(find.text('Selecionar critério'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Próxima página'));
+      await tester.enterText(find.byType(TextField).last, 'Critério 21');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(ListTile, 'Critério 21'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Critério 21'));
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Prosseguir'));
       await tester.pumpAndSettle();
       expect(find.text('Critério 21'), findsOneWidget);
       expect(find.text('Dist. máx. 1500 m'), findsOneWidget);
       expect(find.textContaining('Altura mín.'), findsNothing);
       expect(
         const NovoEstudo(
+          idRfProfile: 1,
           nome: 'Teste',
           pontosArea: [],
           idCriterioInstalacao: 21,

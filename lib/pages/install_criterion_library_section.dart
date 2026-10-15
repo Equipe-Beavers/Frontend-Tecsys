@@ -6,6 +6,7 @@ import '../services/install_criterion_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/criteria_pagination.dart';
 import '../widgets/library_record_card.dart';
+import '../widgets/name_filter_field.dart';
 import '../widgets/primary_button.dart';
 
 class InstallCriterionLibrarySection extends StatefulWidget {
@@ -34,6 +35,7 @@ class InstallCriterionLibrarySection extends StatefulWidget {
 class _InstallCriterionLibrarySectionState
     extends State<InstallCriterionLibrarySection> {
   late final CriteriaPageController _pagination;
+  final _searchController = TextEditingController();
   bool _deleting = false;
 
   @override
@@ -48,6 +50,7 @@ class _InstallCriterionLibrarySectionState
 
   @override
   void dispose() {
+    _searchController.dispose();
     _pagination
       ..removeListener(_pageChanged)
       ..dispose();
@@ -184,6 +187,14 @@ class _InstallCriterionLibrarySectionState
   @override
   Widget build(BuildContext context) => Column(
     children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(22, 16, 22, 0),
+        child: NameFilterField(
+          controller: _searchController,
+          onChanged: _pagination.search,
+          hintText: 'Buscar critério pelo nome',
+        ),
+      ),
       if (widget.busy ||
           _deleting ||
           (_pagination.loading && _pagination.items.isNotEmpty))
@@ -206,11 +217,16 @@ class _InstallCriterionLibrarySectionState
           ),
         ),
       Expanded(
-        child: _pagination.loading && _pagination.items.isEmpty
+        child:
+            _pagination.loading &&
+                (_pagination.items.isEmpty ||
+                    _searchController.text.trim().isNotEmpty)
             ? const Center(
                 child: CircularProgressIndicator(color: AppColors.primaryLime),
               )
-            : _pagination.error != null && _pagination.items.isEmpty
+            : _pagination.error != null &&
+                  (_pagination.items.isEmpty ||
+                      _searchController.text.trim().isNotEmpty)
             ? _stateMessage(
                 Icons.cloud_off_outlined,
                 'Não foi possível carregar',
@@ -219,13 +235,15 @@ class _InstallCriterionLibrarySectionState
                 _pagination.retry,
               )
             : _pagination.items.isEmpty
-            ? _stateMessage(
-                Icons.library_books_outlined,
-                'Sua biblioteca começa aqui',
-                'Crie critérios de instalação para reutilizar nos seus estudos.',
-                'Criar primeiro critério',
-                widget.onCreate,
-              )
+            ? _searchController.text.trim().isNotEmpty
+                  ? const Center(child: Text('Nenhum critério encontrado'))
+                  : _stateMessage(
+                      Icons.library_books_outlined,
+                      'Sua biblioteca começa aqui',
+                      'Crie critérios de instalação para reutilizar nos seus estudos.',
+                      'Criar primeiro critério',
+                      widget.onCreate,
+                    )
             : RefreshIndicator(
                 onRefresh: () => _pagination.load(),
                 child: LayoutBuilder(
@@ -252,10 +270,11 @@ class _InstallCriterionLibrarySectionState
                 ),
               ),
       ),
-      CriteriaPagination(
-        controller: _pagination,
-        enabled: !widget.busy && !_deleting,
-      ),
+      if (_searchController.text.trim().isEmpty)
+        CriteriaPagination(
+          controller: _pagination,
+          enabled: !widget.busy && !_deleting,
+        ),
     ],
   );
 }
