@@ -90,7 +90,11 @@ void main() {
     expect(find.text('ESTRUTURAS'), findsOneWidget);
     expect(find.text('PROTEÇÃO E MANOBRA'), findsOneWidget);
     expect(find.text('REGULAÇÃO'), findsOneWidget);
-    expect(find.text('8 de 10 camadas ativas'), findsOneWidget);
+    expect(find.text('0 de 10 camadas ativas'), findsOneWidget);
+
+    await tester.tap(find.text('Poste'));
+    await tester.pump();
+    expect(find.text('1 de 10 camadas ativas'), findsOneWidget);
     expect(find.text('Salvar filtro'), findsOneWidget);
 
     // Acionar botão "Salvar filtro"
