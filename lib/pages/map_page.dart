@@ -26,8 +26,6 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
-  static const _fallbackCenter = LatLng(-23.4532, -46.4438);
-
   final MapController _mapController = MapController();
   final AtivosService _ativosService = AtivosService();
   final TextEditingController _buscaController = TextEditingController();
@@ -52,8 +50,6 @@ class _MapPageState extends State<MapPage> {
   bool _cargaInicialFeita = false;
 
   static const int _limiteAtivos = 3000;
-
-  final Map<Marker, AtivoBdgd> _markerAtivoMap = {};
 
   List<LatLng> polygonPoints = [];
   bool isDrawing = true;
@@ -542,8 +538,6 @@ class _MapPageState extends State<MapPage> {
   }
 
   List<Marker> _gerarMarcadores() {
-    _markerAtivoMap.clear();
-
     final ativosFiltrados = _ativosVisiveis.where((a) {
       return _camadasAtivas[a.tipo] ?? false;
     }).toList();
@@ -556,10 +550,12 @@ class _MapPageState extends State<MapPage> {
         point: LatLng(ativo.latitude, ativo.longitude),
         width: isSelected ? 42 : 32,
         height: isSelected ? 42 : 32,
-        child: _buildIconeMarcador(ativo, isSelected, cor),
+        child: GestureDetector(
+          onTap: () => _selecionarAtivo(ativo),
+          child: _buildIconeMarcador(ativo, isSelected, cor),
+        ),
       );
 
-      _markerAtivoMap[marker] = ativo;
       return marker;
     }).toList();
   }
@@ -609,6 +605,11 @@ class _MapPageState extends State<MapPage> {
               initialZoom: _currentZoom,
               minZoom: 2.0,
               maxZoom: 18.0,
+              onMapReady: _aoMapaPronto,
+              onPositionChanged: (camera, hasGesture) {
+                _currentZoom = camera.zoom;
+                _agendarCarregamento();
+              },
               cameraConstraint: CameraConstraint.contain(
                 bounds: LatLngBounds(
                   LatLng(-89.9, -180.0),
@@ -643,6 +644,7 @@ class _MapPageState extends State<MapPage> {
                       ]
                     : <Polygon<Object>>[],
               ),
+              MarkerLayer(markers: marcadores),
               MarkerLayer(
                 markers: polygonPoints.map((point) {
                   return Marker(
