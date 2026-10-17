@@ -13,7 +13,7 @@ void main() {
           home: Scaffold(
             body: Builder(
               builder: (context) => EditableChipField(
-                defaultItems: const ['POSTES'],
+                defaultItems: const ['POSTE'],
                 availableItems: criterionAssetTypes.keys.toList(),
                 itemLabels: criterionAssetTypes,
                 onAdd: (availableItems, existingItems) =>
@@ -22,6 +22,7 @@ void main() {
                       builder: (_) => CriterionTypeDialog(
                         availableItems: availableItems,
                         existingItems: existingItems,
+                        itemLabels: criterionAssetTypes,
                       ),
                     ),
               ),
@@ -34,7 +35,7 @@ void main() {
       await tester.pumpAndSettle();
       var dialog = find.byType(AlertDialog);
       expect(
-        find.descendant(of: dialog, matching: find.text('Postes')),
+        find.descendant(of: dialog, matching: find.text('Poste')),
         findsOneWidget,
       );
       expect(
@@ -42,21 +43,21 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: dialog, matching: find.text('Subestações')),
+        find.descendant(of: dialog, matching: find.text('Subestação')),
         findsOneWidget,
       );
-      await tester.tap(find.text('Subestações'));
-      await tester.tap(find.text('Torres'));
+      await tester.tap(find.text('Subestação'));
+      await tester.tap(find.text('Dispositivo'));
       await tester.pump();
       expect(find.text('Adicionar'), findsNWidgets(2));
       await tester.tap(
         find.descendant(of: dialog, matching: find.text('Adicionar')),
       );
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(Chip, 'Subestações'), findsOneWidget);
-      expect(find.widgetWithText(Chip, 'Torres'), findsOneWidget);
+      expect(find.widgetWithText(Chip, 'Subestação'), findsOneWidget);
+      expect(find.widgetWithText(Chip, 'Dispositivo'), findsOneWidget);
 
-      final substationChip = find.widgetWithText(Chip, 'Subestações');
+      final substationChip = find.widgetWithText(Chip, 'Subestação');
       await tester.tap(
         find.descendant(of: substationChip, matching: find.byIcon(Icons.close)),
       );
@@ -67,7 +68,7 @@ void main() {
       await tester.pumpAndSettle();
       dialog = find.byType(AlertDialog);
       expect(
-        find.descendant(of: dialog, matching: find.text('Subestações')),
+        find.descendant(of: dialog, matching: find.text('Subestação')),
         findsOneWidget,
       );
       expect(

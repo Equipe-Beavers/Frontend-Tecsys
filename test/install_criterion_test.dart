@@ -109,15 +109,16 @@ void main() {
       find.byType(TextFormField).first,
       'Novo critério de teste',
     );
-    final postesChip = find.widgetWithText(Chip, 'Postes');
-    await tester.tap(
-      find.descendant(of: postesChip, matching: find.byIcon(Icons.close)),
-    );
+    tester
+        .widget<SegmentedButton<int>>(
+          find.byKey(const ValueKey('asset-rule-SUBESTACAO')),
+        )
+        .onSelectionChanged!({0});
     await tester.pumpAndSettle();
     await tester.tap(find.text('Salvar critério'));
     await tester.pumpAndSettle();
     expect(payload!['id_usuario'], 9);
-    expect(payload!['tipos_elementos_permitidos'], const ['SUBESTACOES']);
+    expect(payload!['tipos_elementos_permitidos'], const ['SUBESTACAO']);
     expect(payload!.containsKey('altura_minima_m'), false);
     expect(find.text(fixture['nome'] as String), findsOneWidget);
     await tester.tap(find.text(fixture['nome'] as String));
@@ -285,38 +286,38 @@ void main() {
     expect(find.text(fixture['nome'] as String), findsOneWidget);
   });
 
-  testWidgets(
-    'local requirements switch and kilometer slider save API values',
-    (tester) async {
-      tester.view.physicalSize = const Size(1440, 900);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      Map<String, dynamic>? payload;
-      await tester.pumpWidget(
-        host(
-          InstallCriterionForm(
-            criterion: InstallCriterion.fromJson(fixture),
-            userId: 1,
-            onClose: () {},
-            onSave: (value) async => payload = value,
-          ),
+  testWidgets('local requirements switch and meter slider save API values', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Map<String, dynamic>? payload;
+    await tester.pumpWidget(
+      host(
+        InstallCriterionForm(
+          criterion: InstallCriterion.fromJson(fixture),
+          userId: 1,
+          onClose: () {},
+          onSave: (value) async => payload = value,
         ),
-      );
-      expect(find.text('Até 1,5 km'), findsOneWidget);
-      await tester.tap(find.byType(Switch).first);
-      tester.widget<RangeSlider>(find.byType(RangeSlider)).onChanged!(
-        const RangeValues(500, 2500),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('0,5–2,5 km'), findsOneWidget);
-      await tester.tap(find.text('Salvar critério'));
-      await tester.pumpAndSettle();
-      expect(payload!['requer_alimentacao_eletrica'], false);
-      expect(payload!['distancia_minima_ativos_m'], 500);
-      expect(payload!['distancia_maxima_ativos_m'], 2500);
-    },
-  );
+      ),
+    );
+    expect(find.text('Até 500 m'), findsOneWidget);
+    await tester.ensureVisible(find.byType(Switch).first);
+    await tester.tap(find.byType(Switch).first);
+    tester.widget<RangeSlider>(find.byType(RangeSlider)).onChanged!(
+      const RangeValues(100, 300),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('100–300 m'), findsOneWidget);
+    await tester.tap(find.text('Salvar critério'));
+    await tester.pumpAndSettle();
+    expect(payload!['requer_alimentacao_eletrica'], false);
+    expect(payload!['distancia_minima_ativos_m'], 100);
+    expect(payload!['distancia_maxima_ativos_m'], 300);
+  });
 
   testWidgets('both distance limits are saved from the range slider', (
     tester,
@@ -333,14 +334,14 @@ void main() {
     );
 
     final slider = tester.widget<RangeSlider>(find.byType(RangeSlider));
-    slider.onChanged!(const RangeValues(500, 2500));
+    slider.onChanged!(const RangeValues(100, 300));
     await tester.pump();
-    expect(find.text('0,5–2,5 km'), findsOneWidget);
+    expect(find.text('100–300 m'), findsOneWidget);
     await tester.enterText(find.byType(TextFormField).first, 'Critério teste');
     await tester.tap(find.text('Salvar critério'));
     await tester.pumpAndSettle();
-    expect(payload!['distancia_minima_ativos_m'], 500);
-    expect(payload!['distancia_maxima_ativos_m'], 2500);
+    expect(payload!['distancia_minima_ativos_m'], 100);
+    expect(payload!['distancia_maxima_ativos_m'], 300);
   });
 
   testWidgets('advanced form values are saved to their JSONB columns', (
@@ -381,88 +382,9 @@ void main() {
       AppColors.surfaceBackground,
     );
 
-    final assetAddButton = find.text('Adicionar').first;
-    await tester.ensureVisible(assetAddButton);
-    await tester.tap(assetAddButton);
-    await tester.pumpAndSettle();
-    var assetDialog = find.byType(AlertDialog);
-    expect(
-      find.descendant(of: assetDialog, matching: find.text('Permitido')),
-      findsNWidgets(2),
-    );
-    expect(
-      find.descendant(of: assetDialog, matching: find.text('Bloqueado')),
-      findsNWidgets(2),
-    );
-    expect(
-      tester
-          .widget<Text>(
-            find
-                .descendant(of: assetDialog, matching: find.text('Permitido'))
-                .first,
-          )
-          .style
-          ?.color,
-      AppColors.secondaryTeal,
-    );
-    expect(
-      tester
-          .widget<Text>(
-            find
-                .descendant(of: assetDialog, matching: find.text('Bloqueado'))
-                .first,
-          )
-          .style
-          ?.color,
-      Colors.orange,
-    );
-    await tester.tap(
-      find.descendant(of: assetDialog, matching: find.text('Cancelar')),
-    );
-    await tester.pumpAndSettle();
-
-    final thirdPartyPost = find.widgetWithText(Chip, 'Postes de terceiros');
-    await tester.ensureVisible(thirdPartyPost);
-    await tester.tap(
-      find.descendant(of: thirdPartyPost, matching: find.byIcon(Icons.close)),
-    );
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(assetAddButton);
-    await tester.tap(assetAddButton);
-    await tester.pumpAndSettle();
-    assetDialog = find.byType(AlertDialog);
-    expect(
-      find.descendant(of: assetDialog, matching: find.text('Permitido')),
-      findsNWidgets(2),
-    );
-    expect(
-      find.descendant(of: assetDialog, matching: find.text('Bloqueado')),
-      findsOneWidget,
-    );
-    await tester.tap(
-      find.descendant(
-        of: assetDialog,
-        matching: find.text('Postes de terceiros'),
-      ),
-    );
-    await tester.pump();
-    await tester.tap(
-      find.descendant(of: assetDialog, matching: find.text('Adicionar')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(Chip, 'Postes de terceiros'), findsOneWidget);
-
     final vegetationPanel = find.ancestor(
       of: find.text('Permitidas'),
       matching: find.byType(AppPanel),
-    );
-    expect(
-      tester.widget<Text>(find.text('ATIVOS PERMITIDOS')).style?.color,
-      AppColors.secondaryTeal,
-    );
-    expect(
-      tester.widget<Text>(find.text('ATIVOS BLOQUEADOS')).style?.color,
-      Colors.orange,
     );
     expect(
       find.descendant(
@@ -558,14 +480,23 @@ void main() {
       findsOneWidget,
     );
 
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'Critério teste');
-    await tester.enterText(fields.at(1), '300');
-    await tester.enterText(fields.at(2), '1200');
-    await tester.enterText(fields.at(3), '20');
-    for (final index in [4, 5, 6, 7, 8, 9, 10]) {
-      await tester.enterText(fields.at(index), '$index');
-    }
+    Finder input(String label) => find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.decoration?.labelText == label,
+    );
+    await tester.enterText(input('Nome'), 'Critério teste');
+    await tester.enterText(input('Mínima'), '300');
+    await tester.enterText(input('Máxima').first, '1200');
+    await tester.enterText(input('Máxima').last, '20');
+    await tester.enterText(input('Raio de análise').first, '4');
+    await tester.enterText(input('Quantidade máxima').first, '5');
+    await tester.enterText(input('Altura máxima'), '6');
+    await tester.enterText(input('Distância mínima').last, '7');
+    await tester.enterText(input('Raio de análise').last, '8');
+    await tester.enterText(input('Quantidade máxima').last, '9');
+    await tester.enterText(input('Distância máxima').last, '10');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(Switch).last);
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(Switch).last);
     await tester.ensureVisible(find.text('Salvar critério'));
     await tester.tap(find.text('Salvar critério'));
@@ -622,8 +553,13 @@ void main() {
         );
         await tester.tap(find.text('Salvar critério'));
         await tester.pumpAndSettle();
-        expect(payload!['distancia_maxima_ativos_m'], distance);
-        expect(payload!['requer_alimentacao_eletrica'], isNull);
+        if (distance != null && (distance < 10 || distance > 500)) {
+          expect(payload, isNull);
+          expect(find.text('Use um valor de 10 a 500 m.'), findsOneWidget);
+        } else {
+          expect(payload!['distancia_maxima_ativos_m'], distance);
+          expect(payload!['requer_alimentacao_eletrica'], isNull);
+        }
         expect(tester.takeException(), isNull);
       },
     );

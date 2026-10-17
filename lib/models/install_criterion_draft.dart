@@ -6,8 +6,8 @@ class InstallCriterionDraft {
     : name = original?.name ?? '',
       gatewayLimitText = original?.gatewayLimit?.toString() ?? '',
       requiresPower = original == null ? true : original.requiresPower,
-      minDistanceMeters = original == null ? 0 : original.minDistanceMeters,
-      maxDistanceMeters = original == null ? 1500 : original.maxDistanceMeters,
+      minDistanceMeters = original == null ? 10 : original.minDistanceMeters,
+      maxDistanceMeters = original == null ? 500 : original.maxDistanceMeters,
       _selections = {
         for (final field in CriterionCollection.values)
           field: {...?original?.labels(field)},
@@ -104,6 +104,12 @@ class InstallCriterionDraft {
 
   /// Validate semantic rules after merging the form with preserved JSON values.
   String? validatePayload(Map<String, dynamic> payload) {
+    for (final distance in [minDistanceMeters, maxDistanceMeters]) {
+      if (distance != null &&
+          (!distance.isFinite || distance < 10 || distance > 500)) {
+        return 'Ajuste a distância aos ativos para um intervalo entre 10 e 500 m.';
+      }
+    }
     if (minDistanceMeters != null &&
         maxDistanceMeters != null &&
         minDistanceMeters! > maxDistanceMeters!) {
@@ -118,6 +124,21 @@ class InstallCriterionDraft {
     final blocked = payload.containsKey('tipos_elementos_proibidos')
         ? payload['tipos_elementos_proibidos']
         : original?.collections[CriterionCollection.blockedTypes];
+    for (final field in CriterionCollection.values) {
+      if (!payload.containsKey(field.jsonKey)) continue;
+      final value = payload[field.jsonKey];
+      if (value != null &&
+          (value is! List ||
+              value.any(
+                (item) =>
+                    item is! String ||
+                    !criterionAssetTypes.containsKey(
+                      normalizeCriterionAssetType(item),
+                    ),
+              ))) {
+        return 'Selecione somente tipos de ativos elétricos disponíveis nas camadas.';
+      }
+    }
     if (keys(allowed).intersection(keys(blocked)).isNotEmpty) {
       return 'Ativos: uma opção não pode ser permitida e proibida ao mesmo tempo.';
     }

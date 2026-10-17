@@ -1,3 +1,6 @@
+import 'layer_filter.dart';
+import 'ativo_bdgd.dart';
+
 enum CriterionCollection {
   allowedTypes('tipos_elementos_permitidos', 'Ativos permitidos'),
   blockedTypes('tipos_elementos_proibidos', 'Ativos bloqueados');
@@ -128,15 +131,16 @@ class InstallCriterion {
   }
 }
 
-const criterionAssetTypes = <String, String>{
-  'POSTES': 'Postes',
-  'SUBESTACOES': 'Subestações',
-  'TORRES': 'Torres',
-  'EDIFICACOES_PROPRIAS': 'Edificações próprias',
-  'RESERVATORIOS': 'Reservatórios',
-  'POSTES_TERCEIROS': 'Postes de terceiros',
-  'ESTRUTURAS_PROVISORIAS': 'Estruturas provisórias',
+final criterionAssetTypes = <String, String>{
+  for (final group in CatalogoCamadas.obterGrupos())
+    for (final item in group.itens) item.tipo.criterionKey: item.titulo,
 };
+
+extension CriterionAssetKey on TipoAtivo {
+  String get criterionKey => name
+      .replaceAllMapped(RegExp(r'[A-Z]'), (match) => '_${match[0]}')
+      .toUpperCase();
+}
 
 const criterionVegetationTypes = <String, String>{
   'AREA_URBANIZADA': 'Área urbanizada',
@@ -169,16 +173,6 @@ String normalizeCriterionAssetType(String value) {
     key = key.replaceAll(entry.key, entry.value);
   }
   key = key.replaceAll(RegExp(r'[\s-]+'), '_');
-  const aliases = {
-    'POSTE': 'POSTES',
-    'SUBESTACAO': 'SUBESTACOES',
-    'TORRE': 'TORRES',
-    'EDIFICACAO_PROPRIA': 'EDIFICACOES_PROPRIAS',
-    'RESERVATORIO': 'RESERVATORIOS',
-    'POSTE_DE_TERCEIRO': 'POSTES_TERCEIROS',
-    'POSTE_DE_TERCEIROS': 'POSTES_TERCEIROS',
-    'POSTES_DE_TERCEIROS': 'POSTES_TERCEIROS',
-    'ESTRUTURA_PROVISORIA': 'ESTRUTURAS_PROVISORIAS',
-  };
+  const aliases = {'POSTES': 'POSTE', 'SUBESTACOES': 'SUBESTACAO'};
   return aliases[key] ?? key;
 }
