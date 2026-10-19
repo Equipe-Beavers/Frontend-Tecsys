@@ -121,21 +121,28 @@ class _MyAppState extends State<MyApp> {
                                   horizontal: 12,
                                   vertical: 3,
                                 ),
-                                child: ListTile(
-                                  enabled: !_editingCriterion,
-                                  selected: _abaSelecionada == item.$1,
-                                  selectedColor: AppColors.primaryLime,
-                                  selectedTileColor: AppColors.primaryLime
-                                      .withValues(alpha: .12),
+                                child: Material(
+                                  color: Colors.transparent,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(9),
                                   ),
-                                  leading: Icon(item.$2, size: 20),
-                                  title: Text(
-                                    item.$3,
-                                    style: const TextStyle(fontSize: 13),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: ListTile(
+                                    enabled: !_editingCriterion,
+                                    selected: _abaSelecionada == item.$1,
+                                    selectedColor: AppColors.primaryLime,
+                                    selectedTileColor: AppColors.primaryLime
+                                        .withValues(alpha: .12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(9),
+                                    ),
+                                    leading: Icon(item.$2, size: 20),
+                                    title: Text(
+                                      item.$3,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    onTap: () => _selectTab(item.$1, context),
                                   ),
-                                  onTap: () => _selectTab(item.$1, context),
                                 ),
                               ),
                           ],

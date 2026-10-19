@@ -605,6 +605,19 @@ void main() {
           tester.getSize(find.byKey(const Key('preview'))).width,
           size.width,
         );
+        if (!form && size.width == 390) {
+          expect(find.text('Novo'), findsOneWidget);
+          expect(find.text('Novo critério'), findsNothing);
+          final titleTop = tester.getTopLeft(find.text('Biblioteca')).dy;
+          final buttonTop = tester.getTopLeft(find.text('Novo')).dy;
+          expect((titleTop - buttonTop).abs(), lessThan(16));
+        }
+        if (!form && size.width == 1440) {
+          expect(
+            tester.getTopLeft(find.text(fixture['nome'] as String)).dx,
+            lessThan(50),
+          );
+        }
       });
     }
   }

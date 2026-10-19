@@ -246,12 +246,16 @@ class _InstallCriterionLibrarySectionState
                     return SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(22),
-                      child: Wrap(
-                        spacing: 16,
-                        runSpacing: 16,
-                        children: _pagination.items
-                            .map((item) => _card(item, width))
-                            .toList(),
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: Wrap(
+                          alignment: WrapAlignment.start,
+                          spacing: 16,
+                          runSpacing: 16,
+                          children: _pagination.items
+                              .map((item) => _card(item, width))
+                              .toList(),
+                        ),
                       ),
                     );
                   },

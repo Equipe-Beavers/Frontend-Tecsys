@@ -1,6 +1,6 @@
 # Interface de critérios de instalação
 
-Acesse **Biblioteca → Critérios** pela navegação lateral no desktop ou pela barra inferior no celular. O layout segue as cores e a organização do protótipo, adaptado aos campos disponíveis no schema local [novo_schema.sql](../../backend/novo_schema.sql) e na API atual.
+Acesse **Biblioteca → Critérios** pela navegação lateral no desktop ou pela barra inferior no celular. O layout segue as cores e a organização do protótipo, adaptado aos campos disponíveis no schema local [schema.sql](../../backend/database/schema.sql) e na API atual.
 
 ## Funcionalidades
 
