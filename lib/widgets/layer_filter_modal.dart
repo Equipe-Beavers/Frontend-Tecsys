@@ -5,18 +5,30 @@ import 'package:frontend_tecsys/theme/app_colors.dart';
 
 class LayerFilterModal extends StatefulWidget {
   final Map<TipoAtivo, bool> camadasAtivasAtuais;
+  final bool vegetacaoAtivaAtual;
+  final bool antenasAtivasAtual;
   final ValueChanged<Map<TipoAtivo, bool>> onSalvarFiltro;
+  final ValueChanged<bool> onSalvarVegetacao;
+  final ValueChanged<bool> onSalvarAntenas;
 
   const LayerFilterModal({
     super.key,
     required this.camadasAtivasAtuais,
+    required this.vegetacaoAtivaAtual,
+    required this.antenasAtivasAtual,
     required this.onSalvarFiltro,
+    required this.onSalvarVegetacao,
+    required this.onSalvarAntenas,
   });
 
   static Future<void> exibir(
     BuildContext context, {
     required Map<TipoAtivo, bool> camadasAtivas,
+    required bool vegetacaoAtiva,
+    required bool antenasAtivas,
     required ValueChanged<Map<TipoAtivo, bool>> onSalvarFiltro,
+    required ValueChanged<bool> onSalvarVegetacao,
+    required ValueChanged<bool> onSalvarAntenas,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -24,7 +36,11 @@ class LayerFilterModal extends StatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (ctx) => LayerFilterModal(
         camadasAtivasAtuais: camadasAtivas,
+        vegetacaoAtivaAtual: vegetacaoAtiva,
+        antenasAtivasAtual: antenasAtivas,
         onSalvarFiltro: onSalvarFiltro,
+        onSalvarVegetacao: onSalvarVegetacao,
+        onSalvarAntenas: onSalvarAntenas,
       ),
     );
   }
@@ -35,6 +51,8 @@ class LayerFilterModal extends StatefulWidget {
 
 class _LayerFilterModalState extends State<LayerFilterModal> {
   late Map<TipoAtivo, bool> _estadoRascunho;
+  late bool _vegetacaoRascunho;
+  late bool _antenasRascunho;
   final List<GrupoCamadasFiltro> _grupos = CatalogoCamadas.obterGrupos();
 
   @override
@@ -42,12 +60,16 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
     super.initState();
     // Clona o mapa de camadas ativas para o rascunho temporário
     _estadoRascunho = Map<TipoAtivo, bool>.from(widget.camadasAtivasAtuais);
+    _vegetacaoRascunho = widget.vegetacaoAtivaAtual;
+    _antenasRascunho = widget.antenasAtivasAtual;
   }
 
   int get _quantidadeAtivas =>
-      _estadoRascunho.values.where((ativa) => ativa).length;
+      _estadoRascunho.values.where((ativa) => ativa).length +
+      (_vegetacaoRascunho ? 1 : 0) +
+      (_antenasRascunho ? 1 : 0);
 
-  int get _totalCamadas => _estadoRascunho.length;
+  int get _totalCamadas => _estadoRascunho.length + 2;
 
   void _limparGrupo(GrupoCamadasFiltro grupo) {
     setState(() {
@@ -140,6 +162,8 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
                     if (i < _grupos.length - 1)
                       const Divider(color: AppColors.borderSubtle, height: 24),
                   ],
+                  const Divider(color: AppColors.borderSubtle, height: 24),
+                  _buildSecaoCamadasExternas(),
                 ],
               ),
             ),
@@ -167,6 +191,8 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
                   // Botão "Salvar filtro"
                   ElevatedButton(
                     onPressed: () {
+                      widget.onSalvarVegetacao(_vegetacaoRascunho);
+                      widget.onSalvarAntenas(_antenasRascunho);
                       widget.onSalvarFiltro(_estadoRascunho);
                       Navigator.of(context).pop();
                     },
@@ -196,6 +222,46 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSecaoCamadasExternas() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 8, bottom: 4, left: 4, right: 4),
+          child: Text(
+            'DADOS GEOGRÁFICOS',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textMuted,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ),
+        CheckboxListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+          value: _vegetacaoRascunho,
+          activeColor: AppColors.primaryLime,
+          checkColor: AppColors.textDark,
+          title: const Text('Vegetação · ESA WorldCover 2021'),
+          secondary: const Icon(Icons.forest_outlined, color: AppColors.secondaryTeal),
+          onChanged: (value) => setState(() => _vegetacaoRascunho = value ?? false),
+        ),
+        CheckboxListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+          value: _antenasRascunho,
+          activeColor: AppColors.primaryLime,
+          checkColor: AppColors.textDark,
+          title: const Text('Antenas / estações · Anatel'),
+          secondary: const Icon(Icons.cell_tower, color: AppColors.secondaryTeal),
+          onChanged: (value) => setState(() => _antenasRascunho = value ?? false),
+        ),
+      ],
     );
   }
 
