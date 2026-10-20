@@ -5,6 +5,7 @@ import '../models/rf_profile.dart';
 import '../services/rf_profile_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/library_record_card.dart';
+import '../widgets/name_filter_field.dart';
 import '../widgets/primary_button.dart';
 
 class RFProfileLibrarySection extends StatefulWidget {
@@ -28,6 +29,7 @@ class RFProfileLibrarySection extends StatefulWidget {
 
 class _RFProfileLibrarySectionState extends State<RFProfileLibrarySection> {
   late final RFProfilePageController _controller;
+  final _searchController = TextEditingController();
   bool _deleting = false;
 
   @override
@@ -42,6 +44,7 @@ class _RFProfileLibrarySectionState extends State<RFProfileLibrarySection> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     _controller
       ..removeListener(_pageChanged)
       ..dispose();
@@ -214,17 +217,30 @@ class _RFProfileLibrarySectionState extends State<RFProfileLibrarySection> {
   @override
   Widget build(BuildContext context) => Column(
     children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(22, 16, 22, 0),
+        child: NameFilterField(
+          controller: _searchController,
+          onChanged: _controller.search,
+          hintText: 'Buscar perfil RF pelo nome',
+        ),
+      ),
       if (_deleting || (_controller.loading && _controller.items.isNotEmpty))
         const LinearProgressIndicator(
           color: AppColors.primaryLime,
           minHeight: 2,
         ),
       Expanded(
-        child: _controller.loading && _controller.items.isEmpty
+        child:
+            _controller.loading &&
+                (_controller.items.isEmpty ||
+                    _searchController.text.trim().isNotEmpty)
             ? const Center(
                 child: CircularProgressIndicator(color: AppColors.primaryLime),
               )
-            : _controller.error != null && _controller.items.isEmpty
+            : _controller.error != null &&
+                  (_controller.items.isEmpty ||
+                      _searchController.text.trim().isNotEmpty)
             ? _stateMessage(
                 Icons.cloud_off_outlined,
                 'Não foi possível carregar',
@@ -233,13 +249,15 @@ class _RFProfileLibrarySectionState extends State<RFProfileLibrarySection> {
                 _controller.retry,
               )
             : _controller.items.isEmpty
-            ? _stateMessage(
-                Icons.settings_input_antenna_outlined,
-                'Nenhum perfil RF cadastrado',
-                'Adicione um perfil para configurar as características de rádio.',
-                'Novo Perfil RF',
-                widget.onCreate,
-              )
+            ? _searchController.text.trim().isNotEmpty
+                  ? const Center(child: Text('Nenhum perfil RF encontrado'))
+                  : _stateMessage(
+                      Icons.settings_input_antenna_outlined,
+                      'Nenhum perfil RF cadastrado',
+                      'Adicione um perfil para configurar as características de rádio.',
+                      'Novo Perfil RF',
+                      widget.onCreate,
+                    )
             : RefreshIndicator(
                 onRefresh: () => _controller.load(),
                 child: LayoutBuilder(
@@ -266,7 +284,7 @@ class _RFProfileLibrarySectionState extends State<RFProfileLibrarySection> {
                 ),
               ),
       ),
-      _pagination(),
+      if (_searchController.text.trim().isEmpty) _pagination(),
     ],
   );
 }

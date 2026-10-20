@@ -43,6 +43,11 @@ Novos critérios iniciam com intervalo de 10–500 m. Limites antigos fora dessa
 | Carregar perfil RF | `GET /get-rf-profile/:id` |
 | Criar perfil RF | `POST /create-rf-profile` |
 | Atualizar perfil RF | `PATCH /update-rf-profile/:id` |
+| Listar estudos | `GET /estudos` |
+| Carregar estudo para edição | `GET /estudos/:id` |
+| Criar estudo | `POST /estudos` |
+| Atualizar estudo | `PATCH /estudos/:id` |
+| Excluir estudo | `DELETE /estudos/:id` |
 
 O contrato completo está em [InstallCriteriaApi.md](../../backend/docs/InstallCriteriaApi.md).
 
@@ -62,7 +67,10 @@ explícita, utiliza `http://localhost:3000` no navegador/desktop e
 - Os campos avançados são armazenados em JSONB. A API valida os campos conhecidos e preserva propriedades adicionais; novos consumidores devem seguir o formato documentado acima.
 - A aba **Perfis de RF** lista os perfis do usuário pela API PostgreSQL, com paginação e estados de carregamento/erro. **Novo Perfil RF** abre um formulário responsivo com preview calculado, validações e gravação em `perfis_rf`; tocar em um perfil abre o mesmo formulário com os dados carregados para edição.
 - Não são apresentados contadores “em uso”, rascunhos ou valores fictícios: esses estados não estão no retorno atual da API.
-- O seletor de critérios em “Novo estudo” usa a mesma API, paginação e modelo da biblioteca; a classe antiga com critérios fixos foi removida. O ID escolhido é incluído em `NovoEstudo.toJson()`. A criação completa de estudos ainda depende da adaptação de seu endpoint/serviço ao DER (o serviço atual usa `/estudos` e os perfis de RF permanecem no fluxo existente). Essa adaptação não foi feita nesta refatoração de critérios.
+- Os seletores de critérios e perfis RF em "Novo estudo" usam os registros cadastrados na Biblioteca, filtrados por `APP_USER_ID`. O perfil RF e o critério são obrigatórios; seus IDs são enviados como `id_perfil_rf` e `id_criterio_instalacao` no `POST /estudos`. A listagem usa `GET /estudos` e é atualizada após a criação.
+- A criação de estudos usa PostgreSQL, sem Supabase, e verifica se perfil e critério pertencem ao usuário informado. A geometria do mapa chega em EPSG:4326, é convertida para EPSG:4674 na gravação e retorna em EPSG:4326. Estudos criados sem delimitação enviam `geom: null`.
+- Os cards de estudos reutilizam o menu global com as ações "Editar" e "Excluir". A edição abre o mesmo formulário com os campos e seleções preenchidos; a atualização parcial preserva geometria, status, distribuidora e metadados não editados. A exclusão exige confirmação, atualiza a lista após sucesso e exibe a mensagem da API quando uma chave estrangeira impede a operação (HTTP 409). Nenhum registro dependente é excluído manualmente pela aplicação.
+- Para o banco de desenvolvimento local já inicializado, execute `npm run dev:loopback` na pasta `backend`: esse modo exige host PostgreSQL local, bloqueia acesso remoto e disponibiliza a API na porta 3000. O banco precisa conter as tabelas `usuarios`, `perfis_rf`, `criterios_instalacao` e `estudos` do DER, com usuários, perfis e critérios cadastrados. O banco isolado na porta 5433 não substitui um schema completo quando ainda não tiver sido inicializado.
 
 ## Organização do código
 
