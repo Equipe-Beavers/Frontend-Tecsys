@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/services.dart';
 
@@ -19,12 +20,20 @@ class RFProfileForm extends StatefulWidget {
     required this.userId,
     required this.onClose,
     required this.onSave,
+    required this.calculateRange,
     this.profile,
   });
 
   final int userId;
   final VoidCallback onClose;
   final Future<void> Function(Map<String, dynamic>) onSave;
+  final Future<double> Function({
+    required double frequencyMhz,
+    required double transmitPowerDbm,
+    required double receiveSensitivityDbm,
+    required double additionalAttenuationDb,
+  })
+  calculateRange;
   final RFProfile? profile;
 
   @override
@@ -47,6 +56,11 @@ class _RFProfileFormState extends State<RFProfileForm> {
   bool _considersAntennas = true;
   bool _saving = false;
   bool _dirty = false;
+  bool _rangeCalculating = false;
+  bool _rangeCalculationFailed = false;
+  double? _estimatedRangeKm;
+  Timer? _rangeCalculationTimer;
+  int _rangeRequestId = 0;
   String? _error;
 
   @override
@@ -87,6 +101,9 @@ class _RFProfileFormState extends State<RFProfileForm> {
     _considersVegetation = profile?.considersVegetation ?? true;
     _considersBuildings = profile?.considersBuildings ?? true;
     _considersAntennas = profile?.considersAntennas ?? true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scheduleRangeCalculation();
+    });
   }
 
   String _initialNumber(double value) => value == value.roundToDouble()
@@ -95,6 +112,7 @@ class _RFProfileFormState extends State<RFProfileForm> {
 
   @override
   void dispose() {
+    _rangeCalculationTimer?.cancel();
     for (final controller in [
       _name,
       _frequency,
@@ -183,9 +201,12 @@ class _RFProfileFormState extends State<RFProfileForm> {
 
   void _changed(String _) {
     setState(() => _dirty = true);
+    _scheduleRangeCalculation();
   }
 
-  double? get _estimatedRangeKm {
+  void _scheduleRangeCalculation() {
+    _rangeCalculationTimer?.cancel();
+    final requestId = ++_rangeRequestId;
     final frequency = double.tryParse(_frequency.text.replaceAll(',', '.'));
     final transmitPower = double.tryParse(
       _transmitPower.text.replaceAll(',', '.'),
@@ -198,20 +219,45 @@ class _RFProfileFormState extends State<RFProfileForm> {
     if (frequency == null ||
         transmitPower == null ||
         sensitivity == null ||
-        frequency <= 0) {
-      return null;
+        !frequency.isFinite ||
+        !transmitPower.isFinite ||
+        !sensitivity.isFinite ||
+        !attenuation.isFinite ||
+        frequency <= 0 ||
+        attenuation < 0) {
+      setState(() {
+        _estimatedRangeKm = null;
+        _rangeCalculating = false;
+        _rangeCalculationFailed = false;
+      });
+      return;
     }
-    const planningMarginDb = 20.0;
-    final pathLossConstant = 20 * math.log(frequency) / math.ln10 + 32.44;
-    final exponent =
-        (transmitPower +
-            sensitivity.abs() -
-            attenuation -
-            planningMarginDb -
-            pathLossConstant) /
-        20;
-    final rangeKm = math.pow(10, exponent).toDouble();
-    return rangeKm.isFinite ? rangeKm : null;
+    setState(() {
+      _estimatedRangeKm = null;
+      _rangeCalculating = true;
+      _rangeCalculationFailed = false;
+    });
+    _rangeCalculationTimer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final rangeMeters = await widget.calculateRange(
+          frequencyMhz: frequency,
+          transmitPowerDbm: transmitPower,
+          receiveSensitivityDbm: -sensitivity.abs(),
+          additionalAttenuationDb: attenuation,
+        );
+        if (!mounted || requestId != _rangeRequestId) return;
+        setState(() {
+          _estimatedRangeKm = rangeMeters / 1000;
+          _rangeCalculating = false;
+        });
+      } catch (_) {
+        if (!mounted || requestId != _rangeRequestId) return;
+        setState(() {
+          _rangeCalculationFailed = true;
+          _rangeCalculating = false;
+        });
+      }
+    });
   }
 
   String _format(double value, {int fractionDigits = 1}) =>
@@ -404,8 +450,11 @@ class _RFProfileFormState extends State<RFProfileForm> {
                 _numericField(
                   label: 'Atenuação adicional',
                   controller: _additionalAttenuation,
-                  validator: (value) =>
-                      _validateNumber(value, label: 'a atenuação'),
+                  validator: (value) => _validateNumber(
+                    value,
+                    label: 'a atenuação',
+                    nonNegative: true,
+                  ),
                   unit: 'dB',
                   insideAppPanel: true,
                 ),
@@ -419,11 +468,15 @@ class _RFProfileFormState extends State<RFProfileForm> {
                   insideAppPanel: true,
                 ),
                 child: Text(
-                  _estimatedRangeKm == null
+                  _rangeCalculating
+                      ? 'Calculando...'
+                      : _rangeCalculationFailed
+                      ? 'Indisponível'
+                      : _estimatedRangeKm == null
                       ? 'Preencha os parâmetros de RF'
                       : _format(_estimatedRangeKm!),
                   style: TextStyle(
-                    color: _estimatedRangeKm == null
+                    color: _estimatedRangeKm == null || _rangeCalculating
                         ? AppColors.textMuted
                         : AppColors.primaryLime,
                     fontWeight: FontWeight.w600,
