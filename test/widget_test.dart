@@ -5,8 +5,27 @@ import 'package:frontend_tecsys/models/layer_filter.dart';
 import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
+import 'package:frontend_tecsys/main.dart';
 
 void main() {
+  testWidgets('menu lateral desktop possui Material para seleção e toque', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MyApp());
+    await tester.pump();
+
+    expect(find.byType(ListTile), findsNWidgets(4));
+    for (final tile in tester.widgetList<ListTile>(find.byType(ListTile))) {
+      expect(tile.selectedTileColor, isNotNull);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Navbar renderiza abas corretamente', (
     WidgetTester tester,
   ) async {
@@ -90,7 +109,11 @@ void main() {
     expect(find.text('ESTRUTURAS'), findsOneWidget);
     expect(find.text('PROTEÇÃO E MANOBRA'), findsOneWidget);
     expect(find.text('REGULAÇÃO'), findsOneWidget);
-    expect(find.text('8 de 10 camadas ativas'), findsOneWidget);
+    expect(find.text('0 de 10 camadas ativas'), findsOneWidget);
+
+    await tester.tap(find.text('Poste'));
+    await tester.pump();
+    expect(find.text('1 de 10 camadas ativas'), findsOneWidget);
     expect(find.text('Salvar filtro'), findsOneWidget);
 
     // Acionar botão "Salvar filtro"
