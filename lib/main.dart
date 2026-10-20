@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:frontend_tecsys/pages/map_page.dart';
-import 'package:frontend_tecsys/pages/criteria_library_page.dart';
+import 'package:frontend_tecsys/pages/library_page.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
@@ -126,21 +126,28 @@ class _MyAppState extends State<MyApp> {
                                   horizontal: 12,
                                   vertical: 3,
                                 ),
-                                child: ListTile(
-                                  enabled: !_editingCriterion,
-                                  selected: _abaSelecionada == item.$1,
-                                  selectedColor: AppColors.primaryLime,
-                                  selectedTileColor: AppColors.primaryLime
-                                      .withValues(alpha: .12),
+                                child: Material(
+                                  color: Colors.transparent,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(9),
                                   ),
-                                  leading: Icon(item.$2, size: 20),
-                                  title: Text(
-                                    item.$3,
-                                    style: const TextStyle(fontSize: 13),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: ListTile(
+                                    enabled: !_editingCriterion,
+                                    selected: _abaSelecionada == item.$1,
+                                    selectedColor: AppColors.primaryLime,
+                                    selectedTileColor: AppColors.primaryLime
+                                        .withValues(alpha: .12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(9),
+                                    ),
+                                    leading: Icon(item.$2, size: 20),
+                                    title: Text(
+                                      item.$3,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    onTap: () => _selectTab(item.$1, context),
                                   ),
-                                  onTap: () => _selectTab(item.$1, context),
                                 ),
                               ),
                           ],

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,9 +9,12 @@ import 'package:frontend_tecsys/controllers/criteria_page_controller.dart';
 import 'package:frontend_tecsys/models/install_criterion.dart';
 import 'package:frontend_tecsys/models/install_criterion_draft.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
-import 'package:frontend_tecsys/pages/criteria_library_page.dart';
+import 'package:frontend_tecsys/pages/library_page.dart';
 import 'package:frontend_tecsys/pages/novo_estudo_page.dart';
+import 'package:frontend_tecsys/pages/rf_profile_form.dart';
 import 'package:frontend_tecsys/services/install_criterion_service.dart';
+import 'package:frontend_tecsys/services/rf_profile_service.dart';
+import 'package:frontend_tecsys/theme/app_colors.dart';
 
 import 'support/criterion_test_support.dart';
 
@@ -28,10 +32,8 @@ void main() {
       ...fixture,
       'id_criterio_instalacao': '7',
       'distancia_maxima_ativos_m': '1500.25',
-      'distancia_minima_ativos_m': '250.5',
-      'altura_minima_local_m': '5.5',
       'requer_alimentacao_eletrica': false,
-      'acesso_manutencao': false,
+      'relevo': {'altitude_minima_m': 5.5},
       'criado_em': '2026-10-06T10:00:00',
       'tipos_elementos_permitidos': {
         'ids': [10, 20],
@@ -39,10 +41,8 @@ void main() {
     });
     expect(criterion.id, 7);
     expect(criterion.maxDistanceMeters, 1500.25);
-    expect(criterion.minDistanceMeters, 250.5);
-    expect(criterion.minHeight, 5.5);
     expect(criterion.requiresPower, false);
-    expect(criterion.maintenanceAccess, false);
+    expect(criterion.relief, {'altitude_minima_m': 5.5});
     expect(criterion.createdAt?.year, 2026);
     final draft = InstallCriterionDraft(original: criterion)
       ..name = 'Nome revisado';
@@ -217,6 +217,7 @@ void main() {
           }, 200);
         }),
       );
+
       addTearDown(service.dispose);
       await tester.pumpWidget(
         host(
@@ -242,7 +243,7 @@ void main() {
       await tester.tap(find.text('Critério 21'));
       await tester.pumpAndSettle();
       expect(find.text('Critério 21'), findsOneWidget);
-      expect(find.text('Dist. 0–1500 m'), findsOneWidget);
+      expect(find.text('Dist. máx. 500 m'), findsOneWidget);
       expect(find.textContaining('Altura mín.'), findsNothing);
       expect(
         const NovoEstudo(
@@ -254,4 +255,365 @@ void main() {
       );
     },
   );
+
+  testWidgets('RF tab loads profiles and creates a profile from the form', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final criteriaService = InstallCriterionService(
+      client: MockClient(
+        (_) async => jsonResponse({'data': [], 'page': 1, 'limit': 20}, 200),
+      ),
+    );
+    final rfRequests = <http.Request>[];
+    final savedProfile = <String, dynamic>{
+      'id_perfil_rf': 9,
+      'id_usuario': 9,
+      'nome': 'GW-9200 LoRaWAN',
+      'frequencia_mhz': 915,
+      'potencia_transmissao_dbm': 8,
+      'sensibilidade_recepcao_dbm': -120,
+      'altura_gateway_m': 6,
+      'altura_dispositivo_m': 5,
+      'capacidade_max_equipamentos': 1200,
+      'atenuacao_adicional_db': 4.2,
+      'considera_relevo': true,
+      'considera_vegetacao': true,
+      'considera_edificacoes': true,
+      'considera_antenas': true,
+    };
+    Map<String, dynamic>? submittedPayload;
+    var saved = false;
+    final rfService = RFProfileService(
+      baseUrl: 'http://example.test/',
+      client: MockClient((request) async {
+        rfRequests.add(request);
+        if (request.method == 'POST') {
+          submittedPayload = jsonDecode(request.body) as Map<String, dynamic>;
+          saved = true;
+          return jsonResponse({'data': savedProfile}, 201);
+        }
+        return jsonResponse({
+          'data': saved
+              ? [savedProfile]
+              : [
+                  {
+                    ...savedProfile,
+                    'id_perfil_rf': 8,
+                    'nome': 'LoRa urbano',
+                    'potencia_transmissao_dbm': 21,
+                    'capacidade_max_equipamentos': 40,
+                    'atenuacao_adicional_db': null,
+                    'considera_edificacoes': false,
+                  },
+                ],
+          'page': 1,
+          'limit': 20,
+        }, 200);
+      }),
+    );
+    addTearDown(criteriaService.dispose);
+    addTearDown(rfService.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CriteriaLibraryPage(
+          service: criteriaService,
+          rfProfileService: rfService,
+          userId: 9,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Novo critério'), findsOneWidget);
+    expect(find.text('Novo Perfil RF'), findsNothing);
+    await tester.tap(find.text('Perfis de RF'));
+    await tester.pumpAndSettle();
+
+    expect(rfRequests, hasLength(1));
+    expect(rfRequests.single.url.path, '/list-rf-profiles');
+    expect(rfRequests.single.url.queryParameters['id_usuario'], '9');
+    expect(find.text('LoRa urbano'), findsOneWidget);
+    expect(find.text('Novo critério'), findsNothing);
+    expect(find.text('Novo Perfil RF'), findsOneWidget);
+
+    await tester.tap(find.text('Novo Perfil RF'));
+    await tester.pumpAndSettle();
+    expect(find.text('Novo perfil de RF'), findsOneWidget);
+    expect(find.text('Alcance estimado'), findsNWidgets(2));
+
+    Future<void> enterField(String label, String value) async {
+      final field = find.widgetWithText(TextFormField, label);
+      await tester.ensureVisible(field);
+      await tester.enterText(field, value);
+    }
+
+    await enterField('Nome', 'GW-9200 LoRaWAN');
+    await enterField('Frequência', '915');
+    await enterField('Potência de transmissão', '8');
+    await enterField('Sensibilidade de recepção', '-120');
+    await enterField('Atenuação adicional', '4.2');
+    await enterField('Altura do gateway em relação ao solo', '6');
+    await enterField('Altura do dispositivo em relação ao solo', '5');
+    await enterField('Máx. equipamentos atendidos', '1200');
+    await tester.tap(find.text('Salvar perfil'));
+    await tester.pumpAndSettle();
+    expect(
+      rfRequests.where((request) => request.method == 'POST'),
+      hasLength(1),
+    );
+    expect(submittedPayload, {
+      'id_usuario': 9,
+      'nome': 'GW-9200 LoRaWAN',
+      'frequencia_mhz': 915,
+      'potencia_transmissao_dbm': 8,
+      'sensibilidade_recepcao_dbm': -120,
+      'altura_gateway_m': 6,
+      'altura_dispositivo_m': 5,
+      'capacidade_max_equipamentos': 1200,
+      'atenuacao_adicional_db': 4.2,
+      'considera_relevo': true,
+      'considera_vegetacao': true,
+      'considera_edificacoes': true,
+      'considera_antenas': true,
+    });
+    expect(find.text('GW-9200 LoRaWAN'), findsOneWidget);
+    expect(
+      rfRequests.where((request) => request.method == 'GET'),
+      hasLength(2),
+    );
+  });
+
+  testWidgets('RF profile form fits mobile viewport', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      host(RFProfileForm(userId: 1, onClose: () {}, onSave: (_) async {})),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Novo perfil de RF'), findsOneWidget);
+    expect(find.text('Salvar perfil'), findsOneWidget);
+    for (final label in [
+      'Frequência',
+      'Potência de transmissão',
+      'Altura do gateway em relação ao solo',
+      'Altura do dispositivo em relação ao solo',
+    ]) {
+      final decorator = find.descendant(
+        of: find.widgetWithText(TextFormField, label),
+        matching: find.byType(InputDecorator),
+      );
+      expect(
+        tester.widget<InputDecorator>(decorator.first).decoration.fillColor,
+        AppColors.surfaceBackground,
+      );
+    }
+    final nameDecorator = find.descendant(
+      of: find.widgetWithText(TextFormField, 'Nome'),
+      matching: find.byType(InputDecorator),
+    );
+    expect(
+      tester.widget<InputDecorator>(nameDecorator.first).decoration.fillColor,
+      AppColors.surfaceCardLight,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('RF profile card confirms deletion and refreshes the list', (
+    tester,
+  ) async {
+    var deleted = false;
+    final criteriaService = InstallCriterionService(
+      client: MockClient(
+        (_) async => jsonResponse({'data': [], 'page': 1, 'limit': 20}, 200),
+      ),
+    );
+    final rfRequests = <http.Request>[];
+    final rfService = RFProfileService(
+      baseUrl: 'http://example.test/',
+      client: MockClient((request) async {
+        rfRequests.add(request);
+        if (request.method == 'DELETE') {
+          deleted = true;
+          return http.Response('', 204);
+        }
+        return jsonResponse({
+          'data': deleted
+              ? []
+              : [
+                  {
+                    'id_perfil_rf': 8,
+                    'id_usuario': 9,
+                    'nome': 'LoRa urbano',
+                    'frequencia_mhz': 915,
+                    'potencia_transmissao_dbm': 21,
+                    'sensibilidade_recepcao_dbm': -120,
+                    'considera_relevo': true,
+                    'considera_vegetacao': true,
+                    'considera_edificacoes': true,
+                    'considera_antenas': true,
+                  },
+                ],
+          'page': 1,
+          'limit': 20,
+        }, 200);
+      }),
+    );
+    addTearDown(criteriaService.dispose);
+    addTearDown(rfService.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CriteriaLibraryPage(
+          service: criteriaService,
+          rfProfileService: rfService,
+          userId: 9,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Perfis de RF'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ações de LoRa urbano'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Excluir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Excluir perfil RF?'), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Excluir'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      rfRequests.any(
+        (request) =>
+            request.method == 'DELETE' &&
+            request.url.path == '/delete-rf-profile/8',
+      ),
+      isTrue,
+    );
+    expect(find.text('Nenhum perfil RF cadastrado'), findsOneWidget);
+    expect(find.text('Perfil RF excluído.'), findsOneWidget);
+  });
+
+  testWidgets('RF profile card opens prefilled form and updates by ID', (
+    tester,
+  ) async {
+    final profile = <String, dynamic>{
+      'id_perfil_rf': 8,
+      'id_usuario': 9,
+      'nome': 'LoRa urbano',
+      'frequencia_mhz': 915,
+      'potencia_transmissao_dbm': 21,
+      'sensibilidade_recepcao_dbm': -120,
+      'altura_gateway_m': 6.5,
+      'altura_dispositivo_m': 5.5,
+      'capacidade_max_equipamentos': 40,
+      'atenuacao_adicional_db': 3.2,
+      'considera_relevo': true,
+      'considera_vegetacao': false,
+      'considera_edificacoes': true,
+      'considera_antenas': false,
+    };
+    final requests = <http.Request>[];
+    final criteriaService = InstallCriterionService(
+      client: MockClient(
+        (_) async => jsonResponse({'data': [], 'page': 1, 'limit': 20}, 200),
+      ),
+    );
+    final rfService = RFProfileService(
+      baseUrl: 'http://example.test/',
+      client: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' &&
+            request.url.path == '/list-rf-profiles') {
+          return jsonResponse({
+            'data': [profile],
+            'page': 1,
+            'limit': 20,
+          }, 200);
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/get-rf-profile/8') {
+          return jsonResponse({'data': profile}, 200);
+        }
+        if (request.method == 'PATCH') {
+          return jsonResponse({'data': profile}, 200);
+        }
+        return jsonResponse({'message': 'Requisição inesperada.'}, 500);
+      }),
+    );
+    addTearDown(criteriaService.dispose);
+    addTearDown(rfService.dispose);
+
+    await tester.pumpWidget(
+      host(
+        CriteriaLibraryPage(
+          service: criteriaService,
+          rfProfileService: rfService,
+          userId: 9,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Perfis de RF'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('LoRa urbano'));
+    await tester.pumpAndSettle();
+
+    expect(
+      requests.any((request) => request.url.path == '/get-rf-profile/8'),
+      isTrue,
+    );
+    expect(find.text('Editar perfil de RF'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextFormField>(find.widgetWithText(TextFormField, 'Nome'))
+          .controller!
+          .text,
+      'LoRa urbano',
+    );
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.widgetWithText(TextFormField, 'Frequência'),
+          )
+          .controller!
+          .text,
+      '915',
+    );
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.widgetWithText(TextFormField, 'Atenuação adicional'),
+          )
+          .controller!
+          .text,
+      '3,2',
+    );
+    expect(tester.widget<Switch>(find.byType(Switch).at(1)).value, false);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Nome'),
+      'LoRa urbano revisado',
+    );
+    await tester.tap(find.text('Salvar perfil'));
+    await tester.pumpAndSettle();
+
+    final patch = requests.singleWhere((request) => request.method == 'PATCH');
+    expect(patch.url.path, '/update-rf-profile/8');
+    expect(jsonDecode(patch.body)['nome'], 'LoRa urbano revisado');
+    expect(jsonDecode(patch.body).containsKey('id_usuario'), isFalse);
+    expect(
+      requests.any((request) => request.url.path == '/list-rf-profiles'),
+      isTrue,
+    );
+  });
 }

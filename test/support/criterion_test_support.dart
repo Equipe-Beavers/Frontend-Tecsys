@@ -10,9 +10,12 @@ const fixture = <String, dynamic>{
   'nome': 'Padrão urbano — Postes e SEs',
   'tipos_elementos_permitidos': ['POSTE', 'SUBESTACAO'],
   'requer_alimentacao_eletrica': true,
-  'distancia_minima_ativos_m': 0,
-  'distancia_maxima_ativos_m': 1500,
+  'distancia_maxima_ativos_m': 500,
   'limite_gateways': 40,
+  'relevo': null,
+  'vegetacoes': null,
+  'edificacoes': null,
+  'antenas': null,
 };
 
 Widget host(Widget child) => MaterialApp(

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../models/install_criterion.dart';
 import 'primary_button.dart';
 
 class CriterionTypeDialog extends StatefulWidget {
@@ -8,7 +7,7 @@ class CriterionTypeDialog extends StatefulWidget {
     super.key,
     required this.availableItems,
     required this.existingItems,
-    this.itemLabels = criterionAssetTypes,
+    this.itemLabels = const {},
     this.existingItemLabels = const {},
     this.existingItemColors = const {},
     this.title = 'Adicionar tipo de ativo',
@@ -28,59 +27,82 @@ class CriterionTypeDialog extends StatefulWidget {
 class _CriterionTypeDialogState extends State<CriterionTypeDialog> {
   final Set<String> _selectedItems = {};
 
+  void _submit() {
+    if (_selectedItems.isNotEmpty) {
+      Navigator.pop(context, _selectedItems.toList());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.title),
-      content: widget.availableItems.isEmpty
-          ? const Text('Todos os tipos permitidos já foram adicionados.')
-          : SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: widget.availableItems.length,
-                itemBuilder: (context, index) {
-                  final option = widget.availableItems[index];
-                  final alreadyAdded = widget.existingItems.contains(option);
-                  if (alreadyAdded) {
-                    return ListTile(
-                      enabled: false,
-                      leading: const Icon(Icons.check_circle_outline),
-                      title: Text(
-                        widget.itemLabels[option] ??
-                            option.replaceAll('_', ' '),
-                      ),
-                      trailing: Text(
-                        widget.existingItemLabels[option] ?? 'Já adicionado',
-                        style: widget.existingItemColors[option] == null
-                            ? null
-                            : TextStyle(
-                                color: widget.existingItemColors[option],
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: widget.availableItems.isEmpty
+                  ? const Text(
+                      'Todos os tipos permitidos já foram adicionados.',
+                    )
+                  : SizedBox(
+                      width: double.maxFinite,
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: widget.availableItems.length,
+                        itemBuilder: (context, index) {
+                          final option = widget.availableItems[index];
+                          final alreadyAdded = widget.existingItems.contains(
+                            option,
+                          );
+                          if (alreadyAdded) {
+                            return ListTile(
+                              enabled: false,
+                              leading: const Icon(Icons.check_circle_outline),
+                              title: Text(
+                                widget.itemLabels[option] ??
+                                    option.replaceAll('_', ' '),
                               ),
+                              trailing: Text(
+                                widget.existingItemLabels[option] ??
+                                    'Já adicionado',
+                                style: widget.existingItemColors[option] == null
+                                    ? null
+                                    : TextStyle(
+                                        color:
+                                            widget.existingItemColors[option],
+                                      ),
+                              ),
+                            );
+                          }
+                          return ListTile(
+                            leading: Checkbox(
+                              value: _selectedItems.contains(option),
+                              onChanged: (selected) => setState(() {
+                                selected == true
+                                    ? _selectedItems.add(option)
+                                    : _selectedItems.remove(option);
+                              }),
+                            ),
+                            title: Text(
+                              widget.itemLabels[option] ??
+                                  option.replaceAll('_', ' '),
+                            ),
+                            onTap: () => setState(() {
+                              _selectedItems.contains(option)
+                                  ? _selectedItems.remove(option)
+                                  : _selectedItems.add(option);
+                            }),
+                          );
+                        },
                       ),
-                    );
-                  }
-                  return ListTile(
-                    leading: Checkbox(
-                      value: _selectedItems.contains(option),
-                      onChanged: (selected) => setState(() {
-                        selected == true
-                            ? _selectedItems.add(option)
-                            : _selectedItems.remove(option);
-                      }),
                     ),
-                    title: Text(
-                      widget.itemLabels[option] ?? option.replaceAll('_', ' '),
-                    ),
-                    onTap: () => setState(() {
-                      _selectedItems.contains(option)
-                          ? _selectedItems.remove(option)
-                          : _selectedItems.add(option);
-                    }),
-                  );
-                },
-              ),
             ),
+          ],
+        ),
+      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -88,9 +110,7 @@ class _CriterionTypeDialogState extends State<CriterionTypeDialog> {
         ),
         PrimaryButton(
           label: 'Adicionar',
-          onPressed: _selectedItems.isEmpty
-              ? null
-              : () => Navigator.pop(context, _selectedItems.toList()),
+          onPressed: _selectedItems.isEmpty ? null : _submit,
         ),
       ],
     );

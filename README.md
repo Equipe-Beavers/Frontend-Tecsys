@@ -1,5 +1,7 @@
 # Frontend Tecsys
 
+Para configurar banco, API e interface, siga o **[guia de execução dos critérios](../backend/docs/RunInstallCriteria.md)** (no projeto com os dois submódulos).
+
 Consulte a [documentação da interface de critérios de instalação](docs/InstallCriteriaInterface.md) para executar e validar a biblioteca de critérios.
 
 ## Requisitos
