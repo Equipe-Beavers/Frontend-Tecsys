@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
+
 import '../services/rf_profile_service.dart';
 import '../models/rf_profile.dart';
 import '../theme/app_colors.dart';
@@ -61,7 +63,7 @@ class _RFProfileFormState extends State<RFProfileForm> {
     _receiveSensitivity = TextEditingController(
       text: profile == null
           ? ''
-          : _initialNumber(profile.receiveSensitivityDbm),
+          : _initialNumber(profile.receiveSensitivityDbm.abs()),
     );
     _additionalAttenuation = TextEditingController(
       text: profile?.additionalAttenuationDb == null
@@ -146,7 +148,8 @@ class _RFProfileFormState extends State<RFProfileForm> {
       'nome': _name.text.trim(),
       'frequencia_mhz': _numberValue(_frequency.text),
       'potencia_transmissao_dbm': _numberValue(_transmitPower.text),
-      'sensibilidade_recepcao_dbm': _numberValue(_receiveSensitivity.text),
+      'sensibilidade_recepcao_dbm': -_numberValue(_receiveSensitivity.text)
+          .abs(),
       'altura_gateway_m': _optionalNumber(_gatewayHeight.text),
       'altura_dispositivo_m': _optionalNumber(_deviceHeight.text),
       'capacidade_max_equipamentos': _optionalInteger(_maximumEquipment.text),
@@ -201,8 +204,8 @@ class _RFProfileFormState extends State<RFProfileForm> {
     const planningMarginDb = 20.0;
     final pathLossConstant = 20 * math.log(frequency) / math.ln10 + 32.44;
     final exponent =
-        (transmitPower -
-            sensitivity -
+        (transmitPower +
+            sensitivity.abs() -
             attenuation -
             planningMarginDb -
             pathLossConstant) /
@@ -218,10 +221,12 @@ class _RFProfileFormState extends State<RFProfileForm> {
     String label, {
     String? hint,
     String? unit,
+    String? prefix,
     bool insideAppPanel = false,
   }) => InputDecoration(
     labelText: label,
     hintText: hint,
+    prefixText: prefix,
     suffixText: unit,
     labelStyle: const TextStyle(color: AppColors.textMuted),
     hintStyle: const TextStyle(color: AppColors.textMuted),
@@ -257,8 +262,6 @@ class _RFProfileFormState extends State<RFProfileForm> {
   String? _validateNumber(
     String? text, {
     required String label,
-    required double minimum,
-    required double maximum,
     bool required = false,
   }) {
     if (text == null || text.trim().isEmpty) {
@@ -266,19 +269,14 @@ class _RFProfileFormState extends State<RFProfileForm> {
     }
     final value = double.tryParse(text.trim().replaceAll(',', '.'));
     if (value == null || !value.isFinite) return 'Informe um número válido.';
-    if (value < minimum || value > maximum) {
-      return 'Use um valor entre $minimum e $maximum.';
-    }
     return null;
   }
 
   String? _validateCapacity(String? text) {
     if (text == null || text.trim().isEmpty) return null;
-    final value = int.tryParse(text.trim());
-    if (value == null || value < 1 || value > 2147483647) {
-      return 'Informe um inteiro positivo válido.';
-    }
-    return null;
+    return int.tryParse(text.trim()) == null
+        ? 'Informe um inteiro válido.'
+        : null;
   }
 
   Widget _textField({
@@ -287,6 +285,8 @@ class _RFProfileFormState extends State<RFProfileForm> {
     required String? Function(String?) validator,
     String? hint,
     String? unit,
+    String? prefix,
+    List<TextInputFormatter>? inputFormatters,
     TextInputType keyboardType = TextInputType.text,
     int? maxLength,
     bool insideAppPanel = false,
@@ -294,11 +294,13 @@ class _RFProfileFormState extends State<RFProfileForm> {
     controller: controller,
     enabled: !_saving,
     keyboardType: keyboardType,
+    inputFormatters: inputFormatters,
     maxLength: maxLength,
     decoration: _decoration(
       label,
       hint: hint,
       unit: unit,
+      prefix: prefix,
       insideAppPanel: insideAppPanel,
     ),
     validator: validator,
@@ -311,16 +313,22 @@ class _RFProfileFormState extends State<RFProfileForm> {
     required String? Function(String?) validator,
     required String unit,
     bool integer = false,
+    bool unsigned = false,
+    String? prefix,
     bool insideAppPanel = false,
   }) => _textField(
     label: label,
     controller: controller,
     validator: validator,
     unit: unit,
+    prefix: prefix,
+    inputFormatters: unsigned
+        ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]'))]
+        : null,
     insideAppPanel: insideAppPanel,
     keyboardType: integer
         ? TextInputType.number
-        : const TextInputType.numberWithOptions(decimal: true, signed: true),
+        : TextInputType.numberWithOptions(decimal: true, signed: !unsigned),
   );
 
   Widget _pair(Widget first, Widget second, bool wide) => wide
@@ -358,8 +366,6 @@ class _RFProfileFormState extends State<RFProfileForm> {
                   validator: (value) => _validateNumber(
                     value,
                     label: 'a frequência',
-                    minimum: 0.001,
-                    maximum: 1000000,
                     required: true,
                   ),
                   unit: 'MHz',
@@ -371,8 +377,6 @@ class _RFProfileFormState extends State<RFProfileForm> {
                   validator: (value) => _validateNumber(
                     value,
                     label: 'a potência',
-                    minimum: -100,
-                    maximum: 100,
                     required: true,
                   ),
                   unit: 'dBm',
@@ -388,22 +392,18 @@ class _RFProfileFormState extends State<RFProfileForm> {
                   validator: (value) => _validateNumber(
                     value,
                     label: 'a sensibilidade',
-                    minimum: -200,
-                    maximum: 0,
                     required: true,
                   ),
                   unit: 'dBm',
+                  prefix: '-',
+                  unsigned: true,
                   insideAppPanel: true,
                 ),
                 _numericField(
                   label: 'Atenuação adicional',
                   controller: _additionalAttenuation,
-                  validator: (value) => _validateNumber(
-                    value,
-                    label: 'a atenuação',
-                    minimum: 0,
-                    maximum: 99999,
-                  ),
+                  validator: (value) =>
+                      _validateNumber(value, label: 'a atenuação'),
                   unit: 'dB',
                   insideAppPanel: true,
                 ),
@@ -440,12 +440,8 @@ class _RFProfileFormState extends State<RFProfileForm> {
               _numericField(
                 label: 'Altura do gateway em relação ao solo',
                 controller: _gatewayHeight,
-                validator: (value) => _validateNumber(
-                  value,
-                  label: 'a altura do gateway',
-                  minimum: 0,
-                  maximum: 10000,
-                ),
+                validator: (value) =>
+                    _validateNumber(value, label: 'a altura do gateway'),
                 unit: 'm',
                 insideAppPanel: true,
               ),
@@ -453,12 +449,8 @@ class _RFProfileFormState extends State<RFProfileForm> {
               _numericField(
                 label: 'Altura do dispositivo em relação ao solo',
                 controller: _deviceHeight,
-                validator: (value) => _validateNumber(
-                  value,
-                  label: 'a altura do dispositivo',
-                  minimum: 0,
-                  maximum: 10000,
-                ),
+                validator: (value) =>
+                    _validateNumber(value, label: 'a altura do dispositivo'),
                 unit: 'm',
                 insideAppPanel: true,
               ),
