@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/rf_profile.dart';
 import '../services/rf_profile_service.dart';
+import '../utils/name_filter.dart';
 
 class RFProfilePageController extends ChangeNotifier {
   RFProfilePageController({required this.service, required this.userId});
@@ -14,10 +15,15 @@ class RFProfilePageController extends ChangeNotifier {
   String? error;
   int _request = 0;
   int _retryPage = 1;
+  String _query = '';
   bool _disposed = false;
 
-  Future<void> load({int? targetPage}) async {
+  Future<void> search(String query) => load(targetPage: 1, query: query);
+
+  Future<void> load({int? targetPage, String? query}) async {
     if (_disposed) return;
+    if (query != null) _query = query.trim();
+    final searchQuery = _query;
     final requestedPage = targetPage ?? page;
     _retryPage = requestedPage;
     final request = ++_request;
@@ -25,6 +31,23 @@ class RFProfilePageController extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
+      if (searchQuery.isNotEmpty) {
+        final matches = <RFProfile>[];
+        var searchPage = 1;
+        while (true) {
+          final result = await service.list(userId: userId, page: searchPage);
+          if (_disposed || request != _request) return;
+          matches.addAll(
+            result.items.where((item) => matchesName(item.name, searchQuery)),
+          );
+          if (!result.hasNext) break;
+          searchPage++;
+        }
+        items = List.unmodifiable(matches);
+        page = 1;
+        hasNext = false;
+        return;
+      }
       final result = await service.list(userId: userId, page: requestedPage);
       if (_disposed || request != _request) return;
       if (result.items.isEmpty && requestedPage > 1) {

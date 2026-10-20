@@ -16,7 +16,7 @@ import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
 import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/filter_chip.dart';
-import 'package:frontend_tecsys/pages/novo_estudo_page.dart';
+import 'package:frontend_tecsys/pages/study_form.dart';
 import 'package:frontend_tecsys/utils/map_utils.dart';
 
 class MapPage extends StatefulWidget {
@@ -709,8 +709,7 @@ class _MapPageState extends State<MapPage> {
                         SelectionBottomSheet.show<String>(
                           context: context,
                           title: 'Selecionar distribuidora',
-                          subtitle:
-                              'Os ativos serão recarregados para a região escolhida.',
+                          subtitle: 'Os ativos serão recarregados para a região escolhida.',
                           items: _distribuidoras
                               .map(
                                 (dist) => SelectionItem(
@@ -759,8 +758,7 @@ class _MapPageState extends State<MapPage> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      shadowColor:
-                          AppColors.primaryLime.withValues(alpha: 0.4),
+                      shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
