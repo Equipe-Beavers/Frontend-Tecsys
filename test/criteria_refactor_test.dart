@@ -483,9 +483,18 @@ void main() {
         matching: find.byType(TextField),
       ),
     );
-    expect(sensitivityField.decoration?.prefixText, '-');
+    expect(sensitivityField.controller?.text, '-');
     await enterField('Sensibilidade de recepção', '120');
     await enterField('Atenuação adicional', '4.2');
+    await enterField('Altura do gateway em relação ao solo', '-6');
+    await enterField('Altura do dispositivo em relação ao solo', '-5');
+    await tester.tap(find.text('Salvar perfil'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Informe um valor igual ou maior que zero.'),
+      findsNWidgets(2),
+    );
+    expect(rfRequests.where((request) => request.method == 'POST'), isEmpty);
     await enterField('Altura do gateway em relação ao solo', '6');
     await enterField('Altura do dispositivo em relação ao solo', '5');
     await enterField('Máx. equipamentos atendidos', '1200');
@@ -736,7 +745,7 @@ void main() {
           )
           .controller!
           .text,
-      '120',
+      '-120',
     );
     expect(tester.widget<Switch>(find.byType(Switch).at(1)).value, false);
     await tester.enterText(

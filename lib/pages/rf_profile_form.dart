@@ -62,8 +62,8 @@ class _RFProfileFormState extends State<RFProfileForm> {
     );
     _receiveSensitivity = TextEditingController(
       text: profile == null
-          ? ''
-          : _initialNumber(profile.receiveSensitivityDbm.abs()),
+          ? '-'
+          : _initialNumber(-profile.receiveSensitivityDbm.abs()),
     );
     _additionalAttenuation = TextEditingController(
       text: profile?.additionalAttenuationDb == null
@@ -263,12 +263,16 @@ class _RFProfileFormState extends State<RFProfileForm> {
     String? text, {
     required String label,
     bool required = false,
+    bool nonNegative = false,
   }) {
     if (text == null || text.trim().isEmpty) {
       return required ? 'Informe $label.' : null;
     }
     final value = double.tryParse(text.trim().replaceAll(',', '.'));
     if (value == null || !value.isFinite) return 'Informe um número válido.';
+    if (nonNegative && value < 0) {
+      return 'Informe um valor igual ou maior que zero.';
+    }
     return null;
   }
 
@@ -395,8 +399,6 @@ class _RFProfileFormState extends State<RFProfileForm> {
                     required: true,
                   ),
                   unit: 'dBm',
-                  prefix: '-',
-                  unsigned: true,
                   insideAppPanel: true,
                 ),
                 _numericField(
@@ -440,8 +442,11 @@ class _RFProfileFormState extends State<RFProfileForm> {
               _numericField(
                 label: 'Altura do gateway em relação ao solo',
                 controller: _gatewayHeight,
-                validator: (value) =>
-                    _validateNumber(value, label: 'a altura do gateway'),
+                validator: (value) => _validateNumber(
+                  value,
+                  label: 'a altura do gateway',
+                  nonNegative: true,
+                ),
                 unit: 'm',
                 insideAppPanel: true,
               ),
@@ -449,8 +454,11 @@ class _RFProfileFormState extends State<RFProfileForm> {
               _numericField(
                 label: 'Altura do dispositivo em relação ao solo',
                 controller: _deviceHeight,
-                validator: (value) =>
-                    _validateNumber(value, label: 'a altura do dispositivo'),
+                validator: (value) => _validateNumber(
+                  value,
+                  label: 'a altura do dispositivo',
+                  nonNegative: true,
+                ),
                 unit: 'm',
                 insideAppPanel: true,
               ),
