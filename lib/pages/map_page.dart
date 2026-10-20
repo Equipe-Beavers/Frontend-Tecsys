@@ -20,6 +20,7 @@ import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/filter_chip.dart';
 import 'package:frontend_tecsys/pages/novo_estudo_page.dart';
 import 'package:frontend_tecsys/utils/map_utils.dart';
+import 'package:frontend_tecsys/widgets/map_switch.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -47,6 +48,7 @@ class _MapPageState extends State<MapPage> {
   VegetacaoConfig? _vegetacaoConfig;
   bool _vegetacaoAtiva = false;
   bool _antenasAtivas = false;
+  bool _legendaVegetacaoVisivel = true;
   Map<TipoAtivo, bool> _camadasAtivas =
       CatalogoCamadas.obterEstadoInicialPadrao();
   AtivoBdgd? _ativoSelecionado;
@@ -864,65 +866,84 @@ class _MapPageState extends State<MapPage> {
             Positioned(
               left: 15,
               bottom: 90,
-              child: Card(
-                color: AppColors.surfaceCard,
-                child: SizedBox(
-                  width: 220,
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _vegetacaoConfig!.product,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textWhite,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        for (final classe in _vegetacaoConfig!.classes)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 10,
-                                  height: 10,
-                                  decoration: BoxDecoration(
-                                    color: Color(int.parse(
-                                      'FF${classe.cor.replaceFirst('#', '')}',
-                                      radix: 16,
-                                    )),
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    '${classe.codigo} · ${classe.nome}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: AppColors.textWhite,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _vegetacaoConfig!.attribution,
-                          style: const TextStyle(fontSize: 8, color: AppColors.textMuted),
-                        ),
-                      ],
-                    ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  MapSwitch(
+                    label: 'Legenda',
+                    value: _legendaVegetacaoVisivel,
+                    onChanged: (valor) {
+                      setState(() {
+                        _legendaVegetacaoVisivel = valor;
+                      });
+                    },
                   ),
-                ),
+
+    
+                  if (_legendaVegetacaoVisivel) ...[
+                    const SizedBox(height: 6),
+                    Card(
+                      color: AppColors.surfaceCard,
+                      child: SizedBox(
+                        width: 220,
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Tipos de Vegetação',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textWhite,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+
+                              for (final classe in _vegetacaoConfig!.classes)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          color: Color(
+                                            int.parse(
+                                              'FF${classe.cor.replaceFirst('#', '')}',
+                                              radix: 16,
+                                            ),
+                                          ),
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          '${classe.codigo} · ${classe.nome}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: AppColors.textWhite,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           Positioned(
