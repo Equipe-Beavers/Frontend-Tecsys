@@ -477,7 +477,14 @@ void main() {
     await enterField('Nome', 'GW-9200 LoRaWAN');
     await enterField('Frequência', '915');
     await enterField('Potência de transmissão', '8');
-    await enterField('Sensibilidade de recepção', '-120');
+    final sensitivityField = tester.widget<TextField>(
+      find.descendant(
+        of: find.widgetWithText(TextFormField, 'Sensibilidade de recepção'),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(sensitivityField.decoration?.prefixText, '-');
+    await enterField('Sensibilidade de recepção', '120');
     await enterField('Atenuação adicional', '4.2');
     await enterField('Altura do gateway em relação ao solo', '6');
     await enterField('Altura do dispositivo em relação ao solo', '5');
@@ -722,6 +729,15 @@ void main() {
           .text,
       '3,2',
     );
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.widgetWithText(TextFormField, 'Sensibilidade de recepção'),
+          )
+          .controller!
+          .text,
+      '120',
+    );
     expect(tester.widget<Switch>(find.byType(Switch).at(1)).value, false);
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Nome'),
@@ -733,6 +749,7 @@ void main() {
     final patch = requests.singleWhere((request) => request.method == 'PATCH');
     expect(patch.url.path, '/update-rf-profile/8');
     expect(jsonDecode(patch.body)['nome'], 'LoRa urbano revisado');
+    expect(jsonDecode(patch.body)['sensibilidade_recepcao_dbm'], -120);
     expect(jsonDecode(patch.body).containsKey('id_usuario'), isFalse);
     expect(
       requests.any((request) => request.url.path == '/list-rf-profiles'),
