@@ -118,7 +118,13 @@ class _InstallCriterionLibrarySectionState
       const LibraryRecordParameter('Requer alimentação'),
     if (criterion.requiresPower == false)
       const LibraryRecordParameter('Alimentação não obrigatória'),
-    if (criterion.maxDistanceMeters != null)
+    if (criterion.minDistanceMeters != null)
+      LibraryRecordParameter(
+        criterion.maxDistanceMeters == null
+            ? 'Dist. mín. ${criterion.minDistanceMeters} m'
+            : 'Dist. ${criterion.minDistanceMeters}–${criterion.distanceMetersLabel} m',
+      )
+    else if (criterion.maxDistanceMeters != null)
       LibraryRecordParameter('Dist. máx. ${criterion.distanceMetersLabel} m'),
     if (criterion.gatewayLimit != null)
       LibraryRecordParameter(
@@ -258,12 +264,16 @@ class _InstallCriterionLibrarySectionState
                     return SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(22),
-                      child: Wrap(
-                        spacing: 16,
-                        runSpacing: 16,
-                        children: _pagination.items
-                            .map((item) => _card(item, width))
-                            .toList(),
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: Wrap(
+                          alignment: WrapAlignment.start,
+                          spacing: 16,
+                          runSpacing: 16,
+                          children: _pagination.items
+                              .map((item) => _card(item, width))
+                              .toList(),
+                        ),
                       ),
                     );
                   },

@@ -179,13 +179,14 @@ class _CriteriaLibraryPageState extends State<CriteriaLibraryPage> {
           child: LayoutBuilder(
             builder: (context, box) {
               final compact = box.maxWidth < 800;
+              final mobile = box.maxWidth < 600;
               final title = const Text(
                 'Biblioteca',
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
               );
               final createCriterion = PrimaryButton(
-                label: 'Novo critério',
+                label: mobile ? 'Novo' : 'Novo critério',
                 icon: Icons.add,
                 onPressed: _busy ? null : () => _open(),
               );
@@ -216,6 +217,21 @@ class _CriteriaLibraryPageState extends State<CriteriaLibraryPage> {
                   ],
                 ),
               );
+              if (mobile) {
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: title),
+                        const SizedBox(width: 16),
+                        _showRfProfiles ? createRfProfile : createCriterion,
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    tabs,
+                  ],
+                );
+              }
               if (compact) {
                 return Column(
                   children: [

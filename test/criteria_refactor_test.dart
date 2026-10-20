@@ -365,7 +365,7 @@ void main() {
       await tester.tap(find.widgetWithText(ElevatedButton, 'Prosseguir'));
       await tester.pumpAndSettle();
       expect(find.text('Critério 21'), findsOneWidget);
-      expect(find.text('Dist. máx. 1500 m'), findsOneWidget);
+      expect(find.text('Dist. máx. 500 m'), findsOneWidget);
       expect(find.textContaining('Altura mín.'), findsNothing);
       expect(
         const NovoEstudo(

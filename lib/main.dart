@@ -126,6 +126,10 @@ class _MyAppState extends State<MyApp> {
                                 ),
                                 child: Material(
                                   color: Colors.transparent,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(9),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
                                   child: ListTile(
                                     enabled: !_editingCriterion,
                                     selected: _abaSelecionada == item.$1,

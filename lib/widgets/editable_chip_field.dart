@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../theme/app_colors.dart';
 
@@ -19,8 +20,10 @@ class EditableChipField extends StatefulWidget {
     this.onAdd,
     this.onItemsChanged,
     this.itemLabels = const {},
+    this.allowCustom = false,
   });
 
+  final bool allowCustom;
   final List<String> defaultItems;
   final List<String> availableItems;
   final Set<String> excludedItems;
@@ -50,6 +53,16 @@ class _EditableChipFieldState extends State<EditableChipField> {
     _items = LinkedHashSet<String>.of(widget.defaultItems).toList();
   }
 
+  @override
+  void didUpdateWidget(covariant EditableChipField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!listEquals(oldWidget.defaultItems, widget.defaultItems)) {
+      _items
+        ..clear()
+        ..addAll(LinkedHashSet<String>.of(widget.defaultItems));
+    }
+  }
+
   void _removeItem(String item) {
     if (!widget.enabled) return;
     setState(() => _items.remove(item));
@@ -59,7 +72,7 @@ class _EditableChipFieldState extends State<EditableChipField> {
 
   Future<void> _addItem() async {
     if (!widget.enabled || _adding || widget.onAdd == null) return;
-    if (widget.availableItems.isEmpty) return;
+    if (widget.availableItems.isEmpty && !widget.allowCustom) return;
     setState(() => _adding = true);
     try {
       final selectedItems = await widget.onAdd!(
@@ -71,7 +84,7 @@ class _EditableChipFieldState extends State<EditableChipField> {
           .where(
             (item) =>
                 item.trim().isNotEmpty &&
-                widget.availableItems.contains(item) &&
+                (widget.allowCustom || widget.availableItems.contains(item)) &&
                 !widget.excludedItems.contains(item) &&
                 !_items.contains(item),
           )
@@ -86,15 +99,18 @@ class _EditableChipFieldState extends State<EditableChipField> {
 
   @override
   Widget build(BuildContext context) {
-    final hasCatalogItems = widget.availableItems.isNotEmpty;
+    final hasCatalogItems =
+        widget.availableItems.isNotEmpty || widget.allowCustom;
     final secondary = widget.colorVariant == ChipColorVariant.secondary;
     final chipBackground = secondary
         ? Colors.orange.withValues(alpha: .12)
-        : AppColors.surfaceCardLight;
+        : AppColors.secondaryTeal;
     final chipBorder = secondary
         ? Colors.orange.withValues(alpha: .55)
         : AppColors.border;
-    final chipForeground = secondary ? Colors.orange.shade300 : null;
+    final chipForeground = secondary
+        ? Colors.orange.shade300
+        : AppColors.textDark;
 
     return Wrap(
       spacing: 8,
@@ -104,14 +120,12 @@ class _EditableChipFieldState extends State<EditableChipField> {
           Chip(
             label: Text(
               widget.itemLabels[item] ?? item.replaceAll('_', ' '),
-              style: chipForeground == null
-                  ? null
-                  : TextStyle(color: chipForeground),
+              style: TextStyle(color: chipForeground, fontSize: 12),
             ),
             backgroundColor: chipBackground,
             side: BorderSide(color: chipBorder),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(7),
+              borderRadius: BorderRadius.circular(20),
             ),
             deleteIcon: Icon(Icons.close, size: 15, color: chipForeground),
             onDeleted: widget.enabled ? () => _removeItem(item) : null,
