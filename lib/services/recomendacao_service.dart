@@ -1,19 +1,31 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
 
-class RecomendacaoService {
+abstract interface class RecommendationRepository {
+  Future<ResultadoRecomendacao> gerarRecomendacao({
+    required int idEstudo,
+    required int idPerfilRf,
+    int? idCriterioInstalacao,
+    String? nomeCenario,
+  });
+}
+
+class RecomendacaoService implements RecommendationRepository {
   RecomendacaoService({http.Client? client, String? baseUrl})
-      : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ??
-            const String.fromEnvironment(
-              'API_BASE_URL',
-              defaultValue: 'http://localhost:3000',
-            );
+    : _client = client ?? http.Client(),
+      _baseUrl =
+          baseUrl ??
+          const String.fromEnvironment(
+            'API_BASE_URL',
+            defaultValue: 'http://localhost:3000',
+          );
 
   final http.Client _client;
   final String _baseUrl;
 
+  @override
   Future<ResultadoRecomendacao> gerarRecomendacao({
     required int idEstudo,
     required int idPerfilRf,

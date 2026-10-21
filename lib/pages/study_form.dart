@@ -8,6 +8,8 @@ import 'package:frontend_tecsys/services/rf_profile_service.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
+import 'package:frontend_tecsys/widgets/primary_button.dart';
+import 'package:frontend_tecsys/widgets/secondary_button.dart';
 import 'package:latlong2/latlong.dart';
 
 class NovoEstudoPage extends StatefulWidget {
@@ -70,6 +72,8 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   bool _loadingSelections = false;
 
   bool get _isEditing => widget.study != null;
+  bool get _saveDisabled =>
+      _salvando || _loadingRfProfiles || _loadingCriteria || _loadingSelections;
 
   @override
   void initState() {
@@ -350,6 +354,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final desktop = MediaQuery.sizeOf(context).width >= 760;
     return Scaffold(
       backgroundColor: AppColors.surfaceBackground,
       body: SafeArea(
@@ -357,7 +362,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           key: _formKey,
           child: Column(
             children: [
-              _buildCabecalho(),
+              _buildCabecalho(desktop),
               if (_loadingSelections)
                 const LinearProgressIndicator(color: AppColors.primaryLime),
               Expanded(
@@ -493,7 +498,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                   ],
                 ),
               ),
-              _buildRodape(),
+              if (!desktop) _buildRodape(),
             ],
           ),
         ),
@@ -501,26 +506,25 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     );
   }
 
-  Widget _buildCabecalho() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 20, 8),
+  Widget _buildCabecalho(bool desktop) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
       child: Row(
         children: [
           IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(
-              Icons.arrow_back_ios_new,
-              color: AppColors.textWhite,
-              size: 18,
-            ),
+            onPressed: _salvando ? null : () => Navigator.pop(context),
+            tooltip: 'Voltar',
+            icon: const Icon(Icons.arrow_back, size: 20),
           ),
           Expanded(
             child: Text(
               _isEditing ? 'Editar estudo' : 'Novo estudo',
               style: const TextStyle(
                 color: AppColors.textWhite,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -541,6 +545,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                 ),
               ),
             ),
+          if (desktop) ...[const SizedBox(width: 12), _buildAcoes()],
         ],
       ),
     );
@@ -744,50 +749,42 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
 
   Widget _buildRodape() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
       decoration: const BoxDecoration(
         color: AppColors.surfaceCard,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed:
-              _salvando ||
-                  _loadingRfProfiles ||
-                  _loadingCriteria ||
-                  _loadingSelections
-              ? null
-              : _criarEstudo,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryLime,
-            foregroundColor: AppColors.textDark,
-            disabledBackgroundColor: AppColors.primaryLime.withValues(
-              alpha: 0.6,
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 17),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: _salvando
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.textDark,
-                  ),
-                )
-              : Text(
-                  _isEditing ? 'Salvar alterações' : 'Criar estudo e simular',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(child: _buildCancelar()),
+            const SizedBox(width: 8),
+            Expanded(child: _buildSalvar()),
+          ],
         ),
       ),
     );
   }
+
+  Widget _buildAcoes() => Wrap(
+    crossAxisAlignment: WrapCrossAlignment.center,
+    runSpacing: 8,
+    children: [_buildCancelar(), const SizedBox(width: 12), _buildSalvar()],
+  );
+
+  Widget _buildCancelar() => SecondaryButton(
+    label: 'Cancelar',
+    onPressed: _salvando ? null : () => Navigator.pop(context),
+  );
+
+  Widget _buildSalvar() => PrimaryButton(
+    label: _salvando
+        ? 'Salvando...'
+        : _isEditing
+        ? 'Salvar alterações'
+        : 'Criar estudo e simular',
+    onPressed: _saveDisabled ? null : _criarEstudo,
+  );
 }

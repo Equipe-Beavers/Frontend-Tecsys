@@ -26,6 +26,38 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('mantém estudos montado ao alternar entre mobile e desktop', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(440, 956);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MyApp());
+    expect(find.byType(Navbar), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
+    await tester.tap(
+      find.descendant(of: find.byType(Navbar), matching: find.text('Estudos')),
+    );
+    await tester.pump();
+    expect(find.text('Buscar estudos'), findsOneWidget);
+
+    tester.view.physicalSize = const Size(1440, 956);
+    await tester.pump();
+    expect(find.text('Buscar estudos'), findsOneWidget);
+    expect(find.byType(Navbar), findsNothing);
+    expect(find.byType(ListTile), findsNWidgets(4));
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(440, 956);
+    await tester.pump();
+    expect(find.text('Buscar estudos'), findsOneWidget);
+    expect(find.byType(Navbar), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Navbar renderiza abas corretamente', (
     WidgetTester tester,
   ) async {
