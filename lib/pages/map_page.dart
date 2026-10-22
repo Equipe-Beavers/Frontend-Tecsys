@@ -632,10 +632,30 @@ class _MapPageState extends State<MapPage> {
     }).toList();
   }
 
+  Widget _linhaDetalheAntena(String titulo, String valor) {
+    return Text.rich(
+      TextSpan(
+        style: const TextStyle(
+          color: AppColors.textWhite,
+        ),
+        children: [
+          TextSpan(
+            text: '$titulo: ',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          TextSpan(text: valor),
+        ],
+      ),
+    );
+  }
+
   void _abrirDetalhesAntena(AntenaAnatel antena) {
     final tecnologias = antena.tecnologias.isEmpty
         ? 'Não informado'
         : antena.tecnologias.join(', ');
+  
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surfaceCard,
@@ -648,16 +668,48 @@ class _MapPageState extends State<MapPage> {
             children: [
               Text(
                 antena.nomeEntidade ?? 'Estação licenciada pela Anatel',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textWhite),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textWhite,
+                ),
               ),
               const SizedBox(height: 12),
-              Text('Município: ${antena.municipio ?? 'Não informado'}${antena.uf == null ? '' : ' / ${antena.uf}'}'),
-              Text('Tecnologias: $tecnologias'),
-              Text('Registros de emissão agrupados: ${antena.totalRegistros}'),
-              if (antena.tipoEstacao != null) Text('Tipo de estação: ${antena.tipoEstacao}'),
+  
+              _linhaDetalheAntena(
+                'Município',
+                '${antena.municipio ?? 'Não informado'}'
+                '${antena.uf == null ? '' : ' / ${antena.uf}'}',
+              ),
+  
+              _linhaDetalheAntena(
+                'Tecnologias',
+                tecnologias,
+              ),
+  
+              _linhaDetalheAntena(
+                'Registros de emissão agrupados',
+                '${antena.totalRegistros}',
+              ),
+  
+              if (antena.tipoEstacao != null)
+                _linhaDetalheAntena(
+                  'Tipo de estação',
+                  antena.tipoEstacao!,
+                ),
+  
               if (antena.alturaAntenaMediaM != null)
-                Text('Altura média informada: ${antena.alturaAntenaMediaM!.toStringAsFixed(1)} m'),
-              Text('Latitude / longitude: ${antena.latitude.toStringAsFixed(6)} / ${antena.longitude.toStringAsFixed(6)}'),
+                _linhaDetalheAntena(
+                  'Altura média informada',
+                  '${antena.alturaAntenaMediaM!.toStringAsFixed(1)} m',
+                ),
+  
+              _linhaDetalheAntena(
+                'Latitude / longitude',
+                '${antena.latitude.toStringAsFixed(6)} / '
+                '${antena.longitude.toStringAsFixed(6)}',
+              ),
+  
               const SizedBox(height: 8),
             ],
           ),
@@ -917,7 +969,7 @@ class _MapPageState extends State<MapPage> {
                         ),
                       ),
                     ),
-          
+
                     if (_legendaExpandida) ...[
                       const Divider(
                         height: 1,
@@ -938,7 +990,7 @@ class _MapPageState extends State<MapPage> {
                               ),
                             ),
                             const SizedBox(height: 6),
-          
+
                             for (final classe in _vegetacaoConfig!.classes)
                               Padding(
                                 padding: const EdgeInsets.symmetric(
