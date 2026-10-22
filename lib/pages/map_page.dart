@@ -8,8 +8,10 @@ import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/city_bairro_bottom_sheet.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
+import 'package:frontend_tecsys/models/edificacao.dart';
 import 'package:frontend_tecsys/models/layer_filter.dart';
 import 'package:frontend_tecsys/services/ativos_service.dart';
+import 'package:frontend_tecsys/services/edificacoes_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
@@ -28,6 +30,9 @@ class MapPage extends StatefulWidget {
 class _MapPageState extends State<MapPage> {
   final MapController _mapController = MapController();
   final AtivosService _ativosService = AtivosService();
+  final EdificacoesService _edificacoesService = EdificacoesService();
+  final LayerHitNotifier<Edificacao> _edificacaoHitNotifier =
+      ValueNotifier(null);
   final TextEditingController _buscaController = TextEditingController();
 
   List<DistribuidoraResumo> _distribuidoras = [];
@@ -49,7 +54,15 @@ class _MapPageState extends State<MapPage> {
   bool _distribuidorasProntas = false;
   bool _cargaInicialFeita = false;
 
+  bool _edificacoesAtivas = false;
+  List<Edificacao> _edificacoes = [];
+  bool _carregandoEdificacoes = false;
+  String? _avisoEdificacoes;
+  int _sequenciaEdificacoes = 0;
+
   static const int _limiteAtivos = 3000;
+  // Zoom a partir do qual altura e material aparecem escritos no edifício.
+  static const double _zoomRotulosEdificacoes = 17;
 
   List<LatLng> polygonPoints = [];
   bool isDrawing = true;
@@ -66,6 +79,8 @@ class _MapPageState extends State<MapPage> {
     _buscaController.dispose();
     _mapController.dispose();
     _ativosService.dispose();
+    _edificacoesService.dispose();
+    _edificacaoHitNotifier.dispose();
     super.dispose();
   }
 
@@ -88,7 +103,65 @@ class _MapPageState extends State<MapPage> {
 
   void _agendarCarregamento() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 400), _carregarDados);
+    _debounceTimer = Timer(const Duration(milliseconds: 400), () {
+      _carregarDados();
+      _carregarEdificacoes();
+    });
+  }
+
+  Future<void> _carregarEdificacoes() async {
+    if (!_mapaPronto) return;
+
+    final sequencia = ++_sequenciaEdificacoes;
+
+    if (!_edificacoesAtivas) {
+      setState(() {
+        _edificacoes = [];
+        _carregandoEdificacoes = false;
+        _avisoEdificacoes = null;
+      });
+      return;
+    }
+
+    final bounds = _mapController.camera.visibleBounds;
+
+    if (bounds.north - bounds.south > EdificacoesService.ladoMaximoGraus ||
+        bounds.east - bounds.west > EdificacoesService.ladoMaximoGraus) {
+      setState(() {
+        _edificacoes = [];
+        _carregandoEdificacoes = false;
+        _avisoEdificacoes = 'Aproxime o mapa para ver os edifícios';
+      });
+      return;
+    }
+
+    setState(() {
+      _carregandoEdificacoes = true;
+      _avisoEdificacoes = null;
+    });
+
+    try {
+      final edificacoes = await _edificacoesService.getEdificacoes(
+        minLatitude: bounds.south,
+        maxLatitude: bounds.north,
+        minLongitude: bounds.west,
+        maxLongitude: bounds.east,
+      );
+
+      if (!mounted || sequencia != _sequenciaEdificacoes) return;
+
+      setState(() {
+        _edificacoes = edificacoes;
+        _carregandoEdificacoes = false;
+      });
+    } catch (error) {
+      if (!mounted || sequencia != _sequenciaEdificacoes) return;
+
+      setState(() {
+        _carregandoEdificacoes = false;
+        _avisoEdificacoes = 'Não foi possível carregar os edifícios.';
+      });
+    }
   }
 
   Future<void> _carregarDados() async {
@@ -177,7 +250,8 @@ class _MapPageState extends State<MapPage> {
   }
 
   int get _totalCamadasAtivas =>
-      _camadasAtivas.values.where((ativa) => ativa).length;
+      _camadasAtivas.values.where((ativa) => ativa).length +
+      (_edificacoesAtivas ? 1 : 0);
 
   Future<void> _selecionarDistribuidora(String? distribuidora) async {
     if (distribuidora == null || distribuidora == _distribuidoraSelecionada) {
@@ -419,6 +493,10 @@ class _MapPageState extends State<MapPage> {
     LayerFilterModal.exibir(
       context,
       camadasAtivas: _camadasAtivas,
+      edificacoesAtivas: _edificacoesAtivas,
+      onSalvarEdificacoes: (ativas) {
+        _edificacoesAtivas = ativas;
+      },
       onSalvarFiltro: (novasCamadas) {
         setState(() {
           _camadasAtivas = novasCamadas;
@@ -429,7 +507,7 @@ class _MapPageState extends State<MapPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length} ativas',
+              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length + 1} ativas',
               style: const TextStyle(
                 color: AppColors.textDark,
                 fontWeight: FontWeight.bold,
@@ -465,6 +543,111 @@ class _MapPageState extends State<MapPage> {
         }
       },
     );
+  }
+
+  void _exibirEdificacao(Edificacao edificacao) {
+    Widget linha(String rotulo, String valor) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                rotulo,
+                style: const TextStyle(color: AppColors.textMuted),
+              ),
+            ),
+            Text(
+              valor,
+              style: const TextStyle(
+                color: AppColors.textWhite,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.apartment, color: edificacao.cor),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Edifício',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textWhite,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              linha(
+                'Altura',
+                edificacao.origemAltura == 'INFORMADA'
+                    ? edificacao.alturaFormatada
+                    : '${edificacao.alturaFormatada} (estimada)',
+              ),
+              if (edificacao.pavimentos != null)
+                linha('Pavimentos', '${edificacao.pavimentos}'),
+              linha(
+                'Material',
+                edificacao.origemMaterial == 'INFORMADO'
+                    ? edificacao.nomeMaterial
+                    : '${edificacao.nomeMaterial} (padrão)',
+              ),
+              linha(
+                'Perda do material',
+                '${edificacao.perdaMaterialDb.toStringAsFixed(1)} dB',
+              ),
+              if (edificacao.areaM2 != null)
+                linha('Área', '${edificacao.areaM2!.toStringAsFixed(0)} m²'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Polygon<Edificacao>> _gerarPoligonosEdificacoes() {
+    final exibirRotulos = _currentZoom >= _zoomRotulosEdificacoes;
+
+    return [
+      for (final edificacao in _edificacoes)
+        for (final aneis in edificacao.poligonos)
+          if (aneis.isNotEmpty && aneis.first.length >= 3)
+            Polygon<Edificacao>(
+              points: aneis.first,
+              holePointsList: aneis.length > 1 ? aneis.sublist(1) : null,
+              color: edificacao.cor.withValues(alpha: 0.45),
+              borderColor: edificacao.cor,
+              borderStrokeWidth: 1,
+              hitValue: edificacao,
+              label: exibirRotulos
+                  ? '${edificacao.alturaFormatada}\n${edificacao.nomeMaterial}'
+                  : null,
+              labelStyle: const TextStyle(
+                color: AppColors.textDark,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+    ];
   }
 
   bool get _areaDesenhada => polygonPoints.length >= 3;
@@ -617,6 +800,13 @@ class _MapPageState extends State<MapPage> {
                 ),
               ),
               onTap: (tapPosition, point) {
+                final edificacoesTocadas =
+                    _edificacaoHitNotifier.value?.hitValues ?? const [];
+                if (edificacoesTocadas.isNotEmpty) {
+                  _exibirEdificacao(edificacoesTocadas.first);
+                  return;
+                }
+
                 if (!isDrawing) {
                   return;
                 }
@@ -631,6 +821,11 @@ class _MapPageState extends State<MapPage> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.example.frontend_tecsys',
               ),
+              if (_edificacoesAtivas)
+                PolygonLayer<Edificacao>(
+                  hitNotifier: _edificacaoHitNotifier,
+                  polygons: _gerarPoligonosEdificacoes(),
+                ),
               PolygonLayer(
                 polygons: polygonPoints.length >= 3
                     ? <Polygon<Object>>[
@@ -780,6 +975,56 @@ class _MapPageState extends State<MapPage> {
                     ),
                   ),
           ),
+          if (_edificacoesAtivas &&
+              (_carregandoEdificacoes || _avisoEdificacoes != null))
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 76,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceCard,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 8,
+                    children: [
+                      if (_carregandoEdificacoes)
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primaryLime,
+                          ),
+                        )
+                      else
+                        const Icon(
+                          Icons.apartment,
+                          size: 16,
+                          color: AppColors.layerEdificacao,
+                        ),
+                      Text(
+                        _carregandoEdificacoes
+                            ? 'Carregando edifícios...'
+                            : _avisoEdificacoes!,
+                        style: const TextStyle(
+                          color: AppColors.textWhite,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           if (_carregando && _todosAtivos.isEmpty)
             Container(
               color: Colors.black45,
