@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/filter_chip.dart';
 import 'package:frontend_tecsys/pages/study_form.dart';
 import 'package:frontend_tecsys/utils/map_utils.dart';
+import 'package:frontend_tecsys/widgets/study_area_step.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -38,6 +40,8 @@ class _MapPageState extends State<MapPage> {
   List<DistribuidoraResumo> _distribuidoras = [];
   String? _distribuidoraSelecionada;
   String? _municipioSelecionado;
+  String? _bairroSelecionado;
+  String? _estadoSelecionado;
   double _currentZoom = 3.8;
   String _textoBusca = '';
 
@@ -55,9 +59,15 @@ class _MapPageState extends State<MapPage> {
   bool _cargaInicialFeita = false;
 
   static const int _limiteAtivos = 3000;
+  static const String _terrainSourceId = 'study-terrain-dem';
 
   List<latlong2.LatLng> polygonPoints = [];
-  bool isDrawing = true;
+  List<double?> _relevoPontos = [];
+  List<Future<void>> _consultasRelevo = [];
+  int _polygonRevision = 0;
+  final Completer<void> _terrainReady = Completer<void>();
+  String? _erroRelevo;
+  bool isDrawing = false;
 
   @override
   void initState() {
@@ -93,22 +103,164 @@ class _MapPageState extends State<MapPage> {
     controller.addInteraction(
       TapInteraction.onMap((context) {
         if (!isDrawing) return;
-        final point = context.point;
-        setState(() {
-          polygonPoints.add(
-            latlong2.LatLng(
-              point.coordinates.lat.toDouble(),
-              point.coordinates.lng.toDouble(),
-            ),
-          );
-        });
-        _atualizarPoligono();
+        _adicionarPontoDesenho(context.point);
       }),
     );
 
     _mapaPronto = true;
     _tentarCargaInicial();
   }
+
+  void _onStyleLoaded(StyleLoadedEventData _) {
+    unawaited(
+      _configurarRelevo().whenComplete(() {
+        if (!_terrainReady.isCompleted) _terrainReady.complete();
+      }),
+    );
+  }
+
+  Future<void> _configurarRelevo() async {
+    final map = _mapboxMap;
+    if (map == null) return;
+
+    try {
+      if (!await map.styleSourceExists(_terrainSourceId)) {
+        await map.addStyleSource(
+          _terrainSourceId,
+          jsonEncode({
+            'type': 'raster-dem',
+            'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            'tileSize': 514,
+          }),
+        );
+      }
+      await map.setStyleTerrain(
+        jsonEncode({'source': _terrainSourceId, 'exaggeration': 1.0}),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Falha ao configurar o relevo do Mapbox: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        setState(() {
+          _erroRelevo =
+              'Não foi possível carregar a fonte de relevo do Mapbox.';
+        });
+      }
+    }
+  }
+
+  void _adicionarPontoDesenho(Point point) {
+    final map = _mapboxMap;
+    if (map == null) return;
+
+    late final int indice;
+    late final int revisao;
+    setState(() {
+      polygonPoints.add(
+        latlong2.LatLng(
+          point.coordinates.lat.toDouble(),
+          point.coordinates.lng.toDouble(),
+        ),
+      );
+      _relevoPontos.add(null);
+      indice = _relevoPontos.length - 1;
+      revisao = _polygonRevision;
+    });
+    _atualizarPoligono();
+    final consulta = _consultarRelevoDoPonto(map, point, indice, revisao);
+    _consultasRelevo.add(consulta);
+    unawaited(consulta);
+  }
+
+  Future<void> _consultarRelevoDoPonto(
+    MapboxMap map,
+    Point point,
+    int indice,
+    int revisao,
+  ) async {
+    try {
+      await _terrainReady.future;
+      final elevation = await map.getElevation(point);
+      if (!mounted ||
+          revisao != _polygonRevision ||
+          indice >= _relevoPontos.length) {
+        return;
+      }
+
+      setState(() {
+        _relevoPontos[indice] = elevation;
+      });
+    } catch (error, stackTrace) {
+      if (!mounted ||
+          revisao != _polygonRevision ||
+          indice >= _relevoPontos.length) {
+        return;
+      }
+      debugPrint('Falha ao consultar o relevo de um ponto: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      setState(() {
+        _relevoPontos[indice] = null;
+        _erroRelevo = 'Falha ao consultar o relevo dos pontos desenhados.';
+      });
+    }
+  }
+
+  void _limparPontosDesenho() {
+    polygonPoints = [];
+    _relevoPontos = [];
+    _consultasRelevo = [];
+    _polygonRevision++;
+    _erroRelevo = null;
+  }
+
+  void _refazerDesenhoArea() {
+    setState(() {
+      _limparPontosDesenho();
+    });
+    _atualizarPoligono();
+  }
+
+  bool _ativoDentroDaArea(AtivoBdgd ativo) {
+    if (polygonPoints.length < 3) return false;
+
+    var dentro = false;
+    for (
+      var i = 0, j = polygonPoints.length - 1;
+      i < polygonPoints.length;
+      j = i++
+    ) {
+      final atual = polygonPoints[i];
+      final anterior = polygonPoints[j];
+      final cruzaLatitude =
+          (atual.latitude > ativo.latitude) !=
+          (anterior.latitude > ativo.latitude);
+      if (!cruzaLatitude) continue;
+
+      final longitudeIntersecao =
+          (anterior.longitude - atual.longitude) *
+              (ativo.latitude - atual.latitude) /
+              (anterior.latitude - atual.latitude) +
+          atual.longitude;
+      if (ativo.longitude < longitudeIntersecao) dentro = !dentro;
+    }
+    return dentro;
+  }
+
+  int get _ativosNaArea => _todosAtivos
+      .where(
+        (ativo) =>
+            _municipioSelecionado == null ||
+            ativo.municipio == _municipioSelecionado,
+      )
+      .where(_ativoDentroDaArea)
+      .length;
+
+  String get _locationLabel => [
+    _distribuidoraSelecionada,
+    _estadoSelecionado,
+    _municipioSelecionado,
+    _bairroSelecionado,
+  ].where((value) => value != null && value.trim().isNotEmpty).join(' · ');
 
   Future<void> _atualizarAnnotations() async {
     if (_pointAnnotationManager == null) return;
@@ -272,18 +424,18 @@ class _MapPageState extends State<MapPage> {
     try {
       final distribuidoras = await _ativosService.getDistribuidoras();
 
-      if (!mounted || distribuidoras.isEmpty) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _distribuidoras = distribuidoras;
-        _distribuidoraSelecionada = distribuidoras.first.nome;
+        _distribuidoraSelecionada = distribuidoras.isEmpty
+            ? null
+            : distribuidoras.first.nome;
         _distribuidorasProntas = true;
         _carregando = false;
       });
 
-      _tentarCargaInicial();
+      if (distribuidoras.isNotEmpty) _tentarCargaInicial();
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -301,25 +453,47 @@ class _MapPageState extends State<MapPage> {
       return;
     }
 
+    final correspondentes = _distribuidoras.where(
+      (item) => item.nome == distribuidora,
+    );
+    final selecionada = correspondentes.isEmpty ? null : correspondentes.first;
     setState(() {
       _distribuidoraSelecionada = distribuidora;
+      _estadoSelecionado = selecionada?.uf;
       _todosAtivos = [];
       _ativoSelecionado = null;
       _municipioSelecionado = null;
+      _bairroSelecionado = null;
       _textoBusca = '';
       _buscaController.clear();
+      _limparPontosDesenho();
+      isDrawing = false;
       _carregando = true;
     });
 
+    _atualizarPoligono();
     await _atualizarAnnotations();
     _agendarCarregamento();
+  }
+
+  void _selecionarMunicipioDoFiltro(String? municipio) {
+    if (_municipioSelecionado == municipio) return;
+
+    setState(() {
+      _municipioSelecionado = municipio;
+      if (isDrawing) {
+        _limparPontosDesenho();
+        isDrawing = false;
+        _bairroSelecionado = null;
+      }
+    });
+    _atualizarPoligono();
   }
 
   Future<void> _iniciarEstudo() async {
     await SelectionBottomSheet.show<String>(
       context: context,
-      title: 'Selecionar distribuidora',
-      subtitle: 'Os ativos serão recarregados para a região escolhida.',
+      title: 'Distribuidora',
       stepLabel: 'PASSO 1 DE 4',
       searchHint: 'Buscar distribuidora',
       notFoundMessage: _distribuidoras.isEmpty
@@ -331,10 +505,20 @@ class _MapPageState extends State<MapPage> {
       selectedValue: _distribuidoraSelecionada,
       onSelected: (distribuidoraNome) async {
         if (distribuidoraNome == null) {
+          _debounceTimer?.cancel();
+          setState(() {
+            _distribuidoraSelecionada = null;
+            _estadoSelecionado = null;
+            _municipioSelecionado = null;
+            _bairroSelecionado = null;
+            _todosAtivos = [];
+            _carregando = false;
+            _limparPontosDesenho();
+            isDrawing = false;
+          });
           await _abrirCidadeBairroDoEstudo();
           return;
         }
-
         await _selecionarDistribuidoraParaEstudo(distribuidoraNome);
       },
     );
@@ -344,17 +528,25 @@ class _MapPageState extends State<MapPage> {
     if (!mounted) return;
 
     _debounceTimer?.cancel();
+    final distribuidoraSelecionada = _distribuidoras
+        .where((item) => item.nome == distribuidora)
+        .first;
 
     setState(() {
       _distribuidoraSelecionada = distribuidora;
+      _estadoSelecionado = distribuidoraSelecionada.uf;
       _todosAtivos = [];
       _ativoSelecionado = null;
       _municipioSelecionado = null;
+      _bairroSelecionado = null;
       _textoBusca = '';
       _buscaController.clear();
+      _limparPontosDesenho();
+      isDrawing = false;
       _carregando = true;
     });
 
+    await _atualizarPoligono();
     try {
       await _carregarDados();
       if (!mounted) return;
@@ -394,6 +586,7 @@ class _MapPageState extends State<MapPage> {
           cidades: cidades,
           bairrosPorCidade: bairrosPorCidade,
           cidadeSelecionada: _municipioSelecionado,
+          bairroSelecionado: _bairroSelecionado,
           stepLabel: 'PASSO 2 DE 4',
           breadcrumb: _distribuidoraSelecionada != null
               ? '$_distribuidoraSelecionada · Selecione o município'
@@ -401,10 +594,16 @@ class _MapPageState extends State<MapPage> {
           notFoundMessage: cidades.isEmpty
               ? 'Nenhuma cidade encontrada para a distribuidora selecionada.'
               : 'Não encontrada',
+          allowEmptySelection: cidades.isEmpty,
           onProsseguir: (cidade, bairro) {
+            if (cidade == null && cidades.isNotEmpty) return;
             setState(() {
               _municipioSelecionado = cidade;
+              _bairroSelecionado = bairro;
+              isDrawing = true;
+              _limparPontosDesenho();
             });
+            _atualizarPoligono();
           },
         );
       },
@@ -502,7 +701,7 @@ class _MapPageState extends State<MapPage> {
                       ),
                       onTap: () {
                         Navigator.pop(context);
-                        setState(() => _municipioSelecionado = null);
+                        _selecionarMunicipioDoFiltro(null);
                       },
                     ),
                     ...municipios.map(
@@ -516,7 +715,7 @@ class _MapPageState extends State<MapPage> {
                         ),
                         onTap: () {
                           Navigator.pop(context);
-                          setState(() => _municipioSelecionado = municipio);
+                          _selecionarMunicipioDoFiltro(municipio);
                         },
                       ),
                     ),
@@ -592,73 +791,48 @@ class _MapPageState extends State<MapPage> {
   bool get _areaDesenhada => polygonPoints.length >= 3;
 
   void _cancelarArea() {
-    setState(() => polygonPoints = []);
+    setState(() {
+      _limparPontosDesenho();
+      isDrawing = false;
+      _municipioSelecionado = null;
+      _bairroSelecionado = null;
+    });
     _atualizarPoligono();
   }
 
   Future<void> _prosseguirArea() async {
+    final revisao = _polygonRevision;
+    setState(() => isDrawing = false);
+    final consultasRelevo = List<Future<void>>.of(_consultasRelevo);
+    await Future.wait(consultasRelevo);
+    if (!mounted || revisao != _polygonRevision) return;
+
     final estudoCriado = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => NovoEstudoPage(
           distribuidora: _distribuidoraSelecionada ?? '',
           municipio: _municipioSelecionado,
+          bairro: _bairroSelecionado,
+          uf: _estadoSelecionado,
           areaKm2: calculatePolygonAreaKm2(polygonPoints),
           pontosArea: List.unmodifiable(polygonPoints),
+          relevoPontos: List.unmodifiable(_relevoPontos),
         ),
       ),
     );
 
     if (estudoCriado == true && mounted) {
-      setState(() => polygonPoints = []);
+      setState(() {
+        _limparPontosDesenho();
+        isDrawing = false;
+        _municipioSelecionado = null;
+        _bairroSelecionado = null;
+      });
       _atualizarPoligono();
+    } else if (mounted) {
+      setState(() => isDrawing = true);
     }
-  }
-
-  Widget _buildBotoesArea() {
-    return Row(
-      spacing: 12,
-      children: [
-        Expanded(
-          child: OutlinedButton(
-            onPressed: _cancelarArea,
-            style: OutlinedButton.styleFrom(
-              backgroundColor: AppColors.surfaceCard,
-              foregroundColor: AppColors.textWhite,
-              side: const BorderSide(color: AppColors.border),
-              padding: const EdgeInsets.symmetric(vertical: 17),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Cancelar',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ),
-        Expanded(
-          flex: 2,
-          child: ElevatedButton(
-            onPressed: _prosseguirArea,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryLime,
-              foregroundColor: AppColors.textDark,
-              elevation: 6,
-              padding: const EdgeInsets.symmetric(vertical: 17),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
-            ),
-            child: const Text(
-              'Prosseguir',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   @override
@@ -675,123 +849,134 @@ class _MapPageState extends State<MapPage> {
               zoom: _currentZoom,
             ),
             onMapCreated: _onMapCreated,
+            onStyleLoadedListener: _onStyleLoaded,
           ),
-          Positioned(
-            top: 10,
-            left: 15,
-            right: 15,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 10,
-              children: [
-                Row(
-                  spacing: 10,
-                  children: [
-                    Expanded(
-                      child: MapSearchBar(
-                        controller: _buscaController,
-                        onChanged: _aplicarBusca,
+          if (!isDrawing)
+            Positioned(
+              top: 10,
+              left: 15,
+              right: 15,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 10,
+                children: [
+                  Row(
+                    spacing: 10,
+                    children: [
+                      Expanded(
+                        child: MapSearchBar(
+                          controller: _buscaController,
+                          onChanged: _aplicarBusca,
+                        ),
                       ),
-                    ),
-                    LayerFilterButton(
-                      onPressed: _abrirPainelCamadas,
-                      activeLayersCount: _totalCamadasAtivas,
-                    ),
-                  ],
-                ),
-                Row(
-                  spacing: 10,
-                  children: [
-                    FilterChipWidget(
-                      label: _distribuidoraSelecionada ?? 'DIST.',
-                      isSelected: true,
-                      onTap: () {
-                        SelectionBottomSheet.show<String>(
-                          context: context,
-                          title: 'Selecionar distribuidora',
-                          subtitle: 'Os ativos serão recarregados para a região escolhida.',
-                          items: _distribuidoras
-                              .map(
-                                (dist) => SelectionItem(
-                                  title: dist.nome,
-                                  value: dist.nome,
-                                ),
-                              )
-                              .toList(),
-                          selectedValue: _distribuidoraSelecionada,
-                          onSelected: (distribuidoraNome) {
-                            _selecionarDistribuidora(distribuidoraNome);
-                          },
-                        );
-                      },
-                    ),
-                    FilterChipWidget(
-                      label: _municipioSelecionado ?? 'Cidade / bairro',
-                      onTap: _abrirFiltroMunicipio,
-                    ),
-                  ],
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: MapNavigationControls(
-                    onZoomIn: _zoomIn,
-                    onZoomOut: _zoomOut,
-                    onLocationPressed: _onLocationPressed,
+                      LayerFilterButton(
+                        onPressed: _abrirPainelCamadas,
+                        activeLayersCount: _totalCamadasAtivas,
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  Row(
+                    spacing: 10,
+                    children: [
+                      FilterChipWidget(
+                        label: _distribuidoraSelecionada ?? 'DIST.',
+                        isSelected: true,
+                        onTap: () {
+                          SelectionBottomSheet.show<String>(
+                            context: context,
+                            title: 'Selecionar distribuidora',
+                            subtitle: 'Os ativos serão recarregados para a região escolhida.',
+                            items: _distribuidoras
+                                .map(
+                                  (dist) => SelectionItem(
+                                    title: dist.nome,
+                                    value: dist.nome,
+                                  ),
+                                )
+                                .toList(),
+                            selectedValue: _distribuidoraSelecionada,
+                            onSelected: (distribuidoraNome) {
+                              _selecionarDistribuidora(distribuidoraNome);
+                            },
+                          );
+                        },
+                      ),
+                      FilterChipWidget(
+                        label: _municipioSelecionado ?? 'Cidade / bairro',
+                        onTap: _abrirFiltroMunicipio,
+                      ),
+                    ],
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: MapNavigationControls(
+                      onZoomIn: _zoomIn,
+                      onZoomOut: _zoomOut,
+                      onLocationPressed: _onLocationPressed,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Positioned(
-            left: 15,
-            right: 15,
-            bottom: 10,
-            child: _areaDesenhada
-                ? _buildBotoesArea()
-                : ElevatedButton(
-                    onPressed: _iniciarEstudo,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryLime,
-                      foregroundColor: AppColors.textDark,
-                      elevation: 6,
-                      padding: const EdgeInsets.symmetric(vertical: 17),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      spacing: 8,
-                      children: [
-                        Icon(
-                          Icons.add,
-                          color: AppColors.textDark,
-                          size: 16,
-                          weight: 10.0,
-                        ),
-                        Text(
-                          'Iniciar estudo',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
+          if (isDrawing)
+            Positioned.fill(
+              child: StudyAreaStep(
+                locationLabel: _locationLabel,
+                areaDesenhada: _areaDesenhada,
+                areaKm2: calculatePolygonAreaKm2(polygonPoints),
+                ativosNaArea: _ativosNaArea,
+                onCancelar: _cancelarArea,
+                onRefazer: _refazerDesenhoArea,
+                onProsseguir: _prosseguirArea,
+              ),
+            )
+          else
+            Positioned(
+              left: 15,
+              right: 15,
+              bottom: 10,
+              child: ElevatedButton(
+                onPressed: _iniciarEstudo,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryLime,
+                  foregroundColor: AppColors.textDark,
+                  elevation: 6,
+                  padding: const EdgeInsets.symmetric(vertical: 17),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-          ),
+                  shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  spacing: 8,
+                  children: [
+                    Icon(
+                      Icons.add,
+                      color: AppColors.textDark,
+                      size: 16,
+                      weight: 10.0,
+                    ),
+                    Text(
+                      'Iniciar estudo',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           if (_carregando && _todosAtivos.isEmpty)
             Container(
               color: Colors.black45,
               child: const Center(
-                child: CircularProgressIndicator(
-                    color: AppColors.primaryLime,
-                ),
+                child: CircularProgressIndicator(color: AppColors.primaryLime),
               ),
             ),
-          if (_erro != null)
+          if (_erro != null || _erroRelevo != null)
             Positioned(
               left: 24,
               right: 24,
@@ -801,7 +986,7 @@ class _MapPageState extends State<MapPage> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
-                    _erro!,
+                    [_erro, _erroRelevo].whereType<String>().join('\n'),
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: AppColors.textWhite),
                   ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:frontend_tecsys/models/install_criterion.dart';
 import 'package:frontend_tecsys/models/install_criterion_draft.dart';
 import 'package:frontend_tecsys/pages/install_criterion_form.dart';
 
@@ -32,17 +33,7 @@ void main() {
     );
     expect(
       draft.validatePayload({
-        'relevo': {'declividade_maxima_graus': 91},
-      }),
-      isNotNull,
-    );
-    expect(
-      draft.validatePayload({
-        'relevo': {
-          'altitude_minima_m': -100,
-          'altitude_maxima_m': 0,
-          'declividade_maxima_graus': 90,
-        },
+        'relevo': {'altitude_minima_m': -100, 'altitude_maxima_m': 0},
       }),
       isNull,
     );
@@ -53,6 +44,21 @@ void main() {
     expect(InstallCriterionDraft.validateOptionalNumber('Infinity'), isNotNull);
     expect(InstallCriterionDraft.validateOptionalNumber('-1'), isNotNull);
   });
+
+  test('legacy slope is omitted when editing a criterion', () {
+    final criterion = InstallCriterion(
+      id: 1,
+      userId: 1,
+      name: 'Critério existente',
+      relief: {'altitude_minima_m': 10, 'declividade_maxima_graus': 91},
+    );
+    final draft = InstallCriterionDraft(original: criterion);
+
+    final payload = draft.toPayload(userId: 1);
+
+    expect(payload['relevo'], {'altitude_minima_m': 10});
+  });
+
   testWidgets(
     'invalid altitude interval stays in the form without calling API',
     (tester) async {

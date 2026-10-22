@@ -35,7 +35,7 @@ class EstudosService {
   ) async {
     final response = await _client
         .patch(
-          Uri.parse('$_baseUrl/estudos/$id'),
+          Uri.parse('$_baseUrl/study/$id'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(values),
         )
@@ -45,7 +45,7 @@ class EstudosService {
 
   Future<void> delete(int id) async {
     final response = await _client
-        .delete(Uri.parse('$_baseUrl/estudos/$id'))
+        .delete(Uri.parse('$_baseUrl/study/$id'))
         .timeout(const Duration(seconds: 15));
     if (response.statusCode != 204) _readStudy(response, 204);
   }
@@ -70,7 +70,7 @@ class EstudosService {
   }
 
   Future<List<Map<String, dynamic>>> list({int? userId}) async {
-    final uri = Uri.parse('$_baseUrl/estudos');
+    final uri = Uri.parse('$_baseUrl/study');
     final requestUri = userId == null
         ? uri
         : uri.replace(queryParameters: {'id_usuario': '$userId'});
@@ -97,7 +97,7 @@ class EstudosService {
   Future<Map<String, dynamic>> criarEstudo(NovoEstudo estudo) async {
     final resposta = await _client
         .post(
-          Uri.parse('$_baseUrl/estudos'),
+          Uri.parse('$_baseUrl/create-study'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(estudo.toJson()),
         )
@@ -116,6 +116,28 @@ class EstudosService {
       throw const FormatException('Resposta de criação de estudo inválida.');
     }
     return Map<String, dynamic>.from(corpo['estudo'] as Map);
+  }
+
+  Future<Map<String, dynamic>> criarPontoEstudo(NovoEstudoPonto ponto) async {
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/study/${ponto.idEstudo}/points'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(ponto.toJson()),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    final body = response.body.isEmpty ? null : jsonDecode(response.body);
+    if (response.statusCode != 201) {
+      final message = body is Map && body['message'] != null
+          ? body['message'].toString()
+          : 'A API de estudos respondeu com HTTP ${response.statusCode}.';
+      throw StateError(message);
+    }
+    if (body is! Map || body['data'] is! Map) {
+      throw const FormatException('Resposta de criação do ponto inválida.');
+    }
+    return Map<String, dynamic>.from(body['data'] as Map);
   }
 }
 

@@ -142,7 +142,7 @@ class AtivosService {
 
   Future<List<DistribuidoraResumo>> getDistribuidoras() async {
     final response = await _client
-        .get(Uri.parse('$_baseUrl/api/distribuidoras'))
+        .get(Uri.parse('$_baseUrl/distribuidoras'))
         .timeout(const Duration(seconds: 15));
 
     if (response.statusCode != 200) {
@@ -208,7 +208,7 @@ class AtivosService {
       query['busca'] = busca;
     }
 
-    final uri = Uri.parse('$_baseUrl/api/ativos').replace(
+    final uri = Uri.parse('$_baseUrl/ativos').replace(
       queryParameters: query,
     );
 
