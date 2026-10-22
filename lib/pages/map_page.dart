@@ -48,7 +48,7 @@ class _MapPageState extends State<MapPage> {
   VegetacaoConfig? _vegetacaoConfig;
   bool _vegetacaoAtiva = false;
   bool _antenasAtivas = false;
-  bool _legendaVegetacaoVisivel = true;
+  bool _legendaExpandida = false;
   Map<TipoAtivo, bool> _camadasAtivas =
       CatalogoCamadas.obterEstadoInicialPadrao();
   AtivoBdgd? _ativoSelecionado;
@@ -866,84 +866,120 @@ class _MapPageState extends State<MapPage> {
             Positioned(
               left: 15,
               bottom: 90,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  MapSwitch(
-                    label: 'Legenda',
-                    value: _legendaVegetacaoVisivel,
-                    onChanged: (valor) {
-                      setState(() {
-                        _legendaVegetacaoVisivel = valor;
-                      });
-                    },
+              child: Container(
+                width: _legendaExpandida ? 220 : 160,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppColors.border,
                   ),
-
-    
-                  if (_legendaVegetacaoVisivel) ...[
-                    const SizedBox(height: 6),
-                    Card(
-                      color: AppColors.surfaceCard,
-                      child: SizedBox(
-                        width: 220,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _legendaExpandida = !_legendaExpandida;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
                         child: Padding(
-                          padding: const EdgeInsets.all(10),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          child: Row(
                             children: [
-                              const Text(
-                                'Tipos de Vegetação',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textWhite,
+                              const Expanded(
+                                child: Text(
+                                  'Legenda',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textWhite,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 6),
-
-                              for (final classe in _vegetacaoConfig!.classes)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 2,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          color: Color(
-                                            int.parse(
-                                              'FF${classe.cor.replaceFirst('#', '')}',
-                                              radix: 16,
-                                            ),
-                                          ),
-                                          borderRadius: BorderRadius.circular(2),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          '${classe.codigo} · ${classe.nome}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 10,
-                                            color: AppColors.textWhite,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              Icon(
+                                _legendaExpandida
+                                    ? Icons.close_fullscreen
+                                    : Icons.open_in_full,
+                                size: 17,
+                                color: AppColors.textWhite,
+                              ),
                             ],
                           ),
                         ),
                       ),
                     ),
+          
+                    if (_legendaExpandida) ...[
+                      const Divider(
+                        height: 1,
+                        color: AppColors.border,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Tipos de Vegetação',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textWhite,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+          
+                            for (final classe in _vegetacaoConfig!.classes)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: Color(
+                                          int.parse(
+                                            'FF${classe.cor.replaceFirst('#', '')}',
+                                            radix: 16,
+                                          ),
+                                        ),
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        '${classe.codigo} · ${classe.nome}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.textWhite,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           Positioned(
