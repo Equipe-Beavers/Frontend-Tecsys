@@ -61,7 +61,6 @@ class StudyLocationStep extends StatelessWidget {
     return SelectionBottomSheet.show<DistribuidoraResumo>(
       context: context,
       title: 'Selecionar distribuidora',
-      subtitle: 'Os ativos serão recarregados para a região escolhida.',
       stepLabel: 'PASSO 1 DE 4',
       searchHint: 'Buscar distribuidora',
       notFoundMessage: distribuidoras.isEmpty
@@ -71,7 +70,6 @@ class StudyLocationStep extends StatelessWidget {
           .map(
             (distribuidora) => SelectionItem<DistribuidoraResumo>(
               title: distribuidora.nome,
-              subtitle: distribuidora.uf,
               value: distribuidora,
             ),
           )

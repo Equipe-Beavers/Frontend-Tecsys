@@ -54,7 +54,7 @@ class SelectionBottomSheet<T> extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: AppColors.surfaceCard,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (context) => SelectionBottomSheet<T>(
         title: title,
@@ -107,7 +107,7 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
     return SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.75,
+          maxHeight: MediaQuery.of(context).size.height * 0.82,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -210,7 +210,7 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? AppColors.surfaceCardLight
+                                ? AppColors.primaryLime.withValues(alpha: 0.2)
                                 : AppColors.surfaceBackground,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
@@ -224,6 +224,10 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                             borderRadius: BorderRadius.circular(12),
                             clipBehavior: Clip.antiAlias,
                             child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                              minTileHeight: 62,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -231,6 +235,7 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                                 item.title,
                                 style: TextStyle(
                                   color: AppColors.textWhite,
+                                  fontSize: 16,
                                   fontWeight: isSelected
                                       ? FontWeight.bold
                                       : FontWeight.normal,
@@ -249,7 +254,10 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                                 isSelected
                                     ? Icons.radio_button_checked
                                     : Icons.radio_button_unchecked,
-                                color: AppColors.primaryLime,
+                                color: isSelected
+                                    ? AppColors.primaryLime
+                                    : AppColors.textMuted,
+                                size: 26,
                               ),
                               onTap: () {
                                 setState(() => _selecionado = item.value);
@@ -288,7 +296,7 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                     backgroundColor: AppColors.primaryLime,
                     foregroundColor: AppColors.textDark,
                     disabledBackgroundColor: AppColors.border,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
