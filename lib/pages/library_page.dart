@@ -159,6 +159,7 @@ class _CriteriaLibraryPageState extends State<CriteriaLibraryPage> {
         profile: _selectedRfProfile,
         userId: widget.userId,
         onClose: _closeRfProfileForm,
+        calculateRange: _rfProfileService.calculateRange,
         onSave: (values) async {
           final editing = _selectedRfProfile != null;
           await _rfProfileService.save(values, id: _selectedRfProfile?.id);

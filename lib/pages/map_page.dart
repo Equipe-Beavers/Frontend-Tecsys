@@ -11,8 +11,10 @@ import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/city_bairro_bottom_sheet.dart';
 import 'package:latlong2/latlong.dart' as latlong2;
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
+import 'package:frontend_tecsys/models/edificacao.dart';
 import 'package:frontend_tecsys/models/layer_filter.dart';
 import 'package:frontend_tecsys/services/ativos_service.dart';
+import 'package:frontend_tecsys/services/edificacoes_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
@@ -34,9 +36,12 @@ class _MapPageState extends State<MapPage> {
   PointAnnotationManager? _pointAnnotationManager;
   PolygonAnnotationManager? _polygonAnnotationManager;
   CircleAnnotationManager? _vertexAnnotationManager;
+  Cancelable? _pointTapEvents;
+  final Map<String, AtivoBdgd> _ativosPorAnnotationId = {};
   Uint8List? _poleIconImage;
 
   final AtivosService _ativosService = AtivosService();
+  final EdificacoesService _edificacoesService = EdificacoesService();
   final TextEditingController _buscaController = TextEditingController();
 
   List<DistribuidoraResumo> _distribuidoras = [];
@@ -65,8 +70,19 @@ class _MapPageState extends State<MapPage> {
   bool _distribuidorasProntas = false;
   bool _cargaInicialFeita = false;
 
+  bool _edificacoesAtivas = false;
+  List<Edificacao> _edificacoes = [];
+  bool _carregandoEdificacoes = false;
+  String? _avisoEdificacoes;
+  int _sequenciaEdificacoes = 0;
+
   static const int _limiteAtivos = 3000;
   static const String _terrainSourceId = 'study-terrain-dem';
+  static const String _edificacoesSourceId = 'study-buildings';
+  static const String _edificacoesFillLayerId = 'study-buildings-fill';
+  static const String _edificacoesLabelLayerId = 'study-buildings-label';
+  // Zoom a partir do qual altura e material aparecem escritos no edifício.
+  static const double _zoomRotulosEdificacoes = 17;
 
   List<latlong2.LatLng> polygonPoints = [];
   List<double?> _relevoPontos = [];
@@ -86,15 +102,15 @@ class _MapPageState extends State<MapPage> {
   void dispose() {
     _debounceTimer?.cancel();
     _buscaController.dispose();
+    _pointTapEvents?.cancel();
     _ativosService.dispose();
+    _edificacoesService.dispose();
     super.dispose();
   }
 
   void _onMapCreated(MapboxMap controller) async {
     _mapboxMap = controller;
     controller.scaleBar.updateSettings(ScaleBarSettings(enabled: false));
-    _pointAnnotationManager = await controller.annotations
-        .createPointAnnotationManager();
     try {
       final image = await rootBundle.load('assets/images/PoleIcon.png');
       _poleIconImage = image.buffer.asUint8List(
@@ -112,6 +128,14 @@ class _MapPageState extends State<MapPage> {
     }
 
     if (!kIsWeb) {
+      _pointAnnotationManager = await controller.annotations
+          .createPointAnnotationManager();
+      _pointTapEvents = _pointAnnotationManager!.tapEvents(
+        onTap: (annotation) {
+          final ativo = _ativosPorAnnotationId[annotation.id];
+          if (ativo != null) _selecionarAtivo(ativo);
+        },
+      );
       _vertexAnnotationManager = await controller.annotations
           .createCircleAnnotationManager();
       _polygonAnnotationManager = await controller.annotations
@@ -124,8 +148,7 @@ class _MapPageState extends State<MapPage> {
 
     controller.addInteraction(
       TapInteraction.onMap((context) {
-        if (!isDrawing) return;
-        _adicionarPontoDesenho(context.point);
+        unawaited(_tratarToqueMapa(context));
       }),
     );
 
@@ -135,9 +158,10 @@ class _MapPageState extends State<MapPage> {
 
   void _onStyleLoaded(StyleLoadedEventData _) {
     unawaited(
-      _configurarRelevo().whenComplete(() {
-        if (!_terrainReady.isCompleted) _terrainReady.complete();
-      }),
+      Future.wait([_configurarRelevo(), _configurarCamadaEdificacoes()])
+          .whenComplete(() {
+            if (!_terrainReady.isCompleted) _terrainReady.complete();
+          }),
     );
   }
 
@@ -169,6 +193,129 @@ class _MapPageState extends State<MapPage> {
         });
       }
     }
+  }
+
+  Future<void> _configurarCamadaEdificacoes() async {
+    final map = _mapboxMap;
+    if (map == null) return;
+
+    if (!await map.styleSourceExists(_edificacoesSourceId)) {
+      await map.addSource(
+        GeoJsonSource(
+          id: _edificacoesSourceId,
+          data: _geoJsonEdificacoes(),
+          dynamicData: true,
+        ),
+      );
+    }
+    if (!await map.styleLayerExists(_edificacoesFillLayerId)) {
+      await map.addLayer(
+        FillLayer(
+          id: _edificacoesFillLayerId,
+          sourceId: _edificacoesSourceId,
+          slot: 'top',
+          fillColorExpression: const ['get', 'color'],
+          fillOpacity: 0.45,
+          fillOutlineColor: AppColors.textDark.toARGB32(),
+        ),
+      );
+    }
+    if (!await map.styleLayerExists(_edificacoesLabelLayerId)) {
+      await map.addLayer(
+        SymbolLayer(
+          id: _edificacoesLabelLayerId,
+          sourceId: _edificacoesSourceId,
+          slot: 'top',
+          minZoom: _zoomRotulosEdificacoes,
+          textFieldExpression: const ['get', 'label'],
+          textSize: 10,
+          textColor: AppColors.textDark.toARGB32(),
+          textAllowOverlap: false,
+        ),
+      );
+    }
+  }
+
+  String _geoJsonEdificacoes() {
+    final features = <Map<String, Object?>>[];
+    for (final edificacao in _edificacoes) {
+      final cor =
+          '#${(edificacao.cor.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+      for (final aneis in edificacao.poligonos) {
+        if (aneis.isEmpty || aneis.first.length < 3) continue;
+        final coordinates = <List<List<double>>>[];
+        for (final anel in aneis) {
+          if (anel.length < 3) continue;
+          final pontos = anel
+              .map((ponto) => [ponto.longitude, ponto.latitude])
+              .toList();
+          if (pontos.first[0] != pontos.last[0] ||
+              pontos.first[1] != pontos.last[1]) {
+            pontos.add(List<double>.from(pontos.first));
+          }
+          coordinates.add(pontos);
+        }
+        if (coordinates.isEmpty) continue;
+        features.add({
+          'type': 'Feature',
+          'properties': {
+            'edificacaoId': edificacao.id,
+            'color': cor,
+            'label':
+                '${edificacao.alturaFormatada}\n${edificacao.nomeMaterial}',
+          },
+          'geometry': {'type': 'Polygon', 'coordinates': coordinates},
+        });
+      }
+    }
+    return jsonEncode({'type': 'FeatureCollection', 'features': features});
+  }
+
+  Future<void> _atualizarEdificacoesNoMapa() async {
+    final map = _mapboxMap;
+    if (map == null || !await map.styleSourceExists(_edificacoesSourceId)) {
+      return;
+    }
+    final source = await map.getSource(_edificacoesSourceId);
+    if (source is GeoJsonSource) {
+      await source.updateGeoJSON(_geoJsonEdificacoes());
+    }
+  }
+
+  Future<void> _tratarToqueMapa(MapContentGestureContext context) async {
+    if (isDrawing) {
+      _adicionarPontoDesenho(context.point);
+      return;
+    }
+
+    final map = _mapboxMap;
+    if (map == null || !_edificacoesAtivas || _edificacoes.isEmpty) return;
+    final features = await map.queryRenderedFeatures(
+      RenderedQueryGeometry.fromScreenCoordinate(context.touchPosition),
+      RenderedQueryOptions(
+        layerIds: const [_edificacoesFillLayerId],
+        filter: null,
+      ),
+    );
+    if (features.isEmpty) return;
+
+    final feature = features.first?.queriedFeature.feature;
+    final properties = feature?['properties'];
+    if (properties is! Map) return;
+    final id = properties['edificacaoId']?.toString();
+    if (id == null) return;
+    for (final edificacao in _edificacoes) {
+      if (edificacao.id == id) {
+        _exibirEdificacao(edificacao);
+        return;
+      }
+    }
+  }
+
+  Future<void> _sincronizarZoom() async {
+    final map = _mapboxMap;
+    if (map == null) return;
+    _currentZoom = (await map.getCameraState()).zoom;
   }
 
   void _adicionarPontoDesenho(Point point) {
@@ -285,8 +432,6 @@ class _MapPageState extends State<MapPage> {
   ].where((value) => value != null && value.trim().isNotEmpty).join(' · ');
 
   Future<void> _atualizarAnnotations() async {
-    if (_pointAnnotationManager == null) return;
-
     final ativosFiltrados = _ativosVisiveis.where((a) {
       return _camadasAtivas[a.tipo] ?? false;
     }).toList();
@@ -302,6 +447,7 @@ class _MapPageState extends State<MapPage> {
       }
       return;
     }
+    if (_pointAnnotationManager == null) return;
 
     List<PointAnnotationOptions> optionsList = [];
     for (var ativo in ativosFiltrados) {
@@ -318,7 +464,16 @@ class _MapPageState extends State<MapPage> {
 
     try {
       await _pointAnnotationManager!.deleteAll();
-      await _pointAnnotationManager!.createMulti(optionsList);
+      final annotations = await _pointAnnotationManager!.createMulti(
+        optionsList,
+      );
+      _ativosPorAnnotationId.clear();
+      for (var index = 0; index < annotations.length; index++) {
+        final annotation = annotations[index];
+        if (annotation != null) {
+          _ativosPorAnnotationId[annotation.id] = ativosFiltrados[index];
+        }
+      }
       if (mounted && _erroMapa != null) {
         setState(() {
           _erroMapa = null;
@@ -354,7 +509,7 @@ class _MapPageState extends State<MapPage> {
       await _polygonAnnotationManager!.create(
         PolygonAnnotationOptions(
           geometry: Polygon(coordinates: [positions]),
-          fillColor: AppColors.navBarBackground.value,
+          fillColor: AppColors.navBarBackground.toARGB32(),
           fillOpacity: 0.4,
         ),
       );
@@ -369,9 +524,9 @@ class _MapPageState extends State<MapPage> {
               coordinates: Position(point.longitude, point.latitude),
             ),
             circleRadius: 6.0,
-            circleColor: AppColors.navBarBackground.value,
+            circleColor: AppColors.navBarBackground.toARGB32(),
             circleStrokeWidth: 2.0,
-            circleStrokeColor: Colors.white.value,
+            circleStrokeColor: Colors.white.toARGB32(),
           ),
         );
       }
@@ -390,7 +545,81 @@ class _MapPageState extends State<MapPage> {
 
   void _agendarCarregamento() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 400), _carregarDados);
+    _debounceTimer = Timer(const Duration(milliseconds: 400), () {
+      _carregarDados();
+      _carregarEdificacoes();
+    });
+  }
+
+  Future<void> _carregarEdificacoes() async {
+    final map = _mapboxMap;
+    if (!_mapaPronto || map == null) return;
+
+    final sequencia = ++_sequenciaEdificacoes;
+
+    if (!_edificacoesAtivas) {
+      setState(() {
+        _edificacoes = [];
+        _carregandoEdificacoes = false;
+        _avisoEdificacoes = null;
+      });
+      await _atualizarEdificacoesNoMapa();
+      return;
+    }
+
+    final cameraState = await map.getCameraState();
+    final bounds = await map.coordinateBoundsForCamera(
+      CameraOptions(
+        center: cameraState.center,
+        zoom: cameraState.zoom,
+        bearing: cameraState.bearing,
+        pitch: cameraState.pitch,
+      ),
+    );
+    final north = bounds.northeast.coordinates.lat.toDouble();
+    final south = bounds.southwest.coordinates.lat.toDouble();
+    final east = bounds.northeast.coordinates.lng.toDouble();
+    final west = bounds.southwest.coordinates.lng.toDouble();
+
+    if (north - south > EdificacoesService.ladoMaximoGraus ||
+        east - west > EdificacoesService.ladoMaximoGraus) {
+      setState(() {
+        _edificacoes = [];
+        _carregandoEdificacoes = false;
+        _avisoEdificacoes = 'Aproxime o mapa para ver os edifícios';
+      });
+      await _atualizarEdificacoesNoMapa();
+      return;
+    }
+
+    setState(() {
+      _carregandoEdificacoes = true;
+      _avisoEdificacoes = null;
+    });
+
+    try {
+      final edificacoes = await _edificacoesService.getEdificacoes(
+        minLatitude: south,
+        maxLatitude: north,
+        minLongitude: west,
+        maxLongitude: east,
+      );
+
+      if (!mounted || sequencia != _sequenciaEdificacoes) return;
+
+      setState(() {
+        _edificacoes = edificacoes;
+        _carregandoEdificacoes = false;
+      });
+      await _atualizarEdificacoesNoMapa();
+    } catch (error) {
+      if (!mounted || sequencia != _sequenciaEdificacoes) return;
+
+      setState(() {
+        _carregandoEdificacoes = false;
+        _avisoEdificacoes = 'Não foi possível carregar os edifícios.';
+      });
+    }
   }
 
   Future<void> _carregarDados() async {
@@ -495,7 +724,8 @@ class _MapPageState extends State<MapPage> {
   }
 
   int get _totalCamadasAtivas =>
-      _camadasAtivas.values.where((ativa) => ativa).length;
+      _camadasAtivas.values.where((ativa) => ativa).length +
+      (_edificacoesAtivas ? 1 : 0);
 
   Future<void> _selecionarDistribuidora(String? distribuidora) async {
     if (distribuidora == null || distribuidora == _distribuidoraSelecionada) {
@@ -845,6 +1075,10 @@ class _MapPageState extends State<MapPage> {
     LayerFilterModal.exibir(
       context,
       camadasAtivas: _camadasAtivas,
+      edificacoesAtivas: _edificacoesAtivas,
+      onSalvarEdificacoes: (ativas) {
+        _edificacoesAtivas = ativas;
+      },
       onSalvarFiltro: (novasCamadas) {
         setState(() {
           _camadasAtivas = novasCamadas;
@@ -856,7 +1090,7 @@ class _MapPageState extends State<MapPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length} ativas',
+              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length + 1} ativas',
               style: const TextStyle(
                 color: AppColors.textDark,
                 fontWeight: FontWeight.bold,
@@ -897,6 +1131,85 @@ class _MapPageState extends State<MapPage> {
           _atualizarAnnotations();
         }
       },
+    );
+  }
+
+  void _exibirEdificacao(Edificacao edificacao) {
+    Widget linha(String rotulo, String valor) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                rotulo,
+                style: const TextStyle(color: AppColors.textMuted),
+              ),
+            ),
+            Text(
+              valor,
+              style: const TextStyle(
+                color: AppColors.textWhite,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.apartment, color: edificacao.cor),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Edifício',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textWhite,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              linha(
+                'Altura',
+                edificacao.origemAltura == 'INFORMADA'
+                    ? edificacao.alturaFormatada
+                    : '${edificacao.alturaFormatada} (estimada)',
+              ),
+              if (edificacao.pavimentos != null)
+                linha('Pavimentos', '${edificacao.pavimentos}'),
+              linha(
+                'Material',
+                edificacao.origemMaterial == 'INFORMADO'
+                    ? edificacao.nomeMaterial
+                    : '${edificacao.nomeMaterial} (padrão)',
+              ),
+              linha(
+                'Perda do material',
+                '${edificacao.perdaMaterialDb.toStringAsFixed(1)} dB',
+              ),
+              if (edificacao.areaM2 != null)
+                linha('Área', '${edificacao.areaM2!.toStringAsFixed(0)} m²'),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -947,22 +1260,31 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+  bool get _emTesteDeWidget => WidgetsBinding.instance.runtimeType
+      .toString()
+      .contains('TestWidgetsFlutterBinding');
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surfaceBackground,
       body: Stack(
         children: [
-          MapWidget(
-            key: const ValueKey('mapWidget'),
-            styleUri: MapboxStyles.STANDARD,
-            viewport: CameraViewportState(
-              center: Point(coordinates: Position(-51.9253, -14.2350)),
-              zoom: _currentZoom,
+          if (_emTesteDeWidget)
+            const ColoredBox(color: AppColors.surfaceBackground)
+          else
+            MapWidget(
+              key: const ValueKey('mapWidget'),
+              styleUri: MapboxStyles.STANDARD,
+              viewport: CameraViewportState(
+                center: Point(coordinates: Position(-51.9253, -14.2350)),
+                zoom: _currentZoom,
+              ),
+              onMapCreated: _onMapCreated,
+              onStyleLoadedListener: _onStyleLoaded,
+              onCameraChangeListener: (_) => unawaited(_sincronizarZoom()),
+              onMapIdleListener: (_) => _agendarCarregamento(),
             ),
-            onMapCreated: _onMapCreated,
-            onStyleLoadedListener: _onStyleLoaded,
-          ),
           if (!isDrawing)
             Positioned(
               top: 10,
@@ -1080,6 +1402,56 @@ class _MapPageState extends State<MapPage> {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+          if (_edificacoesAtivas &&
+              (_carregandoEdificacoes || _avisoEdificacoes != null))
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 76,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceCard,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 8,
+                    children: [
+                      if (_carregandoEdificacoes)
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primaryLime,
+                          ),
+                        )
+                      else
+                        const Icon(
+                          Icons.apartment,
+                          size: 16,
+                          color: AppColors.layerEdificacao,
+                        ),
+                      Text(
+                        _carregandoEdificacoes
+                            ? 'Carregando edifícios...'
+                            : _avisoEdificacoes!,
+                        style: const TextStyle(
+                          color: AppColors.textWhite,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

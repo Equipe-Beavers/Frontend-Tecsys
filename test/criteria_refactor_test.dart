@@ -414,7 +414,14 @@ void main() {
       baseUrl: 'http://example.test/',
       client: MockClient((request) async {
         rfRequests.add(request);
-        if (request.method == 'POST') {
+        if (request.method == 'POST' &&
+            request.url.path == '/calculate-rf-range') {
+          return jsonResponse({
+            'data': {'alcance_estimado_m': 13000, 'margem_planejamento_db': 20},
+          }, 200);
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/create-rf-profile') {
           submittedPayload = jsonDecode(request.body) as Map<String, dynamic>;
           saved = true;
           return jsonResponse({'data': savedProfile}, 201);
@@ -486,6 +493,18 @@ void main() {
     expect(sensitivityField.controller?.text, '-');
     await enterField('Sensibilidade de recepção', '120');
     await enterField('Atenuação adicional', '4.2');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(find.text('13,0'), findsOneWidget);
+    final rangeRequest = rfRequests.singleWhere(
+      (request) => request.url.path == '/calculate-rf-range',
+    );
+    expect(jsonDecode(rangeRequest.body), {
+      'frequencia_mhz': 915,
+      'potencia_transmissao_dbm': 8,
+      'sensibilidade_recepcao_dbm': -120,
+      'atenuacao_adicional_db': 4.2,
+    });
     await enterField('Altura do gateway em relação ao solo', '-6');
     await enterField('Altura do dispositivo em relação ao solo', '-5');
     await tester.tap(find.text('Salvar perfil'));
@@ -494,14 +513,25 @@ void main() {
       find.text('Informe um valor igual ou maior que zero.'),
       findsNWidgets(2),
     );
-    expect(rfRequests.where((request) => request.method == 'POST'), isEmpty);
+    expect(
+      rfRequests.where(
+        (request) =>
+            request.method == 'POST' &&
+            request.url.path == '/create-rf-profile',
+      ),
+      isEmpty,
+    );
     await enterField('Altura do gateway em relação ao solo', '6');
     await enterField('Altura do dispositivo em relação ao solo', '5');
     await enterField('Máx. equipamentos atendidos', '1200');
     await tester.tap(find.text('Salvar perfil'));
     await tester.pumpAndSettle();
     expect(
-      rfRequests.where((request) => request.method == 'POST'),
+      rfRequests.where(
+        (request) =>
+            request.method == 'POST' &&
+            request.url.path == '/create-rf-profile',
+      ),
       hasLength(1),
     );
     expect(submittedPayload, {
@@ -532,7 +562,19 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      host(RFProfileForm(userId: 1, onClose: () {}, onSave: (_) async {})),
+      host(
+        RFProfileForm(
+          userId: 1,
+          onClose: () {},
+          onSave: (_) async {},
+          calculateRange: ({
+            required frequencyMhz,
+            required transmitPowerDbm,
+            required receiveSensitivityDbm,
+            required additionalAttenuationDb,
+          }) async => 1000,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Novo perfil de RF'), findsOneWidget);

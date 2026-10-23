@@ -294,13 +294,11 @@ class AtivosService {
 
     final decoded = jsonDecode(response.body);
 
-    if (decoded is! Map || decoded['active'] is! Map) {
+    if (decoded is! Map) {
       throw const FormatException('Resposta do ativo inválida.');
     }
-
-    return AtivoBdgd.fromJson(
-      Map<String, dynamic>.from(decoded['active'] as Map),
-    );
+    final ativo = decoded['active'] is Map ? decoded['active'] as Map : decoded;
+    return AtivoBdgd.fromJson(Map<String, dynamic>.from(ativo));
   }
 
   Future<AtivosResult> getAtivos({

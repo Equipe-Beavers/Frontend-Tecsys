@@ -35,7 +35,7 @@ class EstudosService {
   ) async {
     final response = await _client
         .patch(
-          Uri.parse('$_baseUrl/study/$id'),
+          Uri.parse('$_baseUrl/estudos/$id'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(values),
         )
@@ -45,7 +45,7 @@ class EstudosService {
 
   Future<void> delete(int id) async {
     final response = await _client
-        .delete(Uri.parse('$_baseUrl/study/$id'))
+        .delete(Uri.parse('$_baseUrl/estudos/$id'))
         .timeout(const Duration(seconds: 15));
     if (response.statusCode != 204) _readStudy(response, 204);
   }
@@ -70,7 +70,7 @@ class EstudosService {
   }
 
   Future<List<Map<String, dynamic>>> list({int? userId}) async {
-    final uri = Uri.parse('$_baseUrl/study');
+    final uri = Uri.parse('$_baseUrl/estudos');
     final requestUri = userId == null
         ? uri
         : uri.replace(queryParameters: {'id_usuario': '$userId'});

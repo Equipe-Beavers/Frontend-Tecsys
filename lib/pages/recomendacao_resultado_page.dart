@@ -3,6 +3,7 @@ import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
 import 'package:frontend_tecsys/services/recomendacao_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
+import 'package:frontend_tecsys/widgets/mancha_cobertura_mapa.dart';
 
 class RecomendacaoResultadoPage extends StatefulWidget {
   final int idEstudo;
@@ -138,6 +139,7 @@ class _RecomendacaoResultadoPageState
           const SizedBox(height: 12),
         ],
         _buildKpis(r),
+        ManchaCoberturaMapa(idCenario: r.idCenario),
         const SizedBox(height: 20),
         _buildCoberturaGeral(r),
         if (r.porCategoria.isNotEmpty) ...[
