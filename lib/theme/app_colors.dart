@@ -43,4 +43,5 @@ abstract class AppColors {
 
   static const Color layerRegulador = Color(0xFF4FC3F7);
   static const Color layerBancoCapacitores = Color(0xFF81C784);
+  static const Color layerEdificacao = Color(0xFFFFB74D);
 }

@@ -32,7 +32,7 @@ class RecomendacaoService implements RecommendationRepository {
     int? idCriterioInstalacao,
     String? nomeCenario,
   }) async {
-    final uri = Uri.parse('$_baseUrl/estudos/$idEstudo/recomendar');
+    final uri = Uri.parse('$_baseUrl/study/$idEstudo/recommendation');
 
     final response = await _client
         .post(
@@ -44,7 +44,7 @@ class RecomendacaoService implements RecommendationRepository {
             'nome_cenario': ?nomeCenario,
           }),
         )
-        .timeout(const Duration(seconds: 30));
+        .timeout(const Duration(seconds: 120));
 
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw StateError(

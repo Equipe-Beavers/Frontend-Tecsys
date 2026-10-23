@@ -3,12 +3,14 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../models/ativo_bdgd.dart';
+import '../../models/mancha_cenario.dart';
 import '../../models/recomendacao_resultado.dart';
 import '../../theme/app_colors.dart';
 
 List<Widget> buildRecommendationMapLayers({
   required List<GatewayProposto> gateways,
   required List<AtivoResultadoMapa> assets,
+  required List<ManchaGatewayCenario> scenarioCoverage,
   required GatewayProposto? selectedGateway,
   required ValueChanged<GatewayProposto>? onGatewayTap,
 }) => [
@@ -26,6 +28,19 @@ List<Widget> buildRecommendationMapLayers({
         ),
     ],
   ),
+  if (scenarioCoverage.any((coverage) => coverage.mancha.length >= 3))
+    PolygonLayer(
+      polygons: [
+        for (final coverage in scenarioCoverage)
+          if (coverage.mancha.length >= 3)
+            Polygon<Object>(
+              points: coverage.mancha,
+              color: AppColors.secondaryTeal.withValues(alpha: .18),
+              borderColor: AppColors.secondaryTeal.withValues(alpha: .85),
+              borderStrokeWidth: 1.6,
+            ),
+      ],
+    ),
   MarkerLayer(
     markers: [
       for (final asset in assets)

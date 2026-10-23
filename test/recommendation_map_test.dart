@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend_tecsys/mocks/recomendacao_mock.dart';
+import 'package:frontend_tecsys/models/mancha_cenario.dart';
 import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
 import 'package:frontend_tecsys/pages/gateway_detail_page.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
@@ -9,6 +10,42 @@ import 'package:frontend_tecsys/widgets/recommendation_map.dart';
 import 'package:latlong2/latlong.dart';
 
 void main() {
+  testWidgets('renders backend scenario coverage as a polygon layer', (
+    tester,
+  ) async {
+    final result = buildRecommendationMock();
+    final gateway = result.gateways.first;
+    final coverage = ManchaGatewayCenario(
+      idEstudoPonto: gateway.idEstudoPonto,
+      rotulo: gateway.rotulo,
+      posicao: LatLng(gateway.latitude, gateway.longitude),
+      alcanceMedioM: 4200,
+      mancha: const [
+        LatLng(-23.18, -45.90),
+        LatLng(-23.18, -45.87),
+        LatLng(-23.21, -45.88),
+      ],
+    );
+
+    await _pumpMap(
+      tester,
+      RecommendationMap(
+        gateways: result.gateways,
+        assets: result.ativosMapa,
+        scenarioCoverage: [coverage],
+        showBaseMap: false,
+      ),
+    );
+
+    final polygons = tester.widget<PolygonLayer>(find.byType(PolygonLayer));
+    expect(polygons.polygons, hasLength(1));
+    expect(polygons.polygons.single.points, coverage.mancha);
+    expect(
+      polygons.polygons.single.borderColor,
+      AppColors.secondaryTeal.withValues(alpha: .85),
+    );
+  });
+
   testWidgets('gateway marker is selectable from the map', (tester) async {
     tester.view.physicalSize = const Size(900, 600);
     tester.view.devicePixelRatio = 1;

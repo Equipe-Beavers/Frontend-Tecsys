@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/mancha_cenario.dart';
 import '../models/recomendacao_resultado.dart';
 import '../theme/app_colors.dart';
 import '../widgets/recommendation/gateway_details_panel.dart';
@@ -10,12 +11,14 @@ class GatewayDetailPage extends StatelessWidget {
     super.key,
     required this.gateway,
     this.assets = const [],
+    this.scenarioCoverage = const [],
     this.studyTitle,
     this.showBaseMap = true,
   });
 
   final GatewayProposto gateway;
   final List<AtivoResultadoMapa> assets;
+  final List<ManchaGatewayCenario> scenarioCoverage;
   final String? studyTitle;
   final bool showBaseMap;
 
@@ -29,6 +32,7 @@ class GatewayDetailPage extends StatelessWidget {
           final map = RecommendationMap(
             gateways: [gateway],
             assets: assets,
+            scenarioCoverage: scenarioCoverage,
             selectedGateway: gateway,
             lockPosition: true,
             showBaseMap: showBaseMap,

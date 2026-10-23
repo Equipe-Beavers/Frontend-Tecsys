@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/mancha_cenario.dart';
 import '../models/recomendacao_resultado.dart';
 import 'recommendation/recommendation_map_overlays.dart';
 import 'recommendation/recommendation_map_viewport.dart';
@@ -12,6 +13,7 @@ class RecommendationMap extends StatelessWidget {
     super.key,
     required this.gateways,
     this.assets = const [],
+    this.scenarioCoverage = const [],
     this.selectedGateway,
     this.onGatewayTap,
     this.lockPosition = false,
@@ -20,6 +22,7 @@ class RecommendationMap extends StatelessWidget {
 
   final List<GatewayProposto> gateways;
   final List<AtivoResultadoMapa> assets;
+  final List<ManchaGatewayCenario> scenarioCoverage;
   final GatewayProposto? selectedGateway;
   final ValueChanged<GatewayProposto>? onGatewayTap;
   final bool lockPosition;
@@ -39,6 +42,7 @@ class RecommendationMap extends StatelessWidget {
         ? gateways
         : <GatewayProposto>[selectedGateway!];
     final visibleAssets = _visibleAssets();
+    final visibleScenarioCoverage = _visibleScenarioCoverage();
     final centerGateway = selectedGateway ?? gateways.firstOrNull;
     final viewport = RecommendationMapViewport.fromGateways(visibleGateways);
 
@@ -61,6 +65,7 @@ class RecommendationMap extends StatelessWidget {
               layers: buildRecommendationMapLayers(
                 gateways: visibleGateways,
                 assets: visibleAssets,
+                scenarioCoverage: visibleScenarioCoverage,
                 selectedGateway: selectedGateway,
                 onGatewayTap: onGatewayTap,
               ),
@@ -98,6 +103,14 @@ class RecommendationMap extends StatelessWidget {
               (!asset.coberto &&
                   asset.idGatewayReferencia == gateway.idEstudoPonto),
         )
+        .toList();
+  }
+
+  List<ManchaGatewayCenario> _visibleScenarioCoverage() {
+    final gateway = selectedGateway;
+    if (gateway == null) return scenarioCoverage;
+    return scenarioCoverage
+        .where((coverage) => coverage.idEstudoPonto == gateway.idEstudoPonto)
         .toList();
   }
 

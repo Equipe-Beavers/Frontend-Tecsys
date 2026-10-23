@@ -102,6 +102,42 @@ class RFProfileService {
     return RFProfile.fromJson(Map<String, dynamic>.from(body['data'] as Map));
   }
 
+  Future<double> calculateRange({
+    required double frequencyMhz,
+    required double transmitPowerDbm,
+    required double receiveSensitivityDbm,
+    required double additionalAttenuationDb,
+  }) async {
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/calculate-rf-range'),
+          headers: const {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'frequencia_mhz': frequencyMhz,
+            'potencia_transmissao_dbm': transmitPowerDbm,
+            'sensibilidade_recepcao_dbm': receiveSensitivityDbm,
+            'atenuacao_adicional_db': additionalAttenuationDb,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      throw RFProfileApiException(
+        response.statusCode,
+        body['message']?.toString() ?? 'Não foi possível calcular o alcance.',
+      );
+    }
+    final data = body['data'];
+    if (data is! Map || data['alcance_estimado_m'] is! num) {
+      throw const FormatException('Não foi possível ler o alcance calculado.');
+    }
+    final rangeMeters = (data['alcance_estimado_m'] as num).toDouble();
+    if (!rangeMeters.isFinite || rangeMeters < 0) {
+      throw const FormatException('O servidor retornou um alcance inválido.');
+    }
+    return rangeMeters;
+  }
+
   Future<void> delete(int id) async {
     if (id < 1) throw ArgumentError('Identificador de perfil RF inválido.');
     final response = await _client
