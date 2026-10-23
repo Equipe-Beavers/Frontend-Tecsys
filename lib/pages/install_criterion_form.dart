@@ -42,7 +42,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
   late final TextEditingController _gatewayLimit;
   late final TextEditingController _minimumAltitude;
   late final TextEditingController _maximumAltitude;
-  late final TextEditingController _maximumSlope;
   late final TextEditingController _buildingAnalysisRadius;
   late final TextEditingController _buildingMaximumQuantity;
   late final TextEditingController _buildingMaximumHeight;
@@ -79,9 +78,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
     );
     _maximumAltitude = TextEditingController(
       text: _sectionText(_draft.relief, 'altitude_maxima_m'),
-    );
-    _maximumSlope = TextEditingController(
-      text: _sectionText(_draft.relief, 'declividade_maxima_graus'),
     );
     _buildingAnalysisRadius = TextEditingController(
       text: _sectionText(_draft.buildings, 'raio_analise_m'),
@@ -138,7 +134,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
       _gatewayLimit,
       _minimumAltitude,
       _maximumAltitude,
-      _maximumSlope,
       _buildingAnalysisRadius,
       _buildingMaximumQuantity,
       _buildingMaximumHeight,
@@ -197,7 +192,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
       reliefValues: {
         'altitude_minima_m': _optionalNumber(_minimumAltitude.text),
         'altitude_maxima_m': _optionalNumber(_maximumAltitude.text),
-        'declividade_maxima_graus': _optionalNumber(_maximumSlope.text),
       },
       buildingValues: {
         'raio_analise_m': _optionalNumber(_buildingAnalysisRadius.text),
@@ -521,28 +515,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 16),
-          FormFieldWrapper(
-            title: 'Declividade em graus',
-            titleColor: const Color(0xFFABC2BC),
-            child: TextFormField(
-              key: _fieldKeys.putIfAbsent(
-                '_maximumSlope',
-                () => GlobalKey<FormFieldState<String>>(),
-              ),
-              controller: _maximumSlope,
-              enabled: !_saving,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: _decoration(
-                'Máxima',
-                insideAppPanel: true,
-              ).copyWith(suffixText: '°'),
-              validator: InstallCriterionDraft.validateOptionalNumber,
-              onChanged: (_) => setState(() => _dirty = true),
-            ),
           ),
         ],
       ),
@@ -1039,11 +1011,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                         _section(
                           _relief(),
                           'relief',
-                          _numericSummary([
-                            _minimumAltitude,
-                            _maximumAltitude,
-                            _maximumSlope,
-                          ]),
+                          _numericSummary([_minimumAltitude, _maximumAltitude]),
                         ),
                         _section(
                           _vegetation(),
