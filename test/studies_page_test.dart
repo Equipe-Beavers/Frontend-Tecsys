@@ -10,6 +10,8 @@ import 'package:frontend_tecsys/services/install_criterion_service.dart';
 import 'package:frontend_tecsys/services/rf_profile_service.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/name_filter_field.dart';
+import 'package:frontend_tecsys/widgets/primary_button.dart';
+import 'package:frontend_tecsys/widgets/secondary_button.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -198,6 +200,42 @@ void main() {
     );
     expect(study.toJson()['geom'], isNull);
     expect(study.toJson()['id_perfil_rf'], 1);
+  });
+
+  testWidgets('ações do estudo seguem o padrão no desktop e no mobile', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final size in [const Size(1440, 900), const Size(390, 844)]) {
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: NovoEstudoPage(
+            distribuidora: 'Distribuidora local',
+            municipio: 'São Paulo',
+            areaKm2: 0,
+            pontosArea: [],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(PrimaryButton), findsOneWidget);
+      expect(find.byType(SecondaryButton), findsOneWidget);
+      expect(find.text('Cancelar'), findsOneWidget);
+      expect(find.text('Criar estudo e simular'), findsOneWidget);
+
+      final actionsTop = tester.getTopLeft(find.byType(PrimaryButton)).dy;
+      if (size.width >= 760) {
+        expect(actionsTop, lessThan(80));
+      } else {
+        expect(actionsTop, greaterThan(size.height - 100));
+      }
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('salva dados do formulário com o perfil e critério escolhidos', (
