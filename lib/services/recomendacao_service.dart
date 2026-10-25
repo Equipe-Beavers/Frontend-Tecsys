@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
+import 'package:frontend_tecsys/services/edificacoes_area_service.dart';
 
 class RecomendacaoService {
   RecomendacaoService({http.Client? client, String? baseUrl})
@@ -22,6 +23,11 @@ class RecomendacaoService {
   }) async {
     final uri = Uri.parse('$_baseUrl/study/$idEstudo/recommendation');
 
+    final edificacoes = await EdificacoesAreaService(
+      client: _client,
+      baseUrl: _baseUrl,
+    ).paraEstudo(idEstudo);
+
     final response = await _client
         .post(
           uri,
@@ -30,6 +36,7 @@ class RecomendacaoService {
             'id_perfil_rf': idPerfilRf,
             'id_criterio_instalacao': ?idCriterioInstalacao,
             'nome_cenario': ?nomeCenario,
+            'edificacoes': ?edificacoes,
           }),
         )
         .timeout(const Duration(seconds: 120));
