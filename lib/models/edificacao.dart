@@ -54,6 +54,24 @@ class Edificacao {
     }
   }
 
+  Map<String, dynamic> toPayloadJson() => {
+    'id': id,
+    'altura_m': alturaM,
+    'codigo_material': codigoMaterial,
+    'geometria': {
+      'type': 'MultiPolygon',
+      'coordinates': [
+        for (final poligono in poligonos)
+          [
+            for (final anel in poligono)
+              [
+                for (final ponto in anel) [ponto.longitude, ponto.latitude],
+              ],
+          ],
+      ],
+    },
+  };
+
   factory Edificacao.fromJson(Map<String, dynamic> json) {
     return Edificacao(
       id: json['id']?.toString() ?? '',
