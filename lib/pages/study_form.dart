@@ -15,8 +15,11 @@ import 'package:latlong2/latlong.dart';
 class NovoEstudoPage extends StatefulWidget {
   final String distribuidora;
   final String? municipio;
+  final String? bairro;
+  final String? uf;
   final double areaKm2;
   final List<LatLng> pontosArea;
+  final List<double?> relevoPontos;
   final InstallCriterionService? criterionService;
   final RFProfileService? rfProfileService;
   final EstudosService? studyService;
@@ -27,8 +30,11 @@ class NovoEstudoPage extends StatefulWidget {
     super.key,
     required this.distribuidora,
     required this.municipio,
+    this.bairro,
+    this.uf,
     required this.areaKm2,
     required this.pontosArea,
+    this.relevoPontos = const [],
     this.criterionService,
     this.rfProfileService,
     this.studyService,
@@ -56,10 +62,10 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     text: widget.study?['municipio']?.toString() ?? widget.municipio,
   );
   late final _estadoController = TextEditingController(
-    text: widget.study?['uf']?.toString(),
+    text: widget.study?['uf']?.toString() ?? widget.uf,
   );
   late final _bairroController = TextEditingController(
-    text: widget.study?['bairro']?.toString(),
+    text: widget.study?['bairro']?.toString() ?? widget.bairro,
   );
 
   RFProfile? _selectedRfProfile;
@@ -70,6 +76,8 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       widget.criterionService ?? InstallCriterionService();
   bool _salvando = false;
   bool _loadingSelections = false;
+  int? _idEstudoCriado;
+  final Set<int> _pontosSalvos = {};
 
   bool get _isEditing => widget.study != null;
   bool get _saveDisabled =>
@@ -319,33 +327,62 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           'bairro': _textoOuNulo(_bairroController),
         });
       } else {
-        await _estudosService.criarEstudo(
-          NovoEstudo(
-            idUsuario: widget.userId,
-            idRfProfile: _selectedRfProfile!.id,
-            idCriterioInstalacao: _criterioSelecionado!.id,
-            nome: _nomeController.text.trim(),
-            descricao: _textoOuNulo(_descricaoController),
-            uf: _textoOuNulo(_estadoController)?.toUpperCase(),
-            municipio: _textoOuNulo(_cidadeController),
-            bairro: _textoOuNulo(_bairroController),
-            distribuidora: widget.distribuidora.isEmpty
-                ? null
-                : widget.distribuidora,
-            pontosArea: widget.pontosArea,
-          ),
-        );
+        var idEstudo = _idEstudoCriado;
+        if (idEstudo == null) {
+          final estudo = await _estudosService.criarEstudo(
+            NovoEstudo(
+              idUsuario: widget.userId,
+              idRfProfile: _selectedRfProfile!.id,
+              idCriterioInstalacao: _criterioSelecionado!.id,
+              nome: _nomeController.text.trim(),
+              descricao: _textoOuNulo(_descricaoController),
+              uf: _textoOuNulo(_estadoController)?.toUpperCase(),
+              municipio: _textoOuNulo(_cidadeController),
+              bairro: _textoOuNulo(_bairroController),
+              distribuidora: widget.distribuidora.isEmpty
+                  ? null
+                  : widget.distribuidora,
+              pontosArea: widget.pontosArea,
+            ),
+          );
+          final id = estudo['id_estudo'];
+          if (id is! num) {
+            throw const FormatException(
+              'A resposta da API não contém um id_estudo válido.',
+            );
+          }
+          idEstudo = id.toInt();
+          _idEstudoCriado = idEstudo;
+        }
+        for (var indice = 0; indice < widget.pontosArea.length; indice++) {
+          if (_pontosSalvos.contains(indice)) continue;
+          final ponto = widget.pontosArea[indice];
+          await _estudosService.criarPontoEstudo(
+            NovoEstudoPonto(
+              idEstudo: idEstudo,
+              latitude: ponto.latitude,
+              longitude: ponto.longitude,
+              relevoM: indice < widget.relevoPontos.length
+                  ? widget.relevoPontos[indice]
+                  : null,
+              rotulo: 'Vértice ${indice + 1}',
+              indice: indice,
+            ),
+          );
+          _pontosSalvos.add(indice);
+        }
       }
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (erro) {
       if (!mounted) return;
       setState(() => _salvando = false);
+      final mensagemErro = _idEstudoCriado == null
+          ? 'Não foi possível ${_isEditing ? 'salvar' : 'criar'} o estudo: $erro'
+          : 'Estudo criado. Não foi possível salvar todos os pontos: $erro';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Não foi possível ${_isEditing ? 'salvar' : 'criar'} o estudo: $erro',
-          ),
+          content: Text(mensagemErro),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -784,7 +821,9 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
         ? 'Salvando...'
         : _isEditing
         ? 'Salvar alterações'
-        : 'Criar estudo e simular',
+        : _idEstudoCriado == null
+        ? 'Criar estudo e simular'
+        : 'Continuar salvamento',
     onPressed: _saveDisabled ? null : _criarEstudo,
   );
 }

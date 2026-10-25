@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:frontend_tecsys/pages/map_page.dart';
 import 'package:frontend_tecsys/pages/library_page.dart';
 import 'package:frontend_tecsys/pages/studies_page.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  final mapboxToken = dotenv.env['MAPBOX_ACCESS_TOKEN'] ?? '';
+  MapboxOptions.setAccessToken(mapboxToken);
 
   runApp(const MyApp());
 }

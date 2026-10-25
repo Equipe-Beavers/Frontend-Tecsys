@@ -9,6 +9,7 @@ class CidadeBairroBottomSheet extends StatefulWidget {
   final String? stepLabel;
   final String? breadcrumb;
   final String notFoundMessage;
+  final bool allowEmptySelection;
 
   final Function(String? cidade, String? bairro) onProsseguir;
 
@@ -21,6 +22,7 @@ class CidadeBairroBottomSheet extends StatefulWidget {
     this.stepLabel,
     this.breadcrumb,
     this.notFoundMessage = 'Não encontrada',
+    this.allowEmptySelection = true,
     required this.onProsseguir,
   });
 
@@ -29,8 +31,7 @@ class CidadeBairroBottomSheet extends StatefulWidget {
       _CidadeBairroBottomSheetState();
 }
 
-class _CidadeBairroBottomSheetState
-    extends State<CidadeBairroBottomSheet> {
+class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
   String? _cidadeSelecionada;
   String? _bairroSelecionado;
   final TextEditingController _buscaController = TextEditingController();
@@ -60,11 +61,9 @@ class _CidadeBairroBottomSheetState
     }).toList();
   }
 
-  // IMPORTANTE:
-  // Se não houver cidades carregadas, libera o Prosseguir mesmo
-  // sem seleção, para não travar o fluxo.
   bool get _podeProsseguir =>
-      _cidadeSelecionada != null || widget.cidades.isEmpty;
+      _cidadeSelecionada != null ||
+      (widget.allowEmptySelection && widget.cidades.isEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -147,10 +146,7 @@ class _CidadeBairroBottomSheetState
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Selecione a cidade e o bairro para o estudo.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textMuted,
-                  ),
+                  style: TextStyle(fontSize: 13, color: AppColors.textMuted),
                 ),
               ),
             ),
@@ -210,16 +206,13 @@ class _CidadeBairroBottomSheetState
                     ),
             ),
 
-            if (widget.cidades.isEmpty)
+            if (widget.cidades.isEmpty && widget.allowEmptySelection)
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 child: Text(
                   'Você pode prosseguir mesmo sem selecionar uma cidade.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                 ),
               ),
 
@@ -346,9 +339,7 @@ class _CidadeBairroBottomSheetState
               child: Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: [
-                  for (final bairro in bairros) _buildBairro(bairro),
-                ],
+                children: [for (final bairro in bairros) _buildBairro(bairro)],
               ),
             ),
         ],
@@ -368,9 +359,7 @@ class _CidadeBairroBottomSheetState
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: selecionado
-              ? AppColors.primaryLime
-              : AppColors.surfaceInput,
+          color: selecionado ? AppColors.primaryLime : AppColors.surfaceInput,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
