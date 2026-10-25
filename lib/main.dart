@@ -70,8 +70,9 @@ class _MyAppState extends State<MyApp> {
               body: SafeArea(
                 child: Row(
                   children: [
-                    if (desktop)
-                      Container(
+                    Offstage(
+                      offstage: !desktop,
+                      child: Container(
                         width: 200,
                         decoration: const BoxDecoration(
                           color: AppColors.surfaceCardLight,
@@ -156,6 +157,7 @@ class _MyAppState extends State<MyApp> {
                           ],
                         ),
                       ),
+                    ),
                     Expanded(
                       child: IndexedStack(
                         index: _abaSelecionada,
@@ -178,15 +180,16 @@ class _MyAppState extends State<MyApp> {
                   ],
                 ),
               ),
-              bottomNavigationBar: desktop || _editingCriterion
-                  ? null
-                  : SafeArea(
-                      top: false,
-                      child: Navbar(
-                        currentIndex: _abaSelecionada,
-                        onTap: (index) => _selectTab(index, context),
-                      ),
-                    ),
+              bottomNavigationBar: Offstage(
+                offstage: desktop || _editingCriterion,
+                child: SafeArea(
+                  top: false,
+                  child: Navbar(
+                    currentIndex: _abaSelecionada,
+                    onTap: (index) => _selectTab(index, context),
+                  ),
+                ),
+              ),
             );
           },
         ),
