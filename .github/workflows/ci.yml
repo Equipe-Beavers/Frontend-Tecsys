@@ -30,6 +30,9 @@ jobs:
       - name: Flutter version
         run: flutter --version
 
+      - name: Create environment file
+        run: cp .env.example .env
+
       - name: Install dependencies
         run: flutter pub get
 

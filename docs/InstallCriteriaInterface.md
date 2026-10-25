@@ -22,7 +22,7 @@ Acesse **Biblioteca → Critérios** pela navegação lateral no desktop ou pela
 | Necessita alimentação elétrica | `requer_alimentacao_eletrica` | Interruptor: ligado (`true`) ou desligado (`false`) |
 | Distância aos ativos | `distancia_minima_ativos_m` e `distancia_maxima_ativos_m` | RangeSlider com dois seletores; escala 10–500 m, em passos de 10 m; persistência em metros |
 | Máximo de gateways | `limite_gateways` | Inteiro positivo; em branco envia `null` |
-| Relevo | `relevo` | JSONB com altitude mínima/máxima e declividade máxima |
+| Relevo | `relevo` | JSONB com altitude mínima e máxima |
 | Vegetação | `vegetacoes` | JSONB com listas de tipos permitidos e proibidos |
 | Edificações | `edificacoes` | JSONB com raio, quantidade máxima, altura máxima e distância mínima |
 | Antenas | `antenas` | JSONB com raio, quantidade máxima, distância máxima e controle de conflito de frequência |
@@ -59,7 +59,7 @@ explícita, utiliza `http://localhost:3000` no navegador/desktop e
 
 ## Limites desta entrega
 
-- Os campos avançados são armazenados em JSONB. A API valida os campos conhecidos e preserva propriedades adicionais; novos consumidores devem seguir o formato documentado acima.
+- Os campos avançados são armazenados em JSONB. A API valida os campos conhecidos e preserva propriedades adicionais; o formulário de relevo apresenta somente altitude mínima/máxima e remove a antiga propriedade `declividade_maxima_graus` ao salvar uma edição. Novos consumidores devem seguir o formato documentado acima.
 - A aba **Perfis de RF** lista os perfis do usuário pela API PostgreSQL, com paginação e estados de carregamento/erro. **Novo Perfil RF** abre um formulário responsivo com preview calculado, validações e gravação em `perfis_rf`; tocar em um perfil abre o mesmo formulário com os dados carregados para edição.
 - Não são apresentados contadores “em uso”, rascunhos ou valores fictícios: esses estados não estão no retorno atual da API.
 - O seletor de critérios em “Novo estudo” usa a mesma API, paginação e modelo da biblioteca; a classe antiga com critérios fixos foi removida. O ID escolhido é incluído em `NovoEstudo.toJson()`. A criação completa de estudos ainda depende da adaptação de seu endpoint/serviço ao DER (o serviço atual usa `/estudos` e os perfis de RF permanecem no fluxo existente). Essa adaptação não foi feita nesta refatoração de critérios.

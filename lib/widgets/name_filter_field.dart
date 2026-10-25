@@ -23,7 +23,10 @@ class NameFilterField extends StatelessWidget {
           onChanged: onChanged,
           decoration: InputDecoration(
             hintText: hintText,
-            prefixIcon: const Icon(Icons.search),
+            prefixIcon: const Icon(
+              Icons.search,
+              color: AppColors.secondaryTeal,
+            ),
             suffixIcon: value.text.isEmpty
                 ? null
                 : IconButton(
@@ -35,10 +38,18 @@ class NameFilterField extends StatelessWidget {
                     },
                   ),
             filled: true,
-            fillColor: AppColors.surfaceCardLight,
+            fillColor: AppColors.surfaceBackground,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.border),
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppColors.borderSubtle),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppColors.secondaryTeal),
             ),
           ),
         ),

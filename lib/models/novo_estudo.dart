@@ -27,6 +27,38 @@ class TipoAtivoSelecionado {
   };
 }
 
+class NovoEstudoPonto {
+  final int idEstudo;
+  final double latitude;
+  final double longitude;
+  final double? relevoM;
+  final String rotulo;
+  final int indice;
+
+  const NovoEstudoPonto({
+    required this.idEstudo,
+    required this.latitude,
+    required this.longitude,
+    required this.relevoM,
+    required this.rotulo,
+    required this.indice,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id_estudo': idEstudo,
+    'origem': 'manual',
+    'id_ativo_bdgd': null,
+    'tipo_ativo': null,
+    'rotulo': rotulo,
+    'papel': 'ambos',
+    'prioridade': null,
+    'latitude': latitude,
+    'longitude': longitude,
+    'atributos': {'tipo_ponto': 'vertice_area', 'indice': indice},
+    'relevo_m': relevoM,
+  };
+}
+
 class NovoEstudo {
   final int idUsuario;
   final int idRfProfile;

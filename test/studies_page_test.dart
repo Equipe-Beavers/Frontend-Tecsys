@@ -12,6 +12,7 @@ import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/name_filter_field.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:latlong2/latlong.dart';
 
 import 'support/criterion_test_support.dart';
 
@@ -111,6 +112,47 @@ void main() {
     addTearDown(service.dispose);
 
     expect(await service.list(userId: 9), isEmpty);
+  });
+
+  test('cria ponto de estudo com relevo na rota do backend', () async {
+    final ponto = NovoEstudoPonto(
+      idEstudo: 81,
+      latitude: -23.55,
+      longitude: -46.63,
+      relevoM: 760.4,
+      rotulo: 'Vértice 1',
+      indice: 0,
+    );
+    final service = EstudosService(
+      client: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/study/81/points');
+        expect(request.headers['content-type'], 'application/json');
+        expect(jsonDecode(request.body), {
+          'id_estudo': 81,
+          'origem': 'manual',
+          'id_ativo_bdgd': null,
+          'tipo_ativo': null,
+          'rotulo': 'Vértice 1',
+          'papel': 'ambos',
+          'prioridade': null,
+          'latitude': -23.55,
+          'longitude': -46.63,
+          'atributos': {'tipo_ponto': 'vertice_area', 'indice': 0},
+          'relevo_m': 760.4,
+        });
+        return http.Response(
+          jsonEncode({
+            'message': 'Ponto adicionado ao estudo com sucesso!',
+            'data': {'id_estudo_ponto': 4},
+          }),
+          201,
+        );
+      }),
+    );
+    addTearDown(service.dispose);
+
+    expect((await service.criarPontoEstudo(ponto))['id_estudo_ponto'], 4);
   });
 
   test('rejeita erros HTTP e respostas inválidas', () async {
@@ -241,17 +283,32 @@ void main() {
       }),
     );
     final payloads = <Map<String, dynamic>>[];
+    final pontosPayloads = <Map<String, dynamic>>[];
+    var requisicoesEstudo = 0;
+    var requisicoesPonto = 0;
     final studyService = EstudosService(
       client: MockClient((request) async {
         expect(request.method, 'POST');
-        expect(request.url.path, '/estudos');
-        payloads.add(
-          Map<String, dynamic>.from(jsonDecode(request.body) as Map),
+        final payload = Map<String, dynamic>.from(
+          jsonDecode(request.body) as Map,
         );
-        return payloads.length == 1
-            ? jsonResponse({'message': 'Falha de gravação'}, 500)
+        if (request.url.path == '/create-study') {
+          payloads.add(payload);
+          requisicoesEstudo++;
+          return requisicoesEstudo == 1
+              ? jsonResponse({'message': 'Falha de gravação'}, 500)
+              : jsonResponse({
+                  'estudo': {'id_estudo': 81},
+                }, 201);
+        }
+        expect(request.url.path, '/study/81/points');
+        pontosPayloads.add(payload);
+        requisicoesPonto++;
+        return requisicoesPonto == 1
+            ? jsonResponse({'message': 'Falha ao salvar ponto'}, 400)
             : jsonResponse({
-                'estudo': {'id_estudo': 81},
+                'message': 'Ponto adicionado ao estudo com sucesso!',
+                'data': {'id_estudo_ponto': 4},
               }, 201);
       }),
     );
@@ -272,7 +329,8 @@ void main() {
                       distribuidora: 'Distribuidora local',
                       municipio: null,
                       areaKm2: 0,
-                      pontosArea: const [],
+                      pontosArea: const [LatLng(-23.55, -46.63)],
+                      relevoPontos: const [760.4],
                       userId: 9,
                       rfProfileService: rfService,
                       criterionService: criterionService,
@@ -338,15 +396,28 @@ void main() {
       payloads.single,
       containsPair('distribuidora', 'Distribuidora local'),
     );
-    expect(payloads.single, containsPair('geom', null));
+    expect(payloads.last['geom'], isNotNull);
     ScaffoldMessenger.of(tester.element(find.byType(NovoEstudoPage)))
         .removeCurrentSnackBar();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Criar estudo e simular'));
     await tester.pumpAndSettle();
+    expect(find.textContaining('Estudo criado.'), findsOneWidget);
+    expect(requisicoesEstudo, 2);
+    expect(requisicoesPonto, 1);
+    expect(pontosPayloads.single['relevo_m'], 760.4);
+    expect(pontosPayloads.single['origem'], 'manual');
+    expect(pontosPayloads.single['papel'], 'ambos');
+    ScaffoldMessenger.of(tester.element(find.byType(NovoEstudoPage)))
+        .removeCurrentSnackBar();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continuar salvamento'));
+    await tester.pumpAndSettle();
     expect(created, isTrue);
     expect(find.byType(NovoEstudoPage), findsNothing);
     expect(payloads.length, 2);
+    expect(pontosPayloads.length, 2);
+    expect(requisicoesEstudo, 2);
     expect(tester.takeException(), isNull);
   });
 
