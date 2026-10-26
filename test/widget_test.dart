@@ -96,6 +96,10 @@ void main() {
         home: Scaffold(
           body: LayerFilterModal(
             camadasAtivasAtuais: camadasIniciais,
+            vegetacaoAtivaAtual: false,
+            antenasAtivasAtual: false,
+            onSalvarVegetacao: (_) {},
+            onSalvarAntenas: (_) {},
             onSalvarFiltro: (novas) {
               camadasSalvas = novas;
             },
@@ -111,11 +115,11 @@ void main() {
     expect(find.text('REGULAÇÃO'), findsOneWidget);
     expect(find.text('EDIFICAÇÕES'), findsOneWidget);
     expect(find.text('Edifícios'), findsOneWidget);
-    expect(find.text('0 de 11 camadas ativas'), findsOneWidget);
+    expect(find.text('0 de 13 camadas ativas'), findsOneWidget);
 
     await tester.tap(find.text('Poste'));
     await tester.pump();
-    expect(find.text('1 de 11 camadas ativas'), findsOneWidget);
+    expect(find.text('1 de 13 camadas ativas'), findsOneWidget);
     expect(find.text('Salvar filtro'), findsOneWidget);
 
     // Acionar botão "Salvar filtro"
