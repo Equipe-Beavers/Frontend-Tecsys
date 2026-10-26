@@ -19,6 +19,7 @@ import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/filter_chip.dart';
 import 'package:frontend_tecsys/pages/study_form.dart';
 import 'package:frontend_tecsys/utils/map_utils.dart';
+import 'package:frontend_tecsys/widgets/map_switch.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -42,6 +43,11 @@ class _MapPageState extends State<MapPage> {
   String _textoBusca = '';
 
   List<AtivoBdgd> _todosAtivos = [];
+  List<AntenaAnatel> _antenas = [];
+  VegetacaoConfig? _vegetacaoConfig;
+  bool _vegetacaoAtiva = false;
+  bool _antenasAtivas = false;
+  bool _legendaExpandida = false;
   Map<TipoAtivo, bool> _camadasAtivas =
       CatalogoCamadas.obterEstadoInicialPadrao();
   AtivoBdgd? _ativoSelecionado;
@@ -90,10 +96,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _tentarCargaInicial() {
-    if (!_mapaPronto ||
-        !_distribuidorasProntas ||
-        _cargaInicialFeita ||
-        _distribuidoraSelecionada == null) {
+    if (!_mapaPronto || !_distribuidorasProntas || _cargaInicialFeita) {
       return;
     }
 
@@ -173,10 +176,14 @@ class _MapPageState extends State<MapPage> {
       for (final entry in _camadasAtivas.entries)
         if (entry.value) entry.key.apiValue,
     };
+    final deveCarregarAtivos = camadasApi.isNotEmpty;
+    final deveCarregarAntenas = _antenasAtivas;
 
-    if (camadasApi.isEmpty) {
+    if (!deveCarregarAtivos && !deveCarregarAntenas) {
+      if (!mounted) return;
       setState(() {
         _todosAtivos = [];
+        _antenas = [];
         _carregando = false;
         _erro = null;
       });
@@ -185,68 +192,85 @@ class _MapPageState extends State<MapPage> {
 
     final sequencia = ++_sequenciaRequisicao;
     final bounds = _mapController.camera.visibleBounds;
-
     if (mounted) {
       setState(() {
-        if (_todosAtivos.isEmpty) _carregando = true;
+        _carregando = _todosAtivos.isEmpty && _antenas.isEmpty;
         _erro = null;
       });
     }
 
-    try {
-      final resultado = await _ativosService.getAtivos(
-        minLatitude: bounds.south,
-        maxLatitude: bounds.north,
-        minLongitude: bounds.west,
-        maxLongitude: bounds.east,
-        distribuidora: _distribuidoraSelecionada,
-        tipos: camadasApi,
-        limit: _limiteAtivos,
-      );
+    var ativosCarregados = <AtivoBdgd>[];
+    var antenasCarregadas = <AntenaAnatel>[];
+    String? erroCarregamento;
 
-      if (!mounted || sequencia != _sequenciaRequisicao) {
-        return;
-      }
+    await Future.wait<void>([
+      () async {
+        if (!deveCarregarAtivos) return;
+        try {
+          final resultado = await _ativosService.getAtivos(
+            minLatitude: bounds.south,
+            maxLatitude: bounds.north,
+            minLongitude: bounds.west,
+            maxLongitude: bounds.east,
+            distribuidora: _distribuidoraSelecionada,
+            tipos: camadasApi,
+            limit: _limiteAtivos,
+          );
+          ativosCarregados = resultado.ativos;
+        } catch (error) {
+          erroCarregamento ??= 'Não foi possível carregar os ativos elétricos: $error';
+        }
+      }(),
+      () async {
+        if (!deveCarregarAntenas) return;
+        try {
+          final resultado = await _camadasExternasService.getAntenas(
+            minLatitude: bounds.south,
+            maxLatitude: bounds.north,
+            minLongitude: bounds.west,
+            maxLongitude: bounds.east,
+            limit: 1000,
+          );
+          antenasCarregadas = resultado.antenas;
+        } catch (error) {
+          erroCarregamento ??= 'Não foi possível carregar as estações da Anatel: $error';
+        }
+      }(),
+    ]);
 
-      setState(() {
-        _todosAtivos = resultado.ativos;
-        _carregando = false;
-      });
-    } catch (error) {
-      if (!mounted || sequencia != _sequenciaRequisicao) {
-        return;
-      }
-
-      setState(() {
-        _erro = 'Não foi possível carregar os ativos reais.';
-        _carregando = false;
-      });
-    }
+    if (!mounted || sequencia != _sequenciaRequisicao) return;
+    setState(() {
+      _todosAtivos = ativosCarregados;
+      _antenas = antenasCarregadas;
+      _carregando = false;
+      _erro = erroCarregamento;
+    });
   }
 
   Future<void> _inicializar() async {
+    var configVegetacao = VegetacaoConfig.fallback();
+    var distribuidoras = <DistribuidoraResumo>[];
+
     try {
-      final distribuidoras = await _ativosService.getDistribuidoras();
-
-      if (!mounted || distribuidoras.isEmpty) {
-        return;
-      }
-
-      setState(() {
-        _distribuidoras = distribuidoras;
-        _distribuidoraSelecionada = distribuidoras.first.nome;
-        _distribuidorasProntas = true;
-        _carregando = false;
-      });
-
-      _tentarCargaInicial();
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _carregando = false;
-        });
-      }
+      configVegetacao = await _camadasExternasService.getVegetacaoConfig();
+    } catch (_) {
+      // A camada tem configuração pública de fallback; a falha não bloqueia o mapa.
     }
+    try {
+      distribuidoras = await _ativosService.getDistribuidoras();
+    } catch (_) {
+      // As camadas externas ainda podem ser usadas sem uma distribuidora.
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _vegetacaoConfig = configVegetacao;
+      _distribuidoras = distribuidoras;
+      _distribuidoraSelecionada = distribuidoras.isEmpty ? null : distribuidoras.first.nome;
+      _distribuidorasProntas = true;
+      _carregando = false;
+    });
+    _tentarCargaInicial();
   }
 
   int get _totalCamadasAtivas =>
@@ -737,10 +761,128 @@ class _MapPageState extends State<MapPage> {
           onTap: () => _selecionarAtivo(ativo),
           child: _buildIconeMarcador(ativo, isSelected, cor),
         ),
+        child: GestureDetector(
+          onTap: () => _selecionarAtivo(ativo),
+          child: _buildIconeMarcador(ativo, isSelected, cor),
+        ),
       );
 
       return marker;
     }).toList();
+  }
+
+  List<Marker> _gerarMarcadoresAntenas() {
+    if (!_antenasAtivas) return [];
+    return _antenas.map((antena) {
+      return Marker(
+        point: LatLng(antena.latitude, antena.longitude),
+        width: 38,
+        height: 38,
+        child: GestureDetector(
+          onTap: () => _abrirDetalhesAntena(antena),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceCard,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.secondaryTeal, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.secondaryTeal.withValues(alpha: 0.35),
+                  blurRadius: 5,
+                ),
+              ],
+            ),
+            child: const Icon(Icons.cell_tower, color: AppColors.secondaryTeal, size: 21),
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  Widget _linhaDetalheAntena(String titulo, String valor) {
+    return Text.rich(
+      TextSpan(
+        style: const TextStyle(
+          color: AppColors.textWhite,
+        ),
+        children: [
+          TextSpan(
+            text: '$titulo: ',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          TextSpan(text: valor),
+        ],
+      ),
+    );
+  }
+
+  void _abrirDetalhesAntena(AntenaAnatel antena) {
+    final tecnologias = antena.tecnologias.isEmpty
+        ? 'Não informado'
+        : antena.tecnologias.join(', ');
+  
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceCard,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                antena.nomeEntidade ?? 'Estação licenciada pela Anatel',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textWhite,
+                ),
+              ),
+              const SizedBox(height: 12),
+  
+              _linhaDetalheAntena(
+                'Município',
+                '${antena.municipio ?? 'Não informado'}'
+                '${antena.uf == null ? '' : ' / ${antena.uf}'}',
+              ),
+  
+              _linhaDetalheAntena(
+                'Tecnologias',
+                tecnologias,
+              ),
+  
+              _linhaDetalheAntena(
+                'Registros de emissão agrupados',
+                '${antena.totalRegistros}',
+              ),
+  
+              if (antena.tipoEstacao != null)
+                _linhaDetalheAntena(
+                  'Tipo de estação',
+                  antena.tipoEstacao!,
+                ),
+  
+              if (antena.alturaAntenaMediaM != null)
+                _linhaDetalheAntena(
+                  'Altura média informada',
+                  '${antena.alturaAntenaMediaM!.toStringAsFixed(1)} m',
+                ),
+  
+              _linhaDetalheAntena(
+                'Latitude / longitude',
+                '${antena.latitude.toStringAsFixed(6)} / '
+                '${antena.longitude.toStringAsFixed(6)}',
+              ),
+  
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildIconeMarcador(AtivoBdgd ativo, bool isSelected, Color cor) {
@@ -784,6 +926,7 @@ class _MapPageState extends State<MapPage> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
+              onMapReady: _aoMapaPronto,
               initialCenter: LatLng(-14.2350, -51.9253),
               initialZoom: _currentZoom,
               minZoom: 2.0,
@@ -799,6 +942,9 @@ class _MapPageState extends State<MapPage> {
                   LatLng(89.9, 180.0),
                 ),
               ),
+              onPositionChanged: (camera, hasGesture) {
+                if (hasGesture) _agendarCarregamento();
+              },
               onTap: (tapPosition, point) {
                 final edificacoesTocadas =
                     _edificacaoHitNotifier.value?.hitValues ?? const [];
@@ -935,6 +1081,128 @@ class _MapPageState extends State<MapPage> {
               ],
             ),
           ),
+          if (_vegetacaoAtiva &&
+              _vegetacaoConfig != null &&
+              _vegetacaoConfig!.classes.isNotEmpty)
+            Positioned(
+              left: 15,
+              bottom: 90,
+              child: Container(
+                width: _legendaExpandida ? 220 : 160,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppColors.border,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _legendaExpandida = !_legendaExpandida;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Legenda',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textWhite,
+                                  ),
+                                ),
+                              ),
+                              Icon(
+                                _legendaExpandida
+                                    ? Icons.close_fullscreen
+                                    : Icons.open_in_full,
+                                size: 17,
+                                color: AppColors.textWhite,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    if (_legendaExpandida) ...[
+                      const Divider(
+                        height: 1,
+                        color: AppColors.border,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Tipos de Vegetação',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textWhite,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+
+                            for (final classe in _vegetacaoConfig!.classes)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: Color(
+                                          int.parse(
+                                            'FF${classe.cor.replaceFirst('#', '')}',
+                                            radix: 16,
+                                          ),
+                                        ),
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        '${classe.codigo} · ${classe.nome}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.textWhite,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           Positioned(
             left: 15,
             right: 15,
