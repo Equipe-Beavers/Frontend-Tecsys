@@ -27,8 +27,42 @@ class TipoAtivoSelecionado {
   };
 }
 
+class NovoEstudoPonto {
+  final int idEstudo;
+  final double latitude;
+  final double longitude;
+  final double? relevoM;
+  final String rotulo;
+  final int indice;
+
+  const NovoEstudoPonto({
+    required this.idEstudo,
+    required this.latitude,
+    required this.longitude,
+    required this.relevoM,
+    required this.rotulo,
+    required this.indice,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id_estudo': idEstudo,
+    'origem': 'manual',
+    'id_ativo_bdgd': null,
+    'tipo_ativo': null,
+    'rotulo': rotulo,
+    'papel': 'ambos',
+    'prioridade': null,
+    'latitude': latitude,
+    'longitude': longitude,
+    'atributos': {'tipo_ponto': 'vertice_area', 'indice': indice},
+    'relevo_m': relevoM,
+  };
+}
+
 class NovoEstudo {
   final int idUsuario;
+  final int idRfProfile;
+  final int idCriterioInstalacao;
   final String tipoDelimitacao;
   final String? uf;
   final String? municipio;
@@ -44,6 +78,8 @@ class NovoEstudo {
 
   const NovoEstudo({
     this.idUsuario = 1,
+    required this.idRfProfile,
+    required this.idCriterioInstalacao,
     this.tipoDelimitacao = 'desenho',
     this.uf,
     this.municipio,
@@ -73,11 +109,13 @@ class NovoEstudo {
 
   Map<String, dynamic> toJson() => {
     'id_usuario': idUsuario,
+    'id_perfil_rf': idRfProfile,
+    'id_criterio_instalacao': idCriterioInstalacao,
     'tipo_delimitacao': tipoDelimitacao,
     'uf': uf,
     'municipio': municipio,
     'bairro': bairro,
-    'geom': _geometria,
+    'geom': pontosArea.isEmpty ? null : _geometria,
     'nome': nome,
     'descricao': descricao,
     'distribuidora': distribuidora,

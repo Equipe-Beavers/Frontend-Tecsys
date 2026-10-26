@@ -8,8 +8,8 @@ class LayerFilterModal extends StatefulWidget {
   final bool vegetacaoAtivaAtual;
   final bool antenasAtivasAtual;
   final ValueChanged<Map<TipoAtivo, bool>> onSalvarFiltro;
-  final ValueChanged<bool> onSalvarVegetacao;
-  final ValueChanged<bool> onSalvarAntenas;
+  final bool edificacoesAtivas;
+  final ValueChanged<bool>? onSalvarEdificacoes;
 
   const LayerFilterModal({
     super.key,
@@ -17,8 +17,8 @@ class LayerFilterModal extends StatefulWidget {
     required this.vegetacaoAtivaAtual,
     required this.antenasAtivasAtual,
     required this.onSalvarFiltro,
-    required this.onSalvarVegetacao,
-    required this.onSalvarAntenas,
+    this.edificacoesAtivas = false,
+    this.onSalvarEdificacoes,
   });
 
   static Future<void> exibir(
@@ -27,8 +27,8 @@ class LayerFilterModal extends StatefulWidget {
     required bool vegetacaoAtiva,
     required bool antenasAtivas,
     required ValueChanged<Map<TipoAtivo, bool>> onSalvarFiltro,
-    required ValueChanged<bool> onSalvarVegetacao,
-    required ValueChanged<bool> onSalvarAntenas,
+    bool edificacoesAtivas = false,
+    ValueChanged<bool>? onSalvarEdificacoes,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -39,8 +39,8 @@ class LayerFilterModal extends StatefulWidget {
         vegetacaoAtivaAtual: vegetacaoAtiva,
         antenasAtivasAtual: antenasAtivas,
         onSalvarFiltro: onSalvarFiltro,
-        onSalvarVegetacao: onSalvarVegetacao,
-        onSalvarAntenas: onSalvarAntenas,
+        edificacoesAtivas: edificacoesAtivas,
+        onSalvarEdificacoes: onSalvarEdificacoes,
       ),
     );
   }
@@ -51,8 +51,7 @@ class LayerFilterModal extends StatefulWidget {
 
 class _LayerFilterModalState extends State<LayerFilterModal> {
   late Map<TipoAtivo, bool> _estadoRascunho;
-  late bool _vegetacaoRascunho;
-  late bool _antenasRascunho;
+  late bool _edificacoesRascunho;
   final List<GrupoCamadasFiltro> _grupos = CatalogoCamadas.obterGrupos();
 
   @override
@@ -60,16 +59,15 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
     super.initState();
     // Clona o mapa de camadas ativas para o rascunho temporário
     _estadoRascunho = Map<TipoAtivo, bool>.from(widget.camadasAtivasAtuais);
-    _vegetacaoRascunho = widget.vegetacaoAtivaAtual;
-    _antenasRascunho = widget.antenasAtivasAtual;
+    _edificacoesRascunho = widget.edificacoesAtivas;
   }
 
   int get _quantidadeAtivas =>
       _estadoRascunho.values.where((ativa) => ativa).length +
-      (_vegetacaoRascunho ? 1 : 0) +
-      (_antenasRascunho ? 1 : 0);
+      (_edificacoesRascunho ? 1 : 0);
 
-  int get _totalCamadas => _estadoRascunho.length + 2;
+  // +1 pela camada de edifícios
+  int get _totalCamadas => _estadoRascunho.length + 1;
 
   void _limparGrupo(GrupoCamadasFiltro grupo) {
     setState(() {
@@ -159,11 +157,9 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
                 children: [
                   for (int i = 0; i < _grupos.length; i++) ...[
                     _buildSecaoGrupo(_grupos[i], i == 0),
-                    if (i < _grupos.length - 1)
-                      const Divider(color: AppColors.borderSubtle, height: 24),
+                    const Divider(color: AppColors.borderSubtle, height: 24),
                   ],
-                  const Divider(color: AppColors.borderSubtle, height: 24),
-                  _buildSecaoCamadasExternas(),
+                  _buildSecaoEdificacoes(),
                 ],
               ),
             ),
@@ -191,8 +187,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
                   // Botão "Salvar filtro"
                   ElevatedButton(
                     onPressed: () {
-                      widget.onSalvarVegetacao(_vegetacaoRascunho);
-                      widget.onSalvarAntenas(_antenasRascunho);
+                      widget.onSalvarEdificacoes?.call(_edificacoesRascunho);
                       widget.onSalvarFiltro(_estadoRascunho);
                       Navigator.of(context).pop();
                     },
@@ -307,11 +302,57 @@ if (podeLimpar)
     );
   }
 
-  Widget _buildLinhaCamada(ItemCamadaFiltro item) {
-    final isAtiva = _estadoRascunho[item.tipo] ?? false;
+  Widget _buildSecaoEdificacoes() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 8, bottom: 4, left: 4, right: 4),
+          child: Text(
+            'EDIFICAÇÕES',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textMuted,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ),
+        _buildLinha(
+          titulo: 'Edifícios',
+          isAtiva: _edificacoesRascunho,
+          onChanged: (valor) =>
+              setState(() => _edificacoesRascunho = valor ?? false),
+          indicador: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: AppColors.layerEdificacao,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
+  Widget _buildLinhaCamada(ItemCamadaFiltro item) {
+    return _buildLinha(
+      titulo: item.titulo,
+      isAtiva: _estadoRascunho[item.tipo] ?? false,
+      onChanged: (valor) => _alternarCamada(item.tipo, valor),
+      indicador: _buildIndicadorVisual(item),
+    );
+  }
+
+  Widget _buildLinha({
+    required String titulo,
+    required bool isAtiva,
+    required ValueChanged<bool?> onChanged,
+    required Widget indicador,
+  }) {
     return InkWell(
-      onTap: () => _alternarCamada(item.tipo, !isAtiva),
+      onTap: () => onChanged(!isAtiva),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
@@ -329,7 +370,7 @@ if (podeLimpar)
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(4),
                 ),
-                onChanged: (val) => _alternarCamada(item.tipo, val),
+                onChanged: onChanged,
               ),
             ),
             const SizedBox(width: 12),
@@ -337,7 +378,7 @@ if (podeLimpar)
             // Título da Camada
             Expanded(
               child: Text(
-                item.titulo,
+                titulo,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: isAtiva ? FontWeight.w600 : FontWeight.normal,
@@ -347,7 +388,7 @@ if (podeLimpar)
             ),
 
             // Indicador Visual à direita (traço, ponto, anel ou quadrado)
-            _buildIndicadorVisual(item),
+            indicador,
           ],
         ),
       ),

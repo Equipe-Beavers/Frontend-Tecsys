@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 
+import '../utils/name_filter.dart';
+import 'name_filter_field.dart';
+
 class SelectionItem<T> {
   final String title;
   final String? subtitle;
@@ -28,7 +31,7 @@ class SelectionBottomSheet<T> extends StatefulWidget {
     required this.title,
     this.subtitle,
     this.stepLabel,
-    this.searchHint = 'Buscar',
+    this.searchHint = 'Buscar pelo nome',
     this.notFoundMessage = 'Não encontrada',
     required this.items,
     required this.selectedValue,
@@ -40,7 +43,7 @@ class SelectionBottomSheet<T> extends StatefulWidget {
     required String title,
     String? subtitle,
     String? stepLabel,
-    String searchHint = 'Buscar',
+    String searchHint = 'Buscar pelo nome',
     String notFoundMessage = 'Não encontrada',
     required List<SelectionItem<T>> items,
     required T? selectedValue,
@@ -51,7 +54,7 @@ class SelectionBottomSheet<T> extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: AppColors.surfaceCard,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (context) => SelectionBottomSheet<T>(
         title: title,
@@ -90,14 +93,12 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
 
   List<SelectionItem<T>> get _itensFiltrados {
     if (_busca.trim().isEmpty) return widget.items;
-    final termo = _busca.trim().toLowerCase();
     return widget.items
-        .where((item) => item.title.toLowerCase().contains(termo))
+        .where((item) => matchesName(item.title, _busca))
         .toList();
   }
 
-  bool get _podeProsseguir =>
-      _selecionado != null || widget.items.isEmpty;
+  bool get _podeProsseguir => _selecionado != null || widget.items.isEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +107,7 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
     return SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.75,
+          maxHeight: MediaQuery.of(context).size.height * 0.82,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -170,25 +171,10 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: TextField(
+              child: NameFilterField(
                 controller: _buscaController,
-                onChanged: (valor) => setState(() => _busca = valor),
-                style: const TextStyle(color: AppColors.textWhite),
-                decoration: InputDecoration(
-                  hintText: widget.searchHint,
-                  hintStyle: const TextStyle(color: AppColors.textMuted),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: AppColors.textMuted,
-                  ),
-                  filled: true,
-                  fillColor: AppColors.surfaceInput,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
+                onChanged: (value) => setState(() => _busca = value),
+                hintText: widget.searchHint,
               ),
             ),
 
@@ -224,7 +210,7 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? AppColors.surfaceCardLight
+                                ? AppColors.primaryLime.withValues(alpha: 0.2)
                                 : AppColors.surfaceBackground,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
@@ -238,6 +224,10 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                             borderRadius: BorderRadius.circular(12),
                             clipBehavior: Clip.antiAlias,
                             child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                              minTileHeight: 62,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -245,6 +235,7 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                                 item.title,
                                 style: TextStyle(
                                   color: AppColors.textWhite,
+                                  fontSize: 16,
                                   fontWeight: isSelected
                                       ? FontWeight.bold
                                       : FontWeight.normal,
@@ -263,7 +254,10 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                                 isSelected
                                     ? Icons.radio_button_checked
                                     : Icons.radio_button_unchecked,
-                                color: AppColors.primaryLime,
+                                color: isSelected
+                                    ? AppColors.primaryLime
+                                    : AppColors.textMuted,
+                                size: 26,
                               ),
                               onTap: () {
                                 setState(() => _selecionado = item.value);
@@ -281,10 +275,7 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                 child: Text(
                   'Você pode prosseguir mesmo sem selecionar — os dados serão carregados assim que a conexão for restabelecida.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                 ),
               ),
 
@@ -305,7 +296,7 @@ class _SelectionBottomSheetState<T> extends State<SelectionBottomSheet<T>> {
                     backgroundColor: AppColors.primaryLime,
                     foregroundColor: AppColors.textDark,
                     disabledBackgroundColor: AppColors.border,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
