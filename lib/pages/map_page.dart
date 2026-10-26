@@ -22,6 +22,7 @@ import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/filter_chip.dart';
 import 'package:frontend_tecsys/pages/study_form.dart';
 import 'package:frontend_tecsys/utils/map_utils.dart';
+import 'package:frontend_tecsys/widgets/map_switch.dart';
 import 'package:frontend_tecsys/widgets/study_area_step.dart';
 
 class MapPage extends StatefulWidget {
@@ -54,6 +55,11 @@ class _MapPageState extends State<MapPage> {
   String _textoBusca = '';
 
   List<AtivoBdgd> _todosAtivos = [];
+  List<AntenaAnatel> _antenas = [];
+  VegetacaoConfig? _vegetacaoConfig;
+  bool _vegetacaoAtiva = false;
+  bool _antenasAtivas = false;
+  bool _legendaExpandida = false;
   Map<TipoAtivo, bool> _camadasAtivas =
       CatalogoCamadas.obterEstadoInicialPadrao();
   AtivoBdgd? _ativoSelecionado;
@@ -631,10 +637,14 @@ class _MapPageState extends State<MapPage> {
       for (final entry in _camadasAtivas.entries)
         if (entry.value) entry.key.apiValue,
     };
+    final deveCarregarAtivos = camadasApi.isNotEmpty;
+    final deveCarregarAntenas = _antenasAtivas;
 
-    if (camadasApi.isEmpty) {
+    if (!deveCarregarAtivos && !deveCarregarAntenas) {
+      if (!mounted) return;
       setState(() {
         _todosAtivos = [];
+        _antenas = [];
         _carregando = false;
         _erro = null;
       });
@@ -721,6 +731,21 @@ class _MapPageState extends State<MapPage> {
         });
       }
     }
+    try {
+      distribuidoras = await _ativosService.getDistribuidoras();
+    } catch (_) {
+      // As camadas externas ainda podem ser usadas sem uma distribuidora.
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _vegetacaoConfig = configVegetacao;
+      _distribuidoras = distribuidoras;
+      _distribuidoraSelecionada = distribuidoras.isEmpty ? null : distribuidoras.first.nome;
+      _distribuidorasProntas = true;
+      _carregando = false;
+    });
+    _tentarCargaInicial();
   }
 
   int get _totalCamadasAtivas =>
@@ -1260,6 +1285,222 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+  Widget _buildBotoesArea() {
+    return Row(
+      spacing: 12,
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: _cancelarArea,
+            style: OutlinedButton.styleFrom(
+              backgroundColor: AppColors.surfaceCard,
+              foregroundColor: AppColors.textWhite,
+              side: const BorderSide(color: AppColors.border),
+              padding: const EdgeInsets.symmetric(vertical: 17),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: ElevatedButton(
+            onPressed: _prosseguirArea,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryLime,
+              foregroundColor: AppColors.textDark,
+              elevation: 6,
+              padding: const EdgeInsets.symmetric(vertical: 17),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
+            ),
+            child: const Text(
+              'Prosseguir',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Marker> _gerarMarcadores() {
+    final ativosFiltrados = _ativosVisiveis.where((a) {
+      return _camadasAtivas[a.tipo] ?? false;
+    }).toList();
+
+    return ativosFiltrados.map((ativo) {
+      final isSelected = _ativoSelecionado?.id == ativo.id;
+      final cor = ativo.tipo.cor;
+
+      final marker = Marker(
+        point: LatLng(ativo.latitude, ativo.longitude),
+        width: isSelected ? 42 : 32,
+        height: isSelected ? 42 : 32,
+        child: GestureDetector(
+          onTap: () => _selecionarAtivo(ativo),
+          child: _buildIconeMarcador(ativo, isSelected, cor),
+        ),
+        child: GestureDetector(
+          onTap: () => _selecionarAtivo(ativo),
+          child: _buildIconeMarcador(ativo, isSelected, cor),
+        ),
+      );
+
+      return marker;
+    }).toList();
+  }
+
+  List<Marker> _gerarMarcadoresAntenas() {
+    if (!_antenasAtivas) return [];
+    return _antenas.map((antena) {
+      return Marker(
+        point: LatLng(antena.latitude, antena.longitude),
+        width: 38,
+        height: 38,
+        child: GestureDetector(
+          onTap: () => _abrirDetalhesAntena(antena),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceCard,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.secondaryTeal, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.secondaryTeal.withValues(alpha: 0.35),
+                  blurRadius: 5,
+                ),
+              ],
+            ),
+            child: const Icon(Icons.cell_tower, color: AppColors.secondaryTeal, size: 21),
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  Widget _linhaDetalheAntena(String titulo, String valor) {
+    return Text.rich(
+      TextSpan(
+        style: const TextStyle(
+          color: AppColors.textWhite,
+        ),
+        children: [
+          TextSpan(
+            text: '$titulo: ',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          TextSpan(text: valor),
+        ],
+      ),
+    );
+  }
+
+  void _abrirDetalhesAntena(AntenaAnatel antena) {
+    final tecnologias = antena.tecnologias.isEmpty
+        ? 'Não informado'
+        : antena.tecnologias.join(', ');
+  
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceCard,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                antena.nomeEntidade ?? 'Estação licenciada pela Anatel',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textWhite,
+                ),
+              ),
+              const SizedBox(height: 12),
+  
+              _linhaDetalheAntena(
+                'Município',
+                '${antena.municipio ?? 'Não informado'}'
+                '${antena.uf == null ? '' : ' / ${antena.uf}'}',
+              ),
+  
+              _linhaDetalheAntena(
+                'Tecnologias',
+                tecnologias,
+              ),
+  
+              _linhaDetalheAntena(
+                'Registros de emissão agrupados',
+                '${antena.totalRegistros}',
+              ),
+  
+              if (antena.tipoEstacao != null)
+                _linhaDetalheAntena(
+                  'Tipo de estação',
+                  antena.tipoEstacao!,
+                ),
+  
+              if (antena.alturaAntenaMediaM != null)
+                _linhaDetalheAntena(
+                  'Altura média informada',
+                  '${antena.alturaAntenaMediaM!.toStringAsFixed(1)} m',
+                ),
+  
+              _linhaDetalheAntena(
+                'Latitude / longitude',
+                '${antena.latitude.toStringAsFixed(6)} / '
+                '${antena.longitude.toStringAsFixed(6)}',
+              ),
+  
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIconeMarcador(AtivoBdgd ativo, bool isSelected, Color cor) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: isSelected ? AppColors.surfaceCardLight : AppColors.surfaceCard,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isSelected ? AppColors.primaryLime : cor,
+          width: isSelected ? 2.5 : 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (isSelected ? AppColors.primaryLime : cor).withValues(
+              alpha: isSelected ? 0.6 : 0.3,
+            ),
+            blurRadius: isSelected ? 10 : 5,
+            spreadRadius: isSelected ? 2 : 0,
+          ),
+        ],
+      ),
+      child: Center(
+        child: Icon(
+          ativo.tipo.icone,
+          color: isSelected ? AppColors.primaryLime : cor,
+          size: isSelected ? 22 : 16,
+        ),
+      ),
+    );
+  }
   bool get _emTesteDeWidget => WidgetsBinding.instance.runtimeType
       .toString()
       .contains('TestWidgetsFlutterBinding');
@@ -1270,6 +1511,44 @@ class _MapPageState extends State<MapPage> {
       backgroundColor: AppColors.surfaceBackground,
       body: Stack(
         children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              onMapReady: _aoMapaPronto,
+              initialCenter: LatLng(-14.2350, -51.9253),
+              initialZoom: _currentZoom,
+              minZoom: 2.0,
+              maxZoom: 18.0,
+              onMapReady: _aoMapaPronto,
+              onPositionChanged: (camera, hasGesture) {
+                _currentZoom = camera.zoom;
+                _agendarCarregamento();
+              },
+              cameraConstraint: CameraConstraint.contain(
+                bounds: LatLngBounds(
+                  LatLng(-89.9, -180.0),
+                  LatLng(89.9, 180.0),
+                ),
+              ),
+              onPositionChanged: (camera, hasGesture) {
+                if (hasGesture) _agendarCarregamento();
+              },
+              onTap: (tapPosition, point) {
+                final edificacoesTocadas =
+                    _edificacaoHitNotifier.value?.hitValues ?? const [];
+                if (edificacoesTocadas.isNotEmpty) {
+                  _exibirEdificacao(edificacoesTocadas.first);
+                  return;
+                }
+
+                if (!isDrawing) {
+                  return;
+                }
+
+                setState(() {
+                  polygonPoints.add(point);
+                });
+              },
           if (_emTesteDeWidget)
             const ColoredBox(color: AppColors.surfaceBackground)
           else
@@ -1405,6 +1684,169 @@ class _MapPageState extends State<MapPage> {
                 ),
               ),
             ),
+          ),
+          if (_vegetacaoAtiva &&
+              _vegetacaoConfig != null &&
+              _vegetacaoConfig!.classes.isNotEmpty)
+            Positioned(
+              left: 15,
+              bottom: 90,
+              child: Container(
+                width: _legendaExpandida ? 220 : 160,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppColors.border,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _legendaExpandida = !_legendaExpandida;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Legenda',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textWhite,
+                                  ),
+                                ),
+                              ),
+                              Icon(
+                                _legendaExpandida
+                                    ? Icons.close_fullscreen
+                                    : Icons.open_in_full,
+                                size: 17,
+                                color: AppColors.textWhite,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    if (_legendaExpandida) ...[
+                      const Divider(
+                        height: 1,
+                        color: AppColors.border,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Tipos de Vegetação',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textWhite,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+
+                            for (final classe in _vegetacaoConfig!.classes)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: Color(
+                                          int.parse(
+                                            'FF${classe.cor.replaceFirst('#', '')}',
+                                            radix: 16,
+                                          ),
+                                        ),
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        '${classe.codigo} · ${classe.nome}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.textWhite,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          Positioned(
+            left: 15,
+            right: 15,
+            bottom: 10,
+            child: _areaDesenhada
+                ? _buildBotoesArea()
+                : ElevatedButton(
+                    onPressed: _iniciarEstudo,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryLime,
+                      foregroundColor: AppColors.textDark,
+                      elevation: 6,
+                      padding: const EdgeInsets.symmetric(vertical: 17),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      spacing: 8,
+                      children: [
+                        Icon(
+                          Icons.add,
+                          color: AppColors.textDark,
+                          size: 16,
+                          weight: 10.0,
+                        ),
+                        Text(
+                          'Iniciar estudo',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
           if (_edificacoesAtivas &&
               (_carregandoEdificacoes || _avisoEdificacoes != null))
             Positioned(

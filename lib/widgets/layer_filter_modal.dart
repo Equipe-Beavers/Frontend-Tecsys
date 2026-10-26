@@ -5,6 +5,8 @@ import 'package:frontend_tecsys/theme/app_colors.dart';
 
 class LayerFilterModal extends StatefulWidget {
   final Map<TipoAtivo, bool> camadasAtivasAtuais;
+  final bool vegetacaoAtivaAtual;
+  final bool antenasAtivasAtual;
   final ValueChanged<Map<TipoAtivo, bool>> onSalvarFiltro;
   final bool edificacoesAtivas;
   final ValueChanged<bool>? onSalvarEdificacoes;
@@ -12,6 +14,8 @@ class LayerFilterModal extends StatefulWidget {
   const LayerFilterModal({
     super.key,
     required this.camadasAtivasAtuais,
+    required this.vegetacaoAtivaAtual,
+    required this.antenasAtivasAtual,
     required this.onSalvarFiltro,
     this.edificacoesAtivas = false,
     this.onSalvarEdificacoes,
@@ -20,6 +24,8 @@ class LayerFilterModal extends StatefulWidget {
   static Future<void> exibir(
     BuildContext context, {
     required Map<TipoAtivo, bool> camadasAtivas,
+    required bool vegetacaoAtiva,
+    required bool antenasAtivas,
     required ValueChanged<Map<TipoAtivo, bool>> onSalvarFiltro,
     bool edificacoesAtivas = false,
     ValueChanged<bool>? onSalvarEdificacoes,
@@ -30,6 +36,8 @@ class LayerFilterModal extends StatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (ctx) => LayerFilterModal(
         camadasAtivasAtuais: camadasAtivas,
+        vegetacaoAtivaAtual: vegetacaoAtiva,
+        antenasAtivasAtual: antenasAtivas,
         onSalvarFiltro: onSalvarFiltro,
         edificacoesAtivas: edificacoesAtivas,
         onSalvarEdificacoes: onSalvarEdificacoes,
@@ -209,6 +217,46 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSecaoCamadasExternas() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 8, bottom: 4, left: 4, right: 4),
+          child: Text(
+            'DADOS GEOGRÁFICOS',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textMuted,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ),
+        CheckboxListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+          value: _vegetacaoRascunho,
+          activeColor: AppColors.primaryLime,
+          checkColor: AppColors.textDark,
+          title: const Text('Vegetação · ESA WorldCover 2021'),
+          secondary: const Icon(Icons.forest_outlined, color: AppColors.secondaryTeal),
+          onChanged: (value) => setState(() => _vegetacaoRascunho = value ?? false),
+        ),
+        CheckboxListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+          value: _antenasRascunho,
+          activeColor: AppColors.primaryLime,
+          checkColor: AppColors.textDark,
+          title: const Text('Antenas / estações · Anatel'),
+          secondary: const Icon(Icons.cell_tower, color: AppColors.secondaryTeal),
+          onChanged: (value) => setState(() => _antenasRascunho = value ?? false),
+        ),
+      ],
     );
   }
 
