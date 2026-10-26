@@ -12,7 +12,7 @@ class InstallCriterionDraft {
         for (final field in CriterionCollection.values)
           field: {...?original?.labels(field)},
       } {
-    relief = _readObject(original?.relief);
+    relief = _readObject(original?.relief)..remove('declividade_maxima_graus');
     vegetation = _readObject(original?.vegetation);
     buildings = _readObject(original?.buildings);
     antennas = _readObject(original?.antennas);
@@ -155,10 +155,6 @@ class InstallCriterionDraft {
       final maximum = relief['altitude_maxima_m'];
       if (minimum is num && maximum is num && minimum > maximum) {
         return 'A altitude mínima não pode ultrapassar a altitude máxima.';
-      }
-      final slope = relief['declividade_maxima_graus'];
-      if (slope is num && (slope < 0 || slope > 90)) {
-        return 'A declividade deve estar entre 0 e 90 graus.';
       }
     }
     return null;

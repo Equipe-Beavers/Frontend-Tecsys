@@ -486,7 +486,7 @@ void main() {
     await tester.enterText(input('Nome'), 'Critério teste');
     await tester.enterText(input('Mínima'), '300');
     await tester.enterText(input('Máxima').first, '1200');
-    await tester.enterText(input('Máxima').last, '20');
+    expect(find.text('Declividade em graus'), findsNothing);
     await tester.enterText(input('Raio de análise').first, '4');
     await tester.enterText(input('Quantidade máxima').first, '5');
     await tester.enterText(input('Altura máxima'), '6');
@@ -506,7 +506,6 @@ void main() {
     expect(payload!['relevo'], {
       'altitude_minima_m': 300,
       'altitude_maxima_m': 1200,
-      'declividade_maxima_graus': 20,
     });
     expect(payload!['vegetacoes'], isA<Map<String, dynamic>>());
     expect(payload!['edificacoes'], {
