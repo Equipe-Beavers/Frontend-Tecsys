@@ -1552,10 +1552,12 @@ class _MapPageState extends State<MapPage> {
                           onChanged: _aplicarBusca,
                         ),
                       ),
-                      LayerFilterButton(
-                        onPressed: _abrirPainelCamadas,
-                        activeLayersCount: _totalCamadasAtivas,
-                      ),
+                      if (_distribuidoraSelecionada != null &&
+                          _municipioSelecionado != null)
+                        LayerFilterButton(
+                          onPressed: _abrirPainelCamadas,
+                          activeLayersCount: _totalCamadasAtivas,
+                        ),
                     ],
                   ),
                   Row(

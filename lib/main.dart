@@ -122,7 +122,7 @@ class _MyAppState extends State<MyApp> {
                               (0, Icons.home_outlined, 'Início'),
                               (1, Icons.layers_outlined, 'Estudos'),
                               (2, Icons.description_outlined, 'Biblioteca'),
-                              (3, Icons.person_outline, 'Perfil'),
+                              // (3, Icons.person_outline, 'Perfil'),
                             ])
                               Padding(
                                 padding: const EdgeInsets.symmetric(

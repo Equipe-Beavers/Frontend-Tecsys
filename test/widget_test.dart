@@ -19,7 +19,7 @@ void main() {
     await tester.pumpWidget(const MyApp());
     await tester.pump();
 
-    expect(find.byType(ListTile), findsNWidgets(4));
+    expect(find.byType(ListTile), findsNWidgets(3));
     for (final tile in tester.widgetList<ListTile>(find.byType(ListTile))) {
       expect(tile.selectedTileColor, isNotNull);
     }
