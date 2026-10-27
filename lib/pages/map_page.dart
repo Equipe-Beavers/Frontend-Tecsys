@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
@@ -36,15 +35,14 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   MapboxMap? _mapboxMap;
-  PointAnnotationManager? _pointAnnotationManager;
+  CircleAnnotationManager? _ativoAnnotationManager;
   PolygonAnnotationManager? _polygonAnnotationManager;
   CircleAnnotationManager? _vertexAnnotationManager;
   CircleAnnotationManager? _antenaAnnotationManager;
-  Cancelable? _pointTapEvents;
+  Cancelable? _ativoTapEvents;
   Cancelable? _antenaTapEvents;
   final Map<String, AtivoBdgd> _ativosPorAnnotationId = {};
   final Map<String, AntenaAnatel> _antenasPorAnnotationId = {};
-  Uint8List? _poleIconImage;
 
   final AtivosService _ativosService = AtivosService();
   final EdificacoesService _edificacoesService = EdificacoesService();
@@ -78,6 +76,8 @@ class _MapPageState extends State<MapPage> {
 
   Timer? _debounceTimer;
   int _sequenciaRequisicao = 0;
+  String? _consultaDadosEmAndamento;
+  String? _ultimaConsultaDados;
   int _sequenciaMunicipios = 0;
   bool _mapaPronto = false;
   bool _distribuidorasProntas = false;
@@ -89,6 +89,8 @@ class _MapPageState extends State<MapPage> {
   String? _avisoEdificacoes;
   String? _avisoAtivos;
   int _sequenciaEdificacoes = 0;
+  String? _consultaEdificacoesEmAndamento;
+  String? _ultimaConsultaEdificacoes;
 
   static const int _limiteAtivos = 3000;
   static const double _ladoMaximoGrausAtivos = 0.2;
@@ -117,7 +119,7 @@ class _MapPageState extends State<MapPage> {
   void dispose() {
     _debounceTimer?.cancel();
     _buscaController.dispose();
-    _pointTapEvents?.cancel();
+    _ativoTapEvents?.cancel();
     _antenaTapEvents?.cancel();
     _ativosService.dispose();
     _camadasExternasService.dispose();
@@ -128,26 +130,11 @@ class _MapPageState extends State<MapPage> {
   void _onMapCreated(MapboxMap controller) async {
     _mapboxMap = controller;
     controller.scaleBar.updateSettings(ScaleBarSettings(enabled: false));
-    try {
-      final image = await rootBundle.load('assets/images/PoleIcon.png');
-      _poleIconImage = image.buffer.asUint8List(
-        image.offsetInBytes,
-        image.lengthInBytes,
-      );
-    } catch (error, stackTrace) {
-      debugPrint('Falha ao carregar o ícone de poste: $error');
-      debugPrintStack(stackTrace: stackTrace);
-      if (mounted) {
-        setState(() {
-          _erroMapa = 'Não foi possível carregar o ícone dos postes.';
-        });
-      }
-    }
 
     if (!kIsWeb) {
-      _pointAnnotationManager = await controller.annotations
-          .createPointAnnotationManager();
-      _pointTapEvents = _pointAnnotationManager!.tapEvents(
+      _ativoAnnotationManager = await controller.annotations
+          .createCircleAnnotationManager();
+      _ativoTapEvents = _ativoAnnotationManager!.tapEvents(
         onTap: (annotation) {
           final ativo = _ativosPorAnnotationId[annotation.id];
           if (ativo != null) _selecionarAtivo(ativo);
@@ -472,26 +459,26 @@ class _MapPageState extends State<MapPage> {
       }
       return;
     }
-    if (_pointAnnotationManager == null) return;
+    final manager = _ativoAnnotationManager;
+    if (manager == null) return;
 
-    List<PointAnnotationOptions> optionsList = [];
-    for (var ativo in ativosFiltrados) {
-      optionsList.add(
-        PointAnnotationOptions(
-          geometry: Point(
-            coordinates: Position(ativo.longitude, ativo.latitude),
+    final optionsList = ativosFiltrados
+        .map(
+          (ativo) => CircleAnnotationOptions(
+            geometry: Point(
+              coordinates: Position(ativo.longitude, ativo.latitude),
+            ),
+            circleRadius: _ativoSelecionado?.id == ativo.id ? 11 : 8,
+            circleColor: ativo.tipo.cor.toARGB32(),
+            circleStrokeWidth: 1.5,
+            circleStrokeColor: Colors.white.toARGB32(),
           ),
-          image: ativo.tipo == TipoAtivo.poste ? _poleIconImage : null,
-          iconSize: _ativoSelecionado?.id == ativo.id ? 3 : 4,
-        ),
-      );
-    }
+        )
+        .toList();
 
     try {
-      await _pointAnnotationManager!.deleteAll();
-      final annotations = await _pointAnnotationManager!.createMulti(
-        optionsList,
-      );
+      await manager.deleteAll();
+      final annotations = await manager.createMulti(optionsList);
       _ativosPorAnnotationId.clear();
       for (var index = 0; index < annotations.length; index++) {
         final annotation = annotations[index];
@@ -620,9 +607,10 @@ class _MapPageState extends State<MapPage> {
     final map = _mapboxMap;
     if (!_mapaPronto || map == null) return;
 
-    final sequencia = ++_sequenciaEdificacoes;
-
     if (!_edificacoesAtivas) {
+      _sequenciaEdificacoes++;
+      _consultaEdificacoesEmAndamento = null;
+      _ultimaConsultaEdificacoes = null;
       setState(() {
         _edificacoes = [];
         _carregandoEdificacoes = false;
@@ -648,6 +636,9 @@ class _MapPageState extends State<MapPage> {
 
     if (north - south > EdificacoesService.ladoMaximoGraus ||
         east - west > EdificacoesService.ladoMaximoGraus) {
+      _sequenciaEdificacoes++;
+      _consultaEdificacoesEmAndamento = null;
+      _ultimaConsultaEdificacoes = null;
       setState(() {
         _edificacoes = [];
         _carregandoEdificacoes = false;
@@ -657,6 +648,23 @@ class _MapPageState extends State<MapPage> {
       return;
     }
 
+    final consulta = jsonEncode([
+      south.toStringAsFixed(5),
+      north.toStringAsFixed(5),
+      west.toStringAsFixed(5),
+      east.toStringAsFixed(5),
+    ]);
+
+    if (consulta == _consultaEdificacoesEmAndamento) return;
+
+    final sequencia = ++_sequenciaEdificacoes;
+    if (consulta == _ultimaConsultaEdificacoes) {
+      _consultaEdificacoesEmAndamento = null;
+      setState(() => _carregandoEdificacoes = false);
+      return;
+    }
+
+    _consultaEdificacoesEmAndamento = consulta;
     setState(() {
       _carregandoEdificacoes = true;
       _avisoEdificacoes = null;
@@ -672,6 +680,8 @@ class _MapPageState extends State<MapPage> {
 
       if (!mounted || sequencia != _sequenciaEdificacoes) return;
 
+      _consultaEdificacoesEmAndamento = null;
+      _ultimaConsultaEdificacoes = consulta;
       setState(() {
         _edificacoes = edificacoes;
         _carregandoEdificacoes = false;
@@ -680,6 +690,7 @@ class _MapPageState extends State<MapPage> {
     } catch (error) {
       if (!mounted || sequencia != _sequenciaEdificacoes) return;
 
+      _consultaEdificacoesEmAndamento = null;
       setState(() {
         _carregandoEdificacoes = false;
         _avisoEdificacoes = 'Não foi possível carregar os edifícios.';
@@ -701,6 +712,9 @@ class _MapPageState extends State<MapPage> {
 
     if (!deveCarregarAtivos && !deveCarregarAntenas) {
       if (!mounted) return;
+      _sequenciaRequisicao++;
+      _consultaDadosEmAndamento = null;
+      _ultimaConsultaDados = null;
       setState(() {
         _todosAtivos = [];
         _antenas = [];
@@ -712,7 +726,8 @@ class _MapPageState extends State<MapPage> {
       return;
     }
 
-    final sequencia = ++_sequenciaRequisicao;
+    int? sequencia;
+    String? consulta;
 
     try {
       final cameraState = await _mapboxMap!.getCameraState();
@@ -734,6 +749,9 @@ class _MapPageState extends State<MapPage> {
           (maxLongitude - minLongitude) > _ladoMaximoGrausAtivos;
       if (areaMuitoAmpla) {
         if (!mounted) return;
+        _sequenciaRequisicao++;
+        _consultaDadosEmAndamento = null;
+        _ultimaConsultaDados = null;
         setState(() {
           _todosAtivos = [];
           _antenas = [];
@@ -745,6 +763,32 @@ class _MapPageState extends State<MapPage> {
         return;
       }
 
+      final tiposOrdenados = camadasApi.toList()..sort();
+      consulta = jsonEncode([
+        minLatitude.toStringAsFixed(5),
+        maxLatitude.toStringAsFixed(5),
+        minLongitude.toStringAsFixed(5),
+        maxLongitude.toStringAsFixed(5),
+        _distribuidoraSelecionada,
+        tiposOrdenados,
+        deveCarregarAntenas,
+      ]);
+
+      if (consulta == _consultaDadosEmAndamento) return;
+
+      sequencia = ++_sequenciaRequisicao;
+      if (consulta == _ultimaConsultaDados) {
+        _consultaDadosEmAndamento = null;
+        if (mounted) {
+          setState(() {
+            _carregando = false;
+            _erro = null;
+          });
+        }
+        return;
+      }
+
+      _consultaDadosEmAndamento = consulta;
       if (mounted) {
         setState(() {
           if (_todosAtivos.isEmpty) _carregando = true;
@@ -797,6 +841,10 @@ class _MapPageState extends State<MapPage> {
         return;
       }
 
+      _consultaDadosEmAndamento = null;
+      if (erroCarregamento == null) {
+        _ultimaConsultaDados = consulta;
+      }
       setState(() {
         _todosAtivos = ativosCarregados;
         _antenas = antenasCarregadas;
@@ -807,10 +855,15 @@ class _MapPageState extends State<MapPage> {
 
       _atualizarAnnotations();
     } catch (error, stackTrace) {
-      if (!mounted || sequencia != _sequenciaRequisicao) {
+      if (sequencia != null && sequencia != _sequenciaRequisicao) {
         return;
       }
 
+      if (sequencia == null) {
+        _sequenciaRequisicao++;
+      }
+      _consultaDadosEmAndamento = null;
+      if (!mounted) return;
       debugPrint('Falha ao carregar dados do mapa: $error');
       debugPrintStack(stackTrace: stackTrace);
       setState(() {
