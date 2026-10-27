@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/mancha_cenario.dart';
@@ -28,13 +27,6 @@ class RecommendationMap extends StatelessWidget {
   final bool lockPosition;
   final bool showBaseMap;
 
-  static const _focusedMapFlags =
-      InteractiveFlag.drag |
-      InteractiveFlag.pinchZoom |
-      InteractiveFlag.doubleTapZoom |
-      InteractiveFlag.doubleTapDragZoom |
-      InteractiveFlag.scrollWheelZoom;
-
   @override
   Widget build(BuildContext context) {
     final legendScale = MediaQuery.sizeOf(context).width >= 900 ? 1.44 : 1.0;
@@ -43,7 +35,6 @@ class RecommendationMap extends StatelessWidget {
         : <GatewayProposto>[selectedGateway!];
     final visibleAssets = _visibleAssets();
     final visibleScenarioCoverage = _visibleScenarioCoverage();
-    final centerGateway = selectedGateway ?? gateways.firstOrNull;
     final viewport = RecommendationMapViewport.fromGateways(visibleGateways);
 
     return ClipRRect(
@@ -52,23 +43,14 @@ class RecommendationMap extends StatelessWidget {
         children: [
           Positioned.fill(
             child: ResponsiveRecommendationMap(
+              gateways: visibleGateways,
+              assets: visibleAssets,
+              scenarioCoverage: visibleScenarioCoverage,
+              viewport: viewport,
+              selectedGateway: selectedGateway,
+              onGatewayTap: onGatewayTap,
               showBaseMap: showBaseMap,
-              optionsBuilder: (size) => buildRecommendationMapOptions(
-                size: size,
-                viewport: viewport,
-                centerGateway: centerGateway,
-                showBaseMap: showBaseMap,
-                interactionFlags: lockPosition
-                    ? _focusedMapFlags
-                    : InteractiveFlag.all & ~InteractiveFlag.rotate,
-              ),
-              layers: buildRecommendationMapLayers(
-                gateways: visibleGateways,
-                assets: visibleAssets,
-                scenarioCoverage: visibleScenarioCoverage,
-                selectedGateway: selectedGateway,
-                onGatewayTap: onGatewayTap,
-              ),
+              lockPosition: lockPosition,
             ),
           ),
           Positioned(
@@ -123,8 +105,4 @@ class RecommendationMap extends StatelessWidget {
         ) <=
         gateway.raioCoberturaM;
   }
-}
-
-extension<T> on List<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

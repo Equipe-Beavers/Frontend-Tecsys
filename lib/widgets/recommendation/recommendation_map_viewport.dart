@@ -1,9 +1,27 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import '../../models/recomendacao_resultado.dart';
-import '../../theme/app_colors.dart';
+
+class RecommendationGeoBounds {
+  const RecommendationGeoBounds({
+    required this.north,
+    required this.south,
+    required this.east,
+    required this.west,
+  });
+
+  final double north;
+  final double south;
+  final double east;
+  final double west;
+
+  CoordinateBounds toMapboxBounds() => CoordinateBounds(
+    southwest: Point(coordinates: Position(west, south)),
+    northeast: Point(coordinates: Position(east, north)),
+    infiniteBounds: false,
+  );
+}
 
 class RecommendationMapViewport {
   const RecommendationMapViewport({
@@ -11,10 +29,10 @@ class RecommendationMapViewport {
     required this.displayBounds,
   });
 
-  static const displayRadiusFactor = 1.2;
+  static const displayRadiusFactor = 1.1;
 
-  final LatLngBounds coverageBounds;
-  final LatLngBounds displayBounds;
+  final RecommendationGeoBounds coverageBounds;
+  final RecommendationGeoBounds displayBounds;
 
   static RecommendationMapViewport? fromGateways(
     List<GatewayProposto> gateways,
@@ -26,7 +44,7 @@ class RecommendationMapViewport {
     );
   }
 
-  static LatLngBounds _boundsFor(
+  static RecommendationGeoBounds _boundsFor(
     List<GatewayProposto> gateways, {
     required double radiusFactor,
   }) {
@@ -42,45 +60,24 @@ class RecommendationMapViewport {
         distance.offset(center, radius, 270),
       ]);
     }
-    return LatLngBounds.fromPoints(points);
+
+    return RecommendationGeoBounds(
+      north: points.map((point) => point.latitude).reduce(_max),
+      south: points.map((point) => point.latitude).reduce(_min),
+      east: points.map((point) => point.longitude).reduce(_max),
+      west: points.map((point) => point.longitude).reduce(_min),
+    );
   }
 }
 
-MapOptions buildRecommendationMapOptions({
-  required Size size,
-  required RecommendationMapViewport? viewport,
-  required GatewayProposto? centerGateway,
-  required bool showBaseMap,
-  required int interactionFlags,
-}) {
-  final fallbackCenter = centerGateway == null
-      ? const LatLng(-23.2, -45.88)
-      : LatLng(centerGateway.latitude, centerGateway.longitude);
-  final fit = viewport == null
-      ? null
-      : CameraFit.bounds(bounds: viewport.displayBounds, maxZoom: 13.4);
-  final baseOptions = MapOptions(
-    initialCenter: fallbackCenter,
-    initialZoom: 12.5,
-    minZoom: 2,
-    maxZoom: 18,
-  );
-  final fittedCamera = fit?.fit(
-    MapCamera.initialCamera(baseOptions).withNonRotatedSize(size),
-  );
+double _max(double a, double b) => a > b ? a : b;
+double _min(double a, double b) => a < b ? a : b;
 
-  return MapOptions(
-    initialCenter: fittedCamera?.center ?? fallbackCenter,
-    initialZoom: fittedCamera?.zoom ?? 12.5,
-    initialCameraFit: fit,
-    minZoom: fittedCamera?.zoom ?? 2,
-    maxZoom: 18,
-    cameraConstraint: viewport == null
-        ? const CameraConstraint.unconstrained()
-        : CameraConstraint.containCenter(bounds: viewport.coverageBounds),
-    backgroundColor: showBaseMap
-        ? const Color(0xFFE6E6E6)
-        : AppColors.surfaceBackground,
-    interactionOptions: InteractionOptions(flags: interactionFlags),
-  );
-}
+const recommendationMinimumAllowedZoom = 8.5;
+const recommendationMaximumZoom = 17.0;
+
+double recommendationMinimumZoom(double fittedZoom) =>
+    (fittedZoom - 3).clamp(
+      recommendationMinimumAllowedZoom,
+      recommendationMaximumZoom,
+    );

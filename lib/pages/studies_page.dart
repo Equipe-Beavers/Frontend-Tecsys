@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/estudos_service.dart';
 import '../services/install_criterion_service.dart';
 import '../services/rf_profile_service.dart';
-import '../mocks/recomendacao_mock.dart';
 import '../theme/app_colors.dart';
 import '../utils/name_filter.dart';
 import '../widgets/library_record_card.dart';
@@ -189,7 +188,6 @@ class _StudiesPageState extends State<StudiesPage> {
               .whereType<String>()
               .where((value) => value.trim().isNotEmpty)
               .join(' · '),
-          resultadoInicial: buildRecommendationMock(studyId: id),
         ),
       ),
     );

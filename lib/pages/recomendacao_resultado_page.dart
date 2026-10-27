@@ -237,7 +237,7 @@ class _RecommendationError extends StatelessWidget {
           const Icon(Icons.error_outline, color: AppColors.textMuted, size: 32),
           const SizedBox(height: 12),
           Text(
-            'Não foi possível gerar a recomendação.\n$message',
+            'Não foi possível gerar a recomendação.\n\n$message',
             style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
             textAlign: TextAlign.center,
           ),

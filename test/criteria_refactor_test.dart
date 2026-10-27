@@ -152,7 +152,6 @@ void main() {
       ...fixture,
       'id_criterio_instalacao': '7',
       'distancia_maxima_ativos_m': '1500.25',
-      'requer_alimentacao_eletrica': false,
       'relevo': {'altitude_minima_m': 5.5},
       'criado_em': '2026-10-06T10:00:00',
       'tipos_elementos_permitidos': {
@@ -161,7 +160,6 @@ void main() {
     });
     expect(criterion.id, 7);
     expect(criterion.maxDistanceMeters, 1500.25);
-    expect(criterion.requiresPower, false);
     expect(criterion.relief, {'altitude_minima_m': 5.5});
     expect(criterion.createdAt?.year, 2026);
     final draft = InstallCriterionDraft(original: criterion)
@@ -403,10 +401,6 @@ void main() {
       'altura_dispositivo_m': 5,
       'capacidade_max_equipamentos': 1200,
       'atenuacao_adicional_db': 4.2,
-      'considera_relevo': true,
-      'considera_vegetacao': true,
-      'considera_edificacoes': true,
-      'considera_antenas': true,
     };
     Map<String, dynamic>? submittedPayload;
     var saved = false;
@@ -437,7 +431,6 @@ void main() {
                     'potencia_transmissao_dbm': 21,
                     'capacidade_max_equipamentos': 40,
                     'atenuacao_adicional_db': null,
-                    'considera_edificacoes': false,
                   },
                 ],
           'page': 1,
@@ -544,10 +537,6 @@ void main() {
       'altura_dispositivo_m': 5,
       'capacidade_max_equipamentos': 1200,
       'atenuacao_adicional_db': 4.2,
-      'considera_relevo': true,
-      'considera_vegetacao': true,
-      'considera_edificacoes': true,
-      'considera_antenas': true,
     });
     expect(find.text('GW-9200 LoRaWAN'), findsOneWidget);
     expect(
@@ -634,10 +623,6 @@ void main() {
                     'frequencia_mhz': 915,
                     'potencia_transmissao_dbm': 21,
                     'sensibilidade_recepcao_dbm': -120,
-                    'considera_relevo': true,
-                    'considera_vegetacao': true,
-                    'considera_edificacoes': true,
-                    'considera_antenas': true,
                   },
                 ],
           'page': 1,
@@ -699,10 +684,6 @@ void main() {
       'altura_dispositivo_m': 5.5,
       'capacidade_max_equipamentos': 40,
       'atenuacao_adicional_db': 3.2,
-      'considera_relevo': true,
-      'considera_vegetacao': false,
-      'considera_edificacoes': true,
-      'considera_antenas': false,
     };
     final requests = <http.Request>[];
     final criteriaService = InstallCriterionService(
@@ -789,7 +770,6 @@ void main() {
           .text,
       '-120',
     );
-    expect(tester.widget<Switch>(find.byType(Switch).at(1)).value, false);
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Nome'),
       'LoRa urbano revisado',

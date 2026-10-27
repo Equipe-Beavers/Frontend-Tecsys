@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend_tecsys/mocks/recomendacao_mock.dart';
 import 'package:frontend_tecsys/models/mancha_cenario.dart';
 import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
 import 'package:frontend_tecsys/pages/gateway_detail_page.dart';
-import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/recommendation_map.dart';
+import 'package:frontend_tecsys/widgets/recommendation/recommendation_map_viewport.dart';
+import 'package:frontend_tecsys/widgets/recommendation/responsive_recommendation_map.dart';
 import 'package:latlong2/latlong.dart';
 
 void main() {
@@ -37,13 +37,14 @@ void main() {
       ),
     );
 
-    final polygons = tester.widget<PolygonLayer>(find.byType(PolygonLayer));
-    expect(polygons.polygons, hasLength(1));
-    expect(polygons.polygons.single.points, coverage.mancha);
     expect(
-      polygons.polygons.single.borderColor,
-      AppColors.secondaryTeal.withValues(alpha: .85),
+      find.byKey(const ValueKey('scenario-coverage-layer')),
+      findsOneWidget,
     );
+    final map = tester.widget<ResponsiveRecommendationMap>(
+      find.byType(ResponsiveRecommendationMap),
+    );
+    expect(map.scenarioCoverage.single.mancha, coverage.mancha);
   });
 
   testWidgets('gateway marker is selectable from the map', (tester) async {
@@ -69,12 +70,14 @@ void main() {
     expect(find.byKey(const ValueKey('covered-asset-1401')), findsOneWidget);
     expect(find.byKey(const ValueKey('uncovered-asset-1403')), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('gateway-14')));
+    tester
+        .widget<GestureDetector>(find.byKey(const ValueKey('gateway-14')))
+        .onTap!();
     await tester.pump();
     expect(selected?.idEstudoPonto, 14);
   });
 
-  testWidgets('study result uses the same light map tiles as the home page', (
+  testWidgets('study result uses the same Mapbox map as the home page', (
     tester,
   ) async {
     final result = buildRecommendationMock();
@@ -84,21 +87,18 @@ void main() {
       settle: false,
     );
 
-    final tileLayer = tester.widget<TileLayer>(find.byType(TileLayer));
-    expect(tileLayer.tileBuilder, isNull);
-    expect(tileLayer.panBuffer, 0);
-    expect(tileLayer.tileDisplay, isA<InstantaneousTileDisplay>());
-
-    final circle = tester
-        .widget<CircleLayer>(find.byType(CircleLayer))
-        .circles
-        .first;
-    expect(circle.color, AppColors.coverageArea.withValues(alpha: .24));
-    expect(circle.borderColor, AppColors.coverageBorder.withValues(alpha: .9));
-    expect(circle.borderStrokeWidth, 1.8);
+    final map = tester.widget<ResponsiveRecommendationMap>(
+      find.byType(ResponsiveRecommendationMap),
+    );
+    expect(map.showBaseMap, isTrue);
+    expect(map.gateways, result.gateways);
+    expect(
+      find.byKey(const ValueKey('recommendation-mapbox-test-surface')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('map keeps the same tile layer after changing to a mobile size', (
+  testWidgets('map keeps the same Mapbox state after changing to mobile size', (
     tester,
   ) async {
     final result = buildRecommendationMock();
@@ -128,15 +128,19 @@ void main() {
       ),
     );
     await tester.pump();
-    final initialTileLayer = tester.state(find.byType(TileLayer));
+    final initialMapState = tester.state(
+      find.byType(ResponsiveRecommendationMap),
+    );
 
     resize(() => mobile = true);
     await tester.pump();
     await tester.pump();
 
-    expect(find.byType(TileLayer), findsOneWidget);
-    expect(tester.state(find.byType(TileLayer)), same(initialTileLayer));
-    expect(tester.widget<TileLayer>(find.byType(TileLayer)).panBuffer, 0);
+    expect(find.byType(ResponsiveRecommendationMap), findsOneWidget);
+    expect(
+      tester.state(find.byType(ResponsiveRecommendationMap)),
+      same(initialMapState),
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -190,19 +194,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final flags = tester
-        .widget<FlutterMap>(find.byType(FlutterMap))
-        .options
-        .interactionOptions
-        .flags;
-    expect(InteractiveFlag.hasDrag(flags), isTrue);
-    expect(InteractiveFlag.hasPinchZoom(flags), isTrue);
-    expect(InteractiveFlag.hasScrollWheelZoom(flags), isTrue);
+    final map = tester.widget<ResponsiveRecommendationMap>(
+      find.byType(ResponsiveRecommendationMap),
+    );
+    expect(map.lockPosition, isTrue);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets(
-    'result and gateway maps fit coverage with 20 percent margin and block zoom out',
+    'result and gateway maps fit coverage and allow controlled zoom out',
     (tester) async {
       tester.view.physicalSize = const Size(1000, 700);
       tester.view.devicePixelRatio = 1;
@@ -227,22 +227,22 @@ void main() {
           ),
         );
 
-        final options = tester
-            .widget<FlutterMap>(find.byType(FlutterMap))
-            .options;
-        final fit = options.initialCameraFit! as FitBounds;
-        final constraint = options.cameraConstraint as ContainCameraCenter;
+        final viewport = RecommendationMapViewport.fromGateways(
+          visibleGateways,
+        )!;
+        final fit = viewport.displayBounds;
+        final constraint = viewport.coverageBounds;
 
-        expect(options.minZoom, closeTo(options.initialZoom, .0001));
-        expect(fit.bounds.north, greaterThan(constraint.bounds.north));
-        expect(fit.bounds.south, lessThan(constraint.bounds.south));
-        expect(fit.bounds.east, greaterThan(constraint.bounds.east));
-        expect(fit.bounds.west, lessThan(constraint.bounds.west));
+        expect(recommendationMinimumZoom(12), 9);
+        expect(recommendationMinimumZoom(20), recommendationMaximumZoom);
+
+        expect(fit.north, greaterThan(constraint.north));
+        expect(fit.south, lessThan(constraint.south));
+        expect(fit.east, greaterThan(constraint.east));
+        expect(fit.west, lessThan(constraint.west));
         for (final gateway in visibleGateways) {
-          expect(
-            fit.bounds.contains(LatLng(gateway.latitude, gateway.longitude)),
-            isTrue,
-          );
+          expect(gateway.latitude, inInclusiveRange(fit.south, fit.north));
+          expect(gateway.longitude, inInclusiveRange(fit.west, fit.east));
         }
 
         if (selectedGateway != null) {
@@ -250,11 +250,11 @@ void main() {
           final marginRadius = distance.as(
             LengthUnit.Meter,
             LatLng(selectedGateway.latitude, selectedGateway.longitude),
-            LatLng(fit.bounds.north, selectedGateway.longitude),
+            LatLng(fit.north, selectedGateway.longitude),
           );
           expect(
             marginRadius,
-            closeTo(selectedGateway.raioCoberturaM * 1.2, 2),
+            closeTo(selectedGateway.raioCoberturaM * 1.1, 2),
           );
         }
       }

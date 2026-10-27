@@ -10,10 +10,13 @@ import 'package:frontend_tecsys/widgets/search_bar.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/city_bairro_bottom_sheet.dart';
 import 'package:latlong2/latlong.dart' as latlong2;
+import 'package:frontend_tecsys/models/antena_anatel.dart';
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/models/edificacao.dart';
 import 'package:frontend_tecsys/models/layer_filter.dart';
+import 'package:frontend_tecsys/models/vegetacao_config.dart';
 import 'package:frontend_tecsys/services/ativos_service.dart';
+import 'package:frontend_tecsys/services/camadas_externas_service.dart';
 import 'package:frontend_tecsys/services/edificacoes_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
@@ -36,12 +39,17 @@ class _MapPageState extends State<MapPage> {
   PointAnnotationManager? _pointAnnotationManager;
   PolygonAnnotationManager? _polygonAnnotationManager;
   CircleAnnotationManager? _vertexAnnotationManager;
+  CircleAnnotationManager? _antenaAnnotationManager;
   Cancelable? _pointTapEvents;
+  Cancelable? _antenaTapEvents;
   final Map<String, AtivoBdgd> _ativosPorAnnotationId = {};
+  final Map<String, AntenaAnatel> _antenasPorAnnotationId = {};
   Uint8List? _poleIconImage;
 
   final AtivosService _ativosService = AtivosService();
   final EdificacoesService _edificacoesService = EdificacoesService();
+  final CamadasExternasService _camadasExternasService =
+      CamadasExternasService();
   final TextEditingController _buscaController = TextEditingController();
 
   List<DistribuidoraResumo> _distribuidoras = [];
@@ -54,6 +62,11 @@ class _MapPageState extends State<MapPage> {
   String _textoBusca = '';
 
   List<AtivoBdgd> _todosAtivos = [];
+  List<AntenaAnatel> _antenas = [];
+  VegetacaoConfig? _vegetacaoConfig;
+  bool _vegetacaoAtiva = false;
+  bool _antenasAtivas = false;
+  bool _legendaExpandida = false;
   Map<TipoAtivo, bool> _camadasAtivas =
       CatalogoCamadas.obterEstadoInicialPadrao();
   AtivoBdgd? _ativoSelecionado;
@@ -74,9 +87,11 @@ class _MapPageState extends State<MapPage> {
   List<Edificacao> _edificacoes = [];
   bool _carregandoEdificacoes = false;
   String? _avisoEdificacoes;
+  String? _avisoAtivos;
   int _sequenciaEdificacoes = 0;
 
   static const int _limiteAtivos = 3000;
+  static const double _ladoMaximoGrausAtivos = 0.2;
   static const String _terrainSourceId = 'study-terrain-dem';
   static const String _edificacoesSourceId = 'study-buildings';
   static const String _edificacoesFillLayerId = 'study-buildings-fill';
@@ -103,7 +118,9 @@ class _MapPageState extends State<MapPage> {
     _debounceTimer?.cancel();
     _buscaController.dispose();
     _pointTapEvents?.cancel();
+    _antenaTapEvents?.cancel();
     _ativosService.dispose();
+    _camadasExternasService.dispose();
     _edificacoesService.dispose();
     super.dispose();
   }
@@ -140,6 +157,14 @@ class _MapPageState extends State<MapPage> {
           .createCircleAnnotationManager();
       _polygonAnnotationManager = await controller.annotations
           .createPolygonAnnotationManager();
+      _antenaAnnotationManager = await controller.annotations
+          .createCircleAnnotationManager();
+      _antenaTapEvents = _antenaAnnotationManager!.tapEvents(
+        onTap: (annotation) {
+          final antena = _antenasPorAnnotationId[annotation.id];
+          if (antena != null) _abrirDetalhesAntena(antena);
+        },
+      );
     }
 
     await controller.setBounds(
@@ -488,6 +513,46 @@ class _MapPageState extends State<MapPage> {
         });
       }
     }
+
+    await _atualizarAntenasNoMapa();
+  }
+
+  Future<void> _atualizarAntenasNoMapa() async {
+    if (kIsWeb) return;
+    final manager = _antenaAnnotationManager;
+    if (manager == null) return;
+
+    try {
+      await manager.deleteAll();
+      _antenasPorAnnotationId.clear();
+
+      if (!_antenasAtivas || _antenas.isEmpty) return;
+
+      final optionsList = _antenas
+          .map(
+            (antena) => CircleAnnotationOptions(
+              geometry: Point(
+                coordinates: Position(antena.longitude, antena.latitude),
+              ),
+              circleRadius: 7.0,
+              circleColor: AppColors.surfaceCard.toARGB32(),
+              circleStrokeWidth: 2.5,
+              circleStrokeColor: AppColors.secondaryTeal.toARGB32(),
+            ),
+          )
+          .toList();
+
+      final annotations = await manager.createMulti(optionsList);
+      for (var index = 0; index < annotations.length; index++) {
+        final annotation = annotations[index];
+        if (annotation != null) {
+          _antenasPorAnnotationId[annotation.id] = _antenas[index];
+        }
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Falha ao renderizar antenas no mapa: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   Future<void> _atualizarPoligono() async {
@@ -631,12 +696,17 @@ class _MapPageState extends State<MapPage> {
       for (final entry in _camadasAtivas.entries)
         if (entry.value) entry.key.apiValue,
     };
+    final deveCarregarAtivos = camadasApi.isNotEmpty;
+    final deveCarregarAntenas = _antenasAtivas;
 
-    if (camadasApi.isEmpty) {
+    if (!deveCarregarAtivos && !deveCarregarAntenas) {
+      if (!mounted) return;
       setState(() {
         _todosAtivos = [];
+        _antenas = [];
         _carregando = false;
         _erro = null;
+        _avisoAtivos = null;
       });
       _atualizarAnnotations();
       return;
@@ -654,6 +724,26 @@ class _MapPageState extends State<MapPage> {
           pitch: cameraState.pitch,
         ),
       );
+      final minLatitude = bounds.southwest.coordinates.lat.toDouble();
+      final maxLatitude = bounds.northeast.coordinates.lat.toDouble();
+      final minLongitude = bounds.southwest.coordinates.lng.toDouble();
+      final maxLongitude = bounds.northeast.coordinates.lng.toDouble();
+
+      final areaMuitoAmpla =
+          (maxLatitude - minLatitude) > _ladoMaximoGrausAtivos ||
+          (maxLongitude - minLongitude) > _ladoMaximoGrausAtivos;
+      if (areaMuitoAmpla) {
+        if (!mounted) return;
+        setState(() {
+          _todosAtivos = [];
+          _antenas = [];
+          _carregando = false;
+          _erro = null;
+          _avisoAtivos = 'Aproxime o mapa para carregar os ativos.';
+        });
+        _atualizarAnnotations();
+        return;
+      }
 
       if (mounted) {
         setState(() {
@@ -662,23 +752,57 @@ class _MapPageState extends State<MapPage> {
         });
       }
 
-      final resultado = await _ativosService.getAtivos(
-        minLatitude: bounds.southwest.coordinates.lat.toDouble(),
-        maxLatitude: bounds.northeast.coordinates.lat.toDouble(),
-        minLongitude: bounds.southwest.coordinates.lng.toDouble(),
-        maxLongitude: bounds.northeast.coordinates.lng.toDouble(),
-        distribuidora: _distribuidoraSelecionada,
-        tipos: camadasApi,
-        limit: _limiteAtivos,
-      );
+      var ativosCarregados = <AtivoBdgd>[];
+      var antenasCarregadas = <AntenaAnatel>[];
+      String? erroCarregamento;
+
+      await Future.wait<void>([
+        () async {
+          if (!deveCarregarAtivos) return;
+          try {
+            final resultado = await _ativosService.getAtivos(
+              minLatitude: minLatitude,
+              maxLatitude: maxLatitude,
+              minLongitude: minLongitude,
+              maxLongitude: maxLongitude,
+              distribuidora: _distribuidoraSelecionada,
+              tipos: camadasApi,
+              limit: _limiteAtivos,
+            );
+            ativosCarregados = resultado.ativos;
+          } catch (error) {
+            erroCarregamento ??=
+                'Não foi possível carregar os ativos elétricos: $error';
+          }
+        }(),
+        () async {
+          if (!deveCarregarAntenas) return;
+          try {
+            final resultado = await _camadasExternasService.getAntenas(
+              minLatitude: minLatitude,
+              maxLatitude: maxLatitude,
+              minLongitude: minLongitude,
+              maxLongitude: maxLongitude,
+              limit: 1000,
+            );
+            antenasCarregadas = resultado.antenas;
+          } catch (error) {
+            erroCarregamento ??=
+                'Não foi possível carregar as estações da Anatel: $error';
+          }
+        }(),
+      ]);
 
       if (!mounted || sequencia != _sequenciaRequisicao) {
         return;
       }
 
       setState(() {
-        _todosAtivos = resultado.ativos;
+        _todosAtivos = ativosCarregados;
+        _antenas = antenasCarregadas;
         _carregando = false;
+        _erro = erroCarregamento;
+        _avisoAtivos = null;
       });
 
       _atualizarAnnotations();
@@ -687,16 +811,28 @@ class _MapPageState extends State<MapPage> {
         return;
       }
 
-      debugPrint('Falha ao carregar ativos: $error');
+      debugPrint('Falha ao carregar dados do mapa: $error');
       debugPrintStack(stackTrace: stackTrace);
       setState(() {
-        _erro = 'Falha ao carregar ativos: $error';
+        _erro = 'Falha ao carregar dados do mapa: $error';
         _carregando = false;
       });
     }
   }
 
   Future<void> _inicializar() async {
+    var configVegetacao = VegetacaoConfig.fallback();
+    try {
+      configVegetacao = await _camadasExternasService.getVegetacaoConfig();
+    } catch (_) {
+      // A camada tem configuração pública de fallback; a falha não bloqueia o mapa.
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _vegetacaoConfig = configVegetacao;
+    });
+
     try {
       final distribuidoras = await _ativosService.getDistribuidoras();
 
@@ -725,6 +861,8 @@ class _MapPageState extends State<MapPage> {
 
   int get _totalCamadasAtivas =>
       _camadasAtivas.values.where((ativa) => ativa).length +
+      (_vegetacaoAtiva ? 1 : 0) +
+      (_antenasAtivas ? 1 : 0) +
       (_edificacoesAtivas ? 1 : 0);
 
   Future<void> _selecionarDistribuidora(String? distribuidora) async {
@@ -773,6 +911,28 @@ class _MapPageState extends State<MapPage> {
     });
     _atualizarPoligono();
     _atualizarAnnotations();
+    if (municipio != null) {
+      unawaited(_centralizarNoMunicipio(municipio));
+    }
+  }
+
+  Future<void> _centralizarNoMunicipio(String municipio) async {
+    final map = _mapboxMap;
+    if (map == null) return;
+
+    final correspondentes = _municipios.where((m) => m.nome == municipio);
+    final selecionado = correspondentes.isEmpty ? null : correspondentes.first;
+    final latitude = selecionado?.latitude;
+    final longitude = selecionado?.longitude;
+    if (latitude == null || longitude == null) return;
+
+    await map.flyTo(
+      CameraOptions(
+        center: Point(coordinates: Position(longitude, latitude)),
+        zoom: 13.0,
+      ),
+      MapAnimationOptions(duration: 700),
+    );
   }
 
   Future<void> _iniciarEstudo() async {
@@ -1075,7 +1235,15 @@ class _MapPageState extends State<MapPage> {
     LayerFilterModal.exibir(
       context,
       camadasAtivas: _camadasAtivas,
+      vegetacaoAtiva: _vegetacaoAtiva,
+      antenasAtivas: _antenasAtivas,
       edificacoesAtivas: _edificacoesAtivas,
+      onSalvarVegetacao: (ativa) {
+        setState(() => _vegetacaoAtiva = ativa);
+      },
+      onSalvarAntenas: (ativa) {
+        setState(() => _antenasAtivas = ativa);
+      },
       onSalvarEdificacoes: (ativas) {
         _edificacoesAtivas = ativas;
       },
@@ -1090,7 +1258,7 @@ class _MapPageState extends State<MapPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length + 1} ativas',
+              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length + 3} ativas',
               style: const TextStyle(
                 color: AppColors.textDark,
                 fontWeight: FontWeight.bold,
@@ -1260,9 +1428,93 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+  Widget _linhaDetalheAntena(String titulo, String valor) {
+    return Text.rich(
+      TextSpan(
+        style: const TextStyle(color: AppColors.textWhite),
+        children: [
+          TextSpan(
+            text: '$titulo: ',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          TextSpan(text: valor),
+        ],
+      ),
+    );
+  }
+
+  void _abrirDetalhesAntena(AntenaAnatel antena) {
+    final tecnologias = antena.tecnologias.isEmpty
+        ? 'Não informado'
+        : antena.tecnologias.join(', ');
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceCard,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                antena.nomeEntidade ?? 'Estação licenciada pela Anatel',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textWhite,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              _linhaDetalheAntena(
+                'Município',
+                '${antena.municipio ?? 'Não informado'}'
+                    '${antena.uf == null ? '' : ' / ${antena.uf}'}',
+              ),
+
+              _linhaDetalheAntena('Tecnologias', tecnologias),
+
+              _linhaDetalheAntena(
+                'Registros de emissão agrupados',
+                '${antena.totalRegistros}',
+              ),
+
+              if (antena.tipoEstacao != null)
+                _linhaDetalheAntena('Tipo de estação', antena.tipoEstacao!),
+
+              if (antena.alturaAntenaMediaM != null)
+                _linhaDetalheAntena(
+                  'Altura média informada',
+                  '${antena.alturaAntenaMediaM!.toStringAsFixed(1)} m',
+                ),
+
+              _linhaDetalheAntena(
+                'Latitude / longitude',
+                '${antena.latitude.toStringAsFixed(6)} / '
+                    '${antena.longitude.toStringAsFixed(6)}',
+              ),
+
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   bool get _emTesteDeWidget => WidgetsBinding.instance.runtimeType
       .toString()
       .contains('TestWidgetsFlutterBinding');
+
+  // Viewport usado somente na criação do mapa. Manter constante evita que
+  // rebuilds de estado (setState) recriem o CameraViewportState e o Mapbox
+  // voe de volta para a posição inicial durante a interação do usuário.
+  static final CameraViewportState _viewportInicial = CameraViewportState(
+    center: Point(coordinates: Position(-51.9253, -14.2350)),
+    zoom: 3.8,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1276,10 +1528,7 @@ class _MapPageState extends State<MapPage> {
             MapWidget(
               key: const ValueKey('mapWidget'),
               styleUri: MapboxStyles.STANDARD,
-              viewport: CameraViewportState(
-                center: Point(coordinates: Position(-51.9253, -14.2350)),
-                zoom: _currentZoom,
-              ),
+              viewport: _viewportInicial,
               onMapCreated: _onMapCreated,
               onStyleLoadedListener: _onStyleLoaded,
               onCameraChangeListener: (_) => unawaited(_sincronizarZoom()),
@@ -1303,10 +1552,12 @@ class _MapPageState extends State<MapPage> {
                           onChanged: _aplicarBusca,
                         ),
                       ),
-                      LayerFilterButton(
-                        onPressed: _abrirPainelCamadas,
-                        activeLayersCount: _totalCamadasAtivas,
-                      ),
+                      if (_distribuidoraSelecionada != null &&
+                          _municipioSelecionado != null)
+                        LayerFilterButton(
+                          onPressed: _abrirPainelCamadas,
+                          activeLayersCount: _totalCamadasAtivas,
+                        ),
                     ],
                   ),
                   Row(
@@ -1405,6 +1656,123 @@ class _MapPageState extends State<MapPage> {
                 ),
               ),
             ),
+          if (_vegetacaoAtiva &&
+              _vegetacaoConfig != null &&
+              _vegetacaoConfig!.classes.isNotEmpty)
+            Positioned(
+              left: 15,
+              bottom: 90,
+              child: Container(
+                width: _legendaExpandida ? 220 : 160,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _legendaExpandida = !_legendaExpandida;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Legenda',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textWhite,
+                                  ),
+                                ),
+                              ),
+                              Icon(
+                                _legendaExpandida
+                                    ? Icons.close_fullscreen
+                                    : Icons.open_in_full,
+                                size: 17,
+                                color: AppColors.textWhite,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    if (_legendaExpandida) ...[
+                      const Divider(height: 1, color: AppColors.border),
+                      Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Tipos de Vegetação',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textWhite,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+
+                            for (final classe in _vegetacaoConfig!.classes)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: Color(
+                                          int.parse(
+                                            'FF${classe.cor.replaceFirst('#', '')}',
+                                            radix: 16,
+                                          ),
+                                        ),
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        '${classe.codigo} · ${classe.nome}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.textWhite,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           if (_edificacoesAtivas &&
               (_carregandoEdificacoes || _avisoEdificacoes != null))
             Positioned(
@@ -1462,7 +1830,10 @@ class _MapPageState extends State<MapPage> {
                 child: CircularProgressIndicator(color: AppColors.primaryLime),
               ),
             ),
-          if (_erro != null || _erroMapa != null || _erroRelevo != null)
+          if (_erro != null ||
+              _erroMapa != null ||
+              _erroRelevo != null ||
+              _avisoAtivos != null)
             Positioned(
               left: 24,
               right: 24,
@@ -1476,6 +1847,7 @@ class _MapPageState extends State<MapPage> {
                       _erro,
                       _erroMapa,
                       _erroRelevo,
+                      _avisoAtivos,
                     ].whereType<String>().join('\n'),
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: AppColors.textWhite),

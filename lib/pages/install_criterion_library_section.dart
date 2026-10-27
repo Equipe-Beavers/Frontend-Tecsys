@@ -114,10 +114,6 @@ class _InstallCriterionLibrarySectionState
       LibraryRecordParameter(
         criterionAssetTypes[type] ?? type.replaceAll('_', ' '),
       ),
-    if (criterion.requiresPower == true)
-      const LibraryRecordParameter('Requer alimentação'),
-    if (criterion.requiresPower == false)
-      const LibraryRecordParameter('Alimentação não obrigatória'),
     if (criterion.minDistanceMeters != null)
       LibraryRecordParameter(
         criterion.maxDistanceMeters == null

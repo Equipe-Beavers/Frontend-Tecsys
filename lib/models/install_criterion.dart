@@ -15,14 +15,10 @@ class InstallCriterion {
     required this.id,
     required this.userId,
     required this.name,
-    this.requiresPower,
     this.minDistanceMeters,
     this.maxDistanceMeters,
     this.gatewayLimit,
     this.relief,
-    this.vegetation,
-    this.buildings,
-    this.antennas,
     this.createdAt,
     this.updatedAt,
     Map<CriterionCollection, Object?> collections = const {},
@@ -31,14 +27,10 @@ class InstallCriterion {
   final int id;
   final int userId;
   final String name;
-  final bool? requiresPower;
   final double? minDistanceMeters;
   final double? maxDistanceMeters;
   final int? gatewayLimit;
   final Object? relief;
-  final Object? vegetation;
-  final Object? buildings;
-  final Object? antennas;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   // JSONB has no prescribed structure in the approved DER.
@@ -46,22 +38,17 @@ class InstallCriterion {
 
   factory InstallCriterion.fromJson(Map<String, dynamic> json) {
     final name = json['nome'];
-    final power = json['requer_alimentacao_eletrica'];
-    if (name is! String || (power != null && power is! bool)) {
+    if (name is! String) {
       throw const FormatException('Resposta de critério inválida.');
     }
     return InstallCriterion(
       id: _integer(json['id_criterio_instalacao'], required: true)!,
       userId: _integer(json['id_usuario'], required: true)!,
       name: name,
-      requiresPower: power as bool?,
       minDistanceMeters: _number(json['distancia_minima_ativos_m']),
       maxDistanceMeters: _number(json['distancia_maxima_ativos_m']),
       gatewayLimit: _integer(json['limite_gateways']),
       relief: json['relevo'],
-      vegetation: json['vegetacoes'],
-      buildings: json['edificacoes'],
-      antennas: json['antenas'],
       createdAt: _date(json['criado_em']),
       updatedAt: _date(json['atualizado_em']),
       collections: {
@@ -141,16 +128,6 @@ extension CriterionAssetKey on TipoAtivo {
       .replaceAllMapped(RegExp(r'[A-Z]'), (match) => '_${match[0]}')
       .toUpperCase();
 }
-
-const criterionVegetationTypes = <String, String>{
-  'AREA_URBANIZADA': 'Área urbanizada',
-  'PASTAGEM': 'Pastagem',
-  'AGRICULTURA': 'Agricultura',
-  'FORMACAO_FLORESTAL': 'Formação florestal',
-  'MANGUE': 'Mangue',
-  'AREA_ALAGADA': 'Área alagada',
-  'CORPO_DAGUA': "Corpo d'água",
-};
 
 /// Canonical keys keep historical BDGD singulars and display labels equivalent.
 String normalizeCriterionAssetType(String value) {
