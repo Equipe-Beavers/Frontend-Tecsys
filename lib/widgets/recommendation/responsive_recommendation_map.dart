@@ -41,7 +41,6 @@ class ResponsiveRecommendationMap extends StatefulWidget {
 
 class _ResponsiveRecommendationMapState
     extends State<ResponsiveRecommendationMap> {
-  static const _cameraSafetyZoomOut = .15;
   static const _scenarioSource = 'recommendation-scenario-source';
   static const _scenarioFillLayer = 'recommendation-scenario-fill';
   static const _scenarioLineLayer = 'recommendation-scenario-line';
@@ -61,6 +60,23 @@ class _ResponsiveRecommendationMapState
   Size _size = Size.zero;
   String? _lastViewportSignature;
   double _minimumZoom = recommendationMinimumAllowedZoom;
+  late final CameraViewportState _initialViewport;
+  bool _constrainingCenter = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final center = _centerGateway;
+    _initialViewport = CameraViewportState(
+      center: Point(
+        coordinates: Position(
+          center?.longitude ?? -45.88,
+          center?.latitude ?? -23.2,
+        ),
+      ),
+      zoom: 12.5,
+    );
+  }
 
   bool get _isWidgetTest => WidgetsBinding.instance.runtimeType
       .toString()
@@ -130,6 +146,7 @@ class _ResponsiveRecommendationMapState
     try {
       await _addSourcesAndLayers(map);
       _styleReady = true;
+      await _updateMapData();
       await _fitCamera(force: true);
     } catch (error, stackTrace) {
       debugPrint('Falha ao configurar o mapa de recomendação: $error');
@@ -285,6 +302,15 @@ class _ResponsiveRecommendationMapState
     if (!force && signature == _lastViewportSignature) return;
     _lastViewportSignature = signature;
 
+    // Geographic camera bounds can force the native SDK to zoom back in.
+    // Constrain the center separately so the fitted coverage can stay visible.
+    await map.setBounds(
+      CameraBoundsOptions(
+        minZoom: recommendationMinimumAllowedZoom,
+        maxZoom: recommendationMaximumZoom,
+      ),
+    );
+
     final horizontalPadding = (_size.width * .07).clamp(24.0, 72.0);
     final verticalPadding = (_size.height * .07).clamp(24.0, 64.0);
     final camera = await map.cameraForCoordinateBounds(
@@ -300,21 +326,51 @@ class _ResponsiveRecommendationMapState
       13.4,
       null,
     );
-    final fittedZoom = ((camera.zoom ?? 12.5) - _cameraSafetyZoomOut).clamp(
-      recommendationMinimumAllowedZoom,
-      recommendationMaximumZoom,
-    );
+    final fittedZoom =
+        ((camera.zoom ?? 12.5) -
+                recommendationCameraSafetyZoomOut(
+                  _size.width,
+                  focused: widget.selectedGateway != null,
+                ))
+            .clamp(recommendationMinimumAllowedZoom, recommendationMaximumZoom);
     camera.zoom = fittedZoom;
     await map.setCamera(camera);
     final minimumZoom = recommendationMinimumZoom(fittedZoom);
     _minimumZoom = minimumZoom;
     await map.setBounds(
       CameraBoundsOptions(
-        bounds: viewport.coverageBounds.toMapboxBounds(),
         minZoom: minimumZoom,
         maxZoom: recommendationMaximumZoom,
       ),
     );
+  }
+
+  Future<void> _constrainCenter() async {
+    final map = _map;
+    final bounds = widget.viewport?.coverageBounds;
+    if (map == null || bounds == null || !_styleReady || _constrainingCenter) {
+      return;
+    }
+    _constrainingCenter = true;
+    try {
+      final camera = await map.getCameraState();
+      final position = camera.center.coordinates;
+      final latitude = position.lat.toDouble().clamp(
+        bounds.south,
+        bounds.north,
+      );
+      final longitude = position.lng.toDouble().clamp(bounds.west, bounds.east);
+      if ((latitude - position.lat).abs() > .000001 ||
+          (longitude - position.lng).abs() > .000001) {
+        await map.setCamera(
+          CameraOptions(
+            center: Point(coordinates: Position(longitude, latitude)),
+          ),
+        );
+      }
+    } finally {
+      _constrainingCenter = false;
+    }
   }
 
   DateTime _lastScrollTime = DateTime.fromMillisecondsSinceEpoch(0);
@@ -374,12 +430,14 @@ class _ResponsiveRecommendationMapState
   }
 
   String _scenarioGeoJson() => _featureCollection([
-    for (final coverage in widget.scenarioCoverage)
-      if (coverage.mancha.length >= 3)
+    for (var index = 0; index < widget.scenarioCoverage.length; index++)
+      if (widget.scenarioCoverage[index].mancha.length >= 3)
         _polygonFeature(
-          id: coverage.idEstudoPonto,
-          points: coverage.mancha,
-          properties: {'gatewayId': coverage.idEstudoPonto},
+          id: index,
+          points: widget.scenarioCoverage[index].mancha,
+          properties: {
+            'gatewayId': widget.scenarioCoverage[index].idEstudoPonto,
+          },
         ),
   ]);
 
@@ -458,7 +516,6 @@ class _ResponsiveRecommendationMapState
       }
 
       if (_isWidgetTest) return _buildTestSurface();
-      final center = _centerGateway;
       return Stack(
         children: [
           Positioned.fill(
@@ -479,15 +536,13 @@ class _ResponsiveRecommendationMapState
                 child: MapWidget(
                   key: const ValueKey('recommendation-mapbox-map'),
                   styleUri: MapboxStyles.STANDARD,
-                  viewport: CameraViewportState(
-                    center: Point(
-                      coordinates: Position(
-                        center?.longitude ?? -45.88,
-                        center?.latitude ?? -23.2,
-                      ),
+                  viewport: _initialViewport,
+                  gestureRecognizers: {
+                    Factory<OneSequenceGestureRecognizer>(
+                      EagerGestureRecognizer.new,
                     ),
-                    zoom: 12.5,
-                  ),
+                  },
+                  onMapIdleListener: (_) => unawaited(_constrainCenter()),
                   onMapCreated: _onMapCreated,
                   onStyleLoadedListener: _onStyleLoaded,
                   onMapLoadedListener: _onMapLoaded,
@@ -495,58 +550,60 @@ class _ResponsiveRecommendationMapState
               ),
             ),
           ),
-          Positioned(
-            right: 14,
-            bottom: 38,
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppColors.surfaceBackground.withValues(alpha: 0.92),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white24, width: 1),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black38,
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    onTap: _zoomIn,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(10),
+          if (constraints.maxWidth >= 600)
+            Positioned(
+              key: const ValueKey('recommendation-zoom-controls'),
+              right: 14,
+              bottom: 38,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBackground.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white24, width: 1),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black38,
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
                     ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.add,
-                        color: AppColors.textWhite,
-                        size: 20,
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: _zoomIn,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(10),
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(
+                          Icons.add,
+                          color: AppColors.textWhite,
+                          size: 20,
+                        ),
                       ),
                     ),
-                  ),
-                  Container(height: 1, width: 28, color: Colors.white12),
-                  InkWell(
-                    onTap: _zoomOut,
-                    borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(10),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.remove,
-                        color: AppColors.textWhite,
-                        size: 20,
+                    Container(height: 1, width: 28, color: Colors.white12),
+                    InkWell(
+                      onTap: _zoomOut,
+                      borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(10),
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(
+                          Icons.remove,
+                          color: AppColors.textWhite,
+                          size: 20,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       );
     },
@@ -559,9 +616,9 @@ class _ResponsiveRecommendationMapState
         : AppColors.surfaceBackground,
     child: Stack(
       children: [
-        for (final coverage in widget.scenarioCoverage)
-          if (coverage.mancha.length >= 3)
-            const SizedBox(key: ValueKey('scenario-coverage-layer')),
+        for (var index = 0; index < widget.scenarioCoverage.length; index++)
+          if (widget.scenarioCoverage[index].mancha.length >= 3)
+            SizedBox(key: ValueKey('scenario-coverage-layer-$index')),
         for (final asset in widget.assets)
           SizedBox(
             key: ValueKey(

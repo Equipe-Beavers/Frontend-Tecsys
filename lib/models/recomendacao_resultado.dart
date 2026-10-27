@@ -1,4 +1,7 @@
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
+import 'package:latlong2/latlong.dart';
+
+import '../utils/geojson_utils.dart';
 
 TipoAtivo tipoAtivoFromApiValue(String? value) {
   if (value == null) return TipoAtivo.dispositivo;
@@ -72,6 +75,7 @@ class GatewayProposto {
   final int quantidadeAtendidos;
   final Map<String, dynamic> atributos;
   final List<AtendimentoGateway> atendidos;
+  final List<List<LatLng>> manchasCobertura;
 
   const GatewayProposto({
     required this.idEstudoPonto,
@@ -82,6 +86,7 @@ class GatewayProposto {
     required this.quantidadeAtendidos,
     required this.atributos,
     required this.atendidos,
+    this.manchasCobertura = const [],
   });
 
   String? get alimentador => atributos['alimentador']?.toString();
@@ -106,6 +111,7 @@ class GatewayProposto {
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       quantidadeAtendidos: (json['quantidade_atendidos'] as num).toInt(),
+      manchasCobertura: aneisExternosGeoJson(json['mancha_cobertura']),
       atributos: _asAttrMap(json['atributos']),
       atendidos: (json['atendidos'] as List? ?? [])
           .map(

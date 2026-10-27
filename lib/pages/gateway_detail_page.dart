@@ -37,7 +37,10 @@ class GatewayDetailPage extends StatelessWidget {
             lockPosition: true,
             showBaseMap: showBaseMap,
           );
-          final details = GatewayDetailsPanel(gateway: gateway);
+          final details = GatewayDetailsPanel(
+            gateway: gateway,
+            scrollable: desktop,
+          );
 
           return Column(
             children: [
@@ -60,17 +63,27 @@ class GatewayDetailPage extends StatelessWidget {
                           SizedBox(width: 360, child: details),
                         ],
                       )
-                    : Column(
-                        children: [
-                          Expanded(
-                            flex: 5,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                              child: map,
+                    : SingleChildScrollView(
+                        key: const ValueKey('mobile-gateway-scroll'),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                12,
+                                12,
+                                12,
+                                12,
+                              ),
+                              child: SizedBox(
+                                height: ((constraints.maxHeight - 64) * .43)
+                                    .clamp(280.0, 360.0),
+                                child: map,
+                              ),
                             ),
-                          ),
-                          Expanded(flex: 6, child: details),
-                        ],
+                            details,
+                          ],
+                        ),
                       ),
               ),
             ],

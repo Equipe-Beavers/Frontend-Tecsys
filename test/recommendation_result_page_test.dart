@@ -11,6 +11,28 @@ import 'package:frontend_tecsys/widgets/recommendation_map.dart';
 import 'package:latlong2/latlong.dart';
 
 void main() {
+  testWidgets('mobile result uses the full available width', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecomendacaoResultadoPage(
+          idEstudo: 1,
+          idPerfilRf: 1,
+          resultadoInicial: buildRecommendationMock(),
+          showBaseMap: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.getSize(find.byType(RecommendationMap)).width, 366);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('opens gateway details from a result card', (tester) async {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1;

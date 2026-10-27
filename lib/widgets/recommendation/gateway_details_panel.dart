@@ -5,9 +5,14 @@ import '../../models/recomendacao_resultado.dart';
 import '../../theme/app_colors.dart';
 
 class GatewayDetailsPanel extends StatelessWidget {
-  const GatewayDetailsPanel({super.key, required this.gateway});
+  const GatewayDetailsPanel({
+    super.key,
+    required this.gateway,
+    this.scrollable = true,
+  });
 
   final GatewayProposto gateway;
+  final bool scrollable;
 
   Map<TipoAtivo, int> get _counts {
     final result = <TipoAtivo, int>{};
@@ -36,6 +41,8 @@ class GatewayDetailsPanel extends StatelessWidget {
       key: const ValueKey('gateway-details-panel'),
       color: AppColors.surfaceCardLight,
       child: SingleChildScrollView(
+        primary: scrollable ? null : false,
+        physics: scrollable ? null : const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

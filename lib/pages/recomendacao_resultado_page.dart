@@ -169,6 +169,7 @@ class _RecommendationContent extends StatelessWidget {
         showBaseMap: showBaseMap,
       );
       final summary = RecommendationResultPanel(
+        scrollable: desktop,
         result: result,
         subtitle: subtitle,
         onGatewayTap: onGatewayTap,
@@ -187,17 +188,24 @@ class _RecommendationContent extends StatelessWidget {
           ],
         );
       }
-      return Column(
-        children: [
-          Expanded(
-            flex: 5,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-              child: map,
-            ),
+      return SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          key: const ValueKey('mobile-recommendation-scroll'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                child: SizedBox(
+                  height: (constraints.maxHeight * .43).clamp(280.0, 360.0),
+                  child: map,
+                ),
+              ),
+              summary,
+            ],
           ),
-          Expanded(flex: 6, child: summary),
-        ],
+        ),
       );
     },
   );

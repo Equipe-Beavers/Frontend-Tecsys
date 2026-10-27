@@ -12,14 +12,19 @@ class RecommendationResultPanel extends StatelessWidget {
     required this.result,
     required this.onGatewayTap,
     this.subtitle,
+    this.scrollable = true,
   });
 
   final ResultadoRecomendacao result;
   final ValueChanged<GatewayProposto> onGatewayTap;
   final String? subtitle;
+  final bool scrollable;
 
   @override
   Widget build(BuildContext context) => ListView(
+    shrinkWrap: !scrollable,
+    primary: scrollable ? null : false,
+    physics: scrollable ? null : const NeverScrollableScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
     children: [
       if (subtitle != null) ...[

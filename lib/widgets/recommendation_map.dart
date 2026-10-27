@@ -35,7 +35,12 @@ class RecommendationMap extends StatelessWidget {
         : <GatewayProposto>[selectedGateway!];
     final visibleAssets = _visibleAssets();
     final visibleScenarioCoverage = _visibleScenarioCoverage();
-    final viewport = RecommendationMapViewport.fromGateways(visibleGateways);
+    final viewport = RecommendationMapViewport.fromContent(
+      gateways: visibleGateways,
+      scenarioCoverage: visibleScenarioCoverage,
+      assets: visibleAssets,
+    );
+    final compact = MediaQuery.sizeOf(context).width < 600;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
@@ -64,7 +69,7 @@ class RecommendationMap extends StatelessWidget {
               ),
             ),
           ),
-          if (lockPosition)
+          if (lockPosition && !compact)
             const Positioned(
               right: 14,
               top: 14,
@@ -89,11 +94,29 @@ class RecommendationMap extends StatelessWidget {
   }
 
   List<ManchaGatewayCenario> _visibleScenarioCoverage() {
-    final gateway = selectedGateway;
-    if (gateway == null) return scenarioCoverage;
-    return scenarioCoverage
-        .where((coverage) => coverage.idEstudoPonto == gateway.idEstudoPonto)
+    final visible = selectedGateway == null ? gateways : [selectedGateway!];
+    return [for (final gateway in visible) ..._coverageFor(gateway)];
+  }
+
+  List<ManchaGatewayCenario> _coverageFor(GatewayProposto gateway) {
+    final saved = scenarioCoverage
+        .where(
+          (coverage) =>
+              coverage.idEstudoPonto == gateway.idEstudoPonto &&
+              coverage.mancha.length >= 3,
+        )
         .toList();
+    if (saved.isNotEmpty) return saved;
+    return [
+      for (final ring in gateway.manchasCobertura)
+        ManchaGatewayCenario(
+          idEstudoPonto: gateway.idEstudoPonto,
+          rotulo: gateway.rotulo,
+          posicao: LatLng(gateway.latitude, gateway.longitude),
+          alcanceMedioM: gateway.raioCoberturaM.round(),
+          mancha: ring,
+        ),
+    ];
   }
 
   bool _isInsideCoverage(AtivoResultadoMapa asset, GatewayProposto gateway) {

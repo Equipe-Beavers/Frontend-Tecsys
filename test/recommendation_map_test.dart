@@ -5,11 +5,70 @@ import 'package:frontend_tecsys/models/mancha_cenario.dart';
 import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
 import 'package:frontend_tecsys/pages/gateway_detail_page.dart';
 import 'package:frontend_tecsys/widgets/recommendation_map.dart';
+import 'package:frontend_tecsys/widgets/recommendation/recommendation_map_overlays.dart';
 import 'package:frontend_tecsys/widgets/recommendation/recommendation_map_viewport.dart';
 import 'package:frontend_tecsys/widgets/recommendation/responsive_recommendation_map.dart';
 import 'package:latlong2/latlong.dart';
 
 void main() {
+  testWidgets('keeps coverage from the recommendation response in both maps', (
+    tester,
+  ) async {
+    final gateway = GatewayProposto.fromJson({
+      'id_estudo_ponto': 7,
+      'latitude': -23.19,
+      'longitude': -45.88,
+      'quantidade_atendidos': 0,
+      'mancha_cobertura': {
+        'type': 'MultiPolygon',
+        'coordinates': [
+          [
+            [
+              [-45.89, -23.18],
+              [-45.87, -23.18],
+              [-45.88, -23.20],
+              [-45.89, -23.18],
+            ],
+          ],
+          [
+            [
+              [-45.90, -23.18],
+              [-45.89, -23.18],
+              [-45.90, -23.19],
+              [-45.90, -23.18],
+            ],
+          ],
+        ],
+      },
+    });
+    for (final selected in [false, true]) {
+      await _pumpMap(
+        tester,
+        RecommendationMap(
+          gateways: [gateway],
+          selectedGateway: selected ? gateway : null,
+          showBaseMap: false,
+        ),
+      );
+      final map = tester.widget<ResponsiveRecommendationMap>(
+        find.byType(ResponsiveRecommendationMap),
+      );
+      expect(map.scenarioCoverage, hasLength(2));
+      expect(
+        map.scenarioCoverage.first.mancha.first,
+        const LatLng(-23.18, -45.89),
+      );
+      expect(
+        find.byKey(const ValueKey('scenario-coverage-layer-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('scenario-coverage-layer-1')),
+        findsOneWidget,
+      );
+    }
+  });
+
   testWidgets('renders backend scenario coverage as a polygon layer', (
     tester,
   ) async {
@@ -38,7 +97,7 @@ void main() {
     );
 
     expect(
-      find.byKey(const ValueKey('scenario-coverage-layer')),
+      find.byKey(const ValueKey('scenario-coverage-layer-0')),
       findsOneWidget,
     );
     final map = tester.widget<ResponsiveRecommendationMap>(
@@ -198,6 +257,11 @@ void main() {
       find.byType(ResponsiveRecommendationMap),
     );
     expect(map.lockPosition, isTrue);
+    expect(find.byType(RecommendationZoomHint), findsNothing);
+    expect(
+      find.byKey(const ValueKey('recommendation-zoom-controls')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -235,6 +299,12 @@ void main() {
 
         expect(recommendationMinimumZoom(12), 9);
         expect(recommendationMinimumZoom(20), recommendationMaximumZoom);
+        expect(
+          recommendationCameraSafetyZoomOut(390, focused: true),
+          closeTo(.928511623 - .263034406, .000001),
+        );
+        expect(recommendationCameraSafetyZoomOut(1200), .15);
+        expect(recommendationCameraSafetyZoomOut(390), -.35);
 
         expect(fit.north, greaterThan(constraint.north));
         expect(fit.south, lessThan(constraint.south));
@@ -254,7 +324,7 @@ void main() {
           );
           expect(
             marginRadius,
-            closeTo(selectedGateway.raioCoberturaM * 1.1, 2),
+            closeTo(selectedGateway.raioCoberturaM * 1.2, 2),
           );
         }
       }
