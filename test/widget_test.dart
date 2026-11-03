@@ -19,7 +19,7 @@ void main() {
     await tester.pumpWidget(const MyApp());
     await tester.pump();
 
-    expect(find.byType(ListTile), findsNWidgets(3));
+    expect(find.byType(ListTile), findsNWidgets(4));
     for (final tile in tester.widgetList<ListTile>(find.byType(ListTile))) {
       expect(tile.selectedTileColor, isNotNull);
     }
@@ -47,7 +47,7 @@ void main() {
     await tester.pump();
     expect(find.text('Buscar estudos'), findsOneWidget);
     expect(find.byType(Navbar), findsNothing);
-    expect(find.byType(ListTile), findsNWidgets(3));
+    expect(find.byType(ListTile), findsNWidgets(4));
     expect(tester.takeException(), isNull);
 
     tester.view.physicalSize = const Size(440, 956);

@@ -8,6 +8,10 @@ import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
+import 'controllers/auth_controller.dart';
+import 'pages/auth_page.dart';
+import 'pages/profile_page.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
@@ -19,13 +23,15 @@ Future<void> main() async {
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.authController});
+  final AuthController? authController;
 
   @override
   State<MyApp> createState() => _MyAppState();
 }
 
 class _MyAppState extends State<MyApp> {
+  late final AuthController _auth = widget.authController ?? AuthController();
   int _abaSelecionada = 0;
   bool _libraryOpened = false;
   bool _studiesOpened = false;
@@ -33,12 +39,6 @@ class _MyAppState extends State<MyApp> {
 
   void _selectTab(int index, BuildContext context) {
     if (_editingCriterion) return;
-    if (index == 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Esta seção ainda não está disponível.')),
-      );
-      return;
-    }
     setState(() {
       _abaSelecionada = index;
       if (index == 1) _studiesOpened = true;
@@ -47,10 +47,20 @@ class _MyAppState extends State<MyApp> {
   }
 
   @override
+  void dispose() {
+    if (widget.authController == null) _auth.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Geomash Tecsys',
       debugShowCheckedModeBanner: false,
+      routes: {
+        '/cadastro': (_) => AuthPage(controller: _auth, register: true),
+        '/login': (_) => AuthPage(controller: _auth),
+      },
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: AppColors.surfaceBackground,
@@ -123,7 +133,7 @@ class _MyAppState extends State<MyApp> {
                               (0, Icons.home_outlined, 'Início'),
                               (1, Icons.layers_outlined, 'Estudos'),
                               (2, Icons.description_outlined, 'Biblioteca'),
-                              // (3, Icons.person_outline, 'Perfil'),
+                              (3, Icons.person_outline, 'Perfil'),
                             ])
                               Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -174,6 +184,7 @@ class _MyAppState extends State<MyApp> {
                             )
                           else
                             const SizedBox.shrink(),
+                          ProfilePage(controller: _auth),
                         ],
                       ),
                     ),
