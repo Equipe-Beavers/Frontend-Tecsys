@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/auth/auth_scope.dart';
+
 import '../models/mancha_cenario.dart';
 import '../models/recomendacao_resultado.dart';
 import '../services/mancha_cenario_service.dart';
@@ -48,7 +50,9 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
   @override
   void initState() {
     super.initState();
-    _ownedService = widget.repository == null ? RecomendacaoService() : null;
+    _ownedService = widget.repository == null
+        ? RecomendacaoService(client: AuthScope.clientOf(context))
+        : null;
     _repository = widget.repository ?? _ownedService!;
     _futureResultado = widget.resultadoInicial != null
         ? Future.value(widget.resultadoInicial)
@@ -63,7 +67,7 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
         (widget.resultadoInicial == null && widget.repository == null);
     if (shouldLoadCoverage) {
       _ownedCoverageService = widget.coverageRepository == null
-          ? ManchaCenarioService()
+          ? ManchaCenarioService(client: AuthScope.clientOf(context))
           : null;
       _futureResultado.then(_loadScenarioCoverage);
     }

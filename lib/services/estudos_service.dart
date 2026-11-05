@@ -1,21 +1,14 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import '../config/api_config.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:frontend_tecsys/models/novo_estudo.dart';
 
 class EstudosService {
   EstudosService({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrl = (baseUrl ?? _defaultUrl).replaceFirst(RegExp(r'/+$'), '');
-
-  static String get _defaultUrl {
-    const configured = String.fromEnvironment('API_BASE_URL');
-    if (configured.isNotEmpty) return configured;
-    return !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-        ? 'http://10.0.2.2:3000'
-        : 'http://localhost:3000';
-  }
+      _baseUrl = ApiConfig.resolve(baseUrl);
 
   final http.Client _client;
   final String _baseUrl;

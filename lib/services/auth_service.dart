@@ -25,10 +25,7 @@ class AuthLoginResult {
 class AuthService {
   AuthService({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrl = (baseUrl ?? ApiConfig.baseUrl).replaceFirst(
-        RegExp(r'/+$'),
-        '',
-      );
+      _baseUrl = ApiConfig.resolve(baseUrl);
 
   final http.Client _client;
   final String _baseUrl;

@@ -6,6 +6,29 @@ import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 import 'package:frontend_tecsys/main.dart';
+import 'package:frontend_tecsys/controllers/auth_controller.dart';
+import 'package:frontend_tecsys/services/auth_service.dart';
+import 'package:http/testing.dart';
+import 'package:http/http.dart' as http;
+
+Future<AuthController> signedInController() async {
+  final service = AuthService(
+    client: MockClient(
+      (_) async => http.Response(
+        '{"access_token":"test-token","usuario":{"id_usuario":17,"username":"Teste","email":"teste@example.com"}}',
+        200,
+      ),
+    ),
+  );
+  final controller = AuthController(service: service);
+  addTearDown(controller.dispose);
+  addTearDown(service.dispose);
+  await controller.login(
+    email: 'teste@example.com',
+    password: 'Senha de teste!',
+  );
+  return controller;
+}
 
 void main() {
   testWidgets('menu lateral desktop possui Material para seleção e toque', (
@@ -16,7 +39,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(MyApp(authController: AuthController()));
     await tester.pump();
 
     expect(find.byType(ListTile), findsNWidgets(4));
@@ -34,7 +57,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MyApp());
+    final auth = await signedInController();
+    await tester.pumpWidget(MyApp(authController: auth));
     expect(find.byType(Navbar), findsOneWidget);
     expect(find.byType(ListTile), findsNothing);
     await tester.tap(

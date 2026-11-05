@@ -82,7 +82,7 @@ class _LoginFormState extends State<LoginForm> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: IconButton(
-                  tooltip: 'Voltar ao perfil',
+                  tooltip: 'Voltar',
                   onPressed: _busy ? null : widget.onBack,
                   icon: const Icon(Icons.arrow_back, size: 20),
                 ),

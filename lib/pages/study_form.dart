@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../widgets/auth/auth_scope.dart';
+
 import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/models/install_criterion.dart';
 import 'package:frontend_tecsys/services/install_criterion_service.dart';
@@ -39,7 +42,7 @@ class NovoEstudoPage extends StatefulWidget {
     this.rfProfileService,
     this.studyService,
     this.study,
-    this.userId = const int.fromEnvironment('APP_USER_ID', defaultValue: 1),
+    required this.userId,
   });
 
   @override
@@ -47,10 +50,8 @@ class NovoEstudoPage extends StatefulWidget {
 }
 
 class _NovoEstudoPageState extends State<NovoEstudoPage> {
-  late final EstudosService _estudosService =
-      widget.studyService ?? EstudosService();
-  late final RFProfileService _rfProfileService =
-      widget.rfProfileService ?? RFProfileService();
+  late final EstudosService _estudosService;
+  late final RFProfileService _rfProfileService;
   final _formKey = GlobalKey<FormState>();
   late final _nomeController = TextEditingController(
     text: widget.study?['nome']?.toString(),
@@ -72,8 +73,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   bool _loadingRfProfiles = false;
   bool _loadingCriteria = false;
   InstallCriterion? _criterioSelecionado;
-  late final InstallCriterionService _criterionService =
-      widget.criterionService ?? InstallCriterionService();
+  late final InstallCriterionService _criterionService;
   bool _salvando = false;
   bool _loadingSelections = false;
   int? _idEstudoCriado;
@@ -86,6 +86,15 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   @override
   void initState() {
     super.initState();
+    _estudosService =
+        widget.studyService ??
+        EstudosService(client: AuthScope.clientOf(context));
+    _rfProfileService =
+        widget.rfProfileService ??
+        RFProfileService(client: AuthScope.clientOf(context));
+    _criterionService =
+        widget.criterionService ??
+        InstallCriterionService(client: AuthScope.clientOf(context));
     if (_isEditing) _loadSelections();
   }
 

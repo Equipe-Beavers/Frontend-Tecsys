@@ -4,7 +4,6 @@ import '../controllers/auth_controller.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth/auth_form_components.dart';
-import '../widgets/primary_button.dart';
 import 'auth_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -71,165 +70,304 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Align(
-                  alignment: Alignment.topLeft,
+              child: LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 520),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_error != null) AuthNotice(message: _error!),
-                        if (user == null) ...[
-                          const Icon(
-                            Icons.person_outline,
-                            size: 48,
-                            color: AppColors.secondaryTeal,
-                          ),
-                          const SizedBox(height: 20),
-                          const Text(
-                            'Sua conta Geomash',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Crie sua conta ou entre para acessar seu perfil.',
-                            style: TextStyle(
-                              color: AppColors.textMuted,
-                              height: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          SizedBox(
-                            width: double.infinity,
-                            child: PrimaryButton(
-                              label: 'Criar conta',
-                              onPressed: () => _openAuth(register: true),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton(
-                              onPressed: () => _openAuth(),
-                              child: const Text('Entrar'),
-                            ),
-                          ),
-                        ] else ...[
-                          Row(
-                            children: [
-                              Container(
-                                width: 62,
-                                height: 62,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryLime.withValues(
-                                    alpha: .12,
-                                  ),
-                                  border: Border.all(
-                                    color: AppColors.primaryLime.withValues(
-                                      alpha: .35,
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight > 48
+                          ? constraints.maxHeight - 48
+                          : 0,
+                    ),
+                    child: Align(
+                      alignment: user == null
+                          ? Alignment.center
+                          : Alignment.topLeft,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: user == null ? 480 : 520,
+                        ),
+                        child: Container(
+                          width: double.infinity,
+                          padding: user == null
+                              ? EdgeInsets.all(
+                                  constraints.maxWidth < 480 ? 20 : 28,
+                                )
+                              : EdgeInsets.zero,
+                          decoration: user == null
+                              ? BoxDecoration(
+                                  color: AppColors.surfaceCard,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: AppColors.border),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: .18,
+                                      ),
+                                      blurRadius: 32,
+                                      offset: const Offset(0, 12),
                                     ),
-                                  ),
-                                  borderRadius: BorderRadius.circular(19),
+                                  ],
+                                )
+                              : null,
+                          child: Column(
+                            crossAxisAlignment: user == null
+                                ? CrossAxisAlignment.center
+                                : CrossAxisAlignment.start,
+                            children: [
+                              if (_error != null) AuthNotice(message: _error!),
+                              if (widget.controller.restoreError != null) ...[
+                                AuthNotice(
+                                  message: widget.controller.restoreError!,
                                 ),
-                                child: Text(
-                                  user.initials,
-                                  style: const TextStyle(
-                                    color: AppColors.primaryLime,
+                                TextButton(
+                                  onPressed: _busy
+                                      ? null
+                                      : () =>
+                                            _perform(widget.controller.restore),
+                                  child: const Text('Tentar restaurar sessão'),
+                                ),
+                              ],
+                              if (user == null) ...[
+                                const Icon(
+                                  Icons.person_outline,
+                                  size: 48,
+                                  color: AppColors.secondaryTeal,
+                                ),
+                                const SizedBox(height: 20),
+                                const Text(
+                                  'Sua conta Geomash',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
                                     fontSize: 22,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Crie sua conta ou entre para acessar seu perfil.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: AppColors.textMuted,
+                                    height: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 28),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(
-                                      user.username,
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600,
+                                    Flexible(
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 160,
+                                        ),
+                                        child: SizedBox(
+                                          width: 160,
+                                          height: 48,
+                                          child: FilledButton(
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor:
+                                                  AppColors.primaryLime,
+                                              foregroundColor:
+                                                  AppColors.textDark,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 12,
+                                                  ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                            ),
+                                            onPressed: () =>
+                                                _openAuth(register: true),
+                                            child: const Text(
+                                              'Criar conta',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      user.email,
-                                      style: const TextStyle(
-                                        color: AppColors.textMuted,
+                                    const SizedBox(width: 12),
+                                    Flexible(
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 160,
+                                        ),
+                                        child: SizedBox(
+                                          width: 160,
+                                          height: 48,
+                                          child: OutlinedButton(
+                                            onPressed: () => _openAuth(),
+                                            style: OutlinedButton.styleFrom(
+                                              minimumSize: const Size(140, 48),
+                                              side: const BorderSide(
+                                                color: AppColors.border,
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                            ),
+                                            child: const Text('Entrar'),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
+                              ] else ...[
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 62,
+                                      height: 62,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryLime.withValues(
+                                          alpha: .12,
+                                        ),
+                                        border: Border.all(
+                                          color: AppColors.primaryLime
+                                              .withValues(alpha: .35),
+                                        ),
+                                        borderRadius: BorderRadius.circular(19),
+                                      ),
+                                      child: Text(
+                                        user.initials,
+                                        style: const TextStyle(
+                                          color: AppColors.primaryLime,
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            user.username,
+                                            textAlign: TextAlign.left,
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            user.email,
+                                            textAlign: TextAlign.left,
+                                            style: const TextStyle(
+                                              color: AppColors.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 30),
+                                _ReadOnlyProfileField(
+                                  label: 'Nome de usuário',
+                                  value: user.username,
+                                ),
+                                const SizedBox(height: 24),
+                                _ReadOnlyProfileField(
+                                  label: 'E-mail',
+                                  value: user.email,
+                                ),
+                                const SizedBox(height: 24),
+                                const Text(
+                                  'Dados da sua conta. A edição de perfil ainda não está disponível.',
+                                  textAlign: TextAlign.left,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textMuted,
+                                    height: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                Column(
+                                  children: [
+                                    SizedBox(
+                                      width: double.infinity,
+                                      height: 48,
+                                      child: OutlinedButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _perform(
+                                                widget.controller.refreshUser,
+                                              ),
+                                        icon: const Icon(
+                                          Icons.refresh,
+                                          size: 18,
+                                        ),
+                                        label: const Text('Atualizar dados'),
+                                        style: OutlinedButton.styleFrom(
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      height: 48,
+                                      child: OutlinedButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _perform(
+                                                widget.controller.logout,
+                                              ),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.orange,
+                                          side: BorderSide(
+                                            color: Colors.orange.withValues(
+                                              alpha: .4,
+                                            ),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+                                        icon: const Icon(
+                                          Icons.logout,
+                                          size: 18,
+                                        ),
+                                        label: const Text('Sair'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (_busy)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 16),
+                                    child: LinearProgressIndicator(
+                                      semanticsLabel: 'Aguarde',
+                                    ),
+                                  ),
+                              ],
                             ],
                           ),
-                          const SizedBox(height: 30),
-                          _ReadOnlyProfileField(
-                            label: 'Nome de usuário',
-                            value: user.username,
-                          ),
-                          const SizedBox(height: 24),
-                          _ReadOnlyProfileField(
-                            label: 'E-mail',
-                            value: user.email,
-                          ),
-                          const SizedBox(height: 24),
-                          const Text(
-                            'Dados da sua conta. A edição de perfil ainda não está disponível.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textMuted,
-                              height: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: _busy
-                                  ? null
-                                  : () =>
-                                        _perform(widget.controller.refreshUser),
-                              icon: const Icon(Icons.refresh, size: 18),
-                              label: const Text('Atualizar dados'),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: _busy
-                                  ? null
-                                  : () => _perform(widget.controller.logout),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.orange,
-                                side: BorderSide(
-                                  color: Colors.orange.withValues(alpha: .4),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 18,
-                                ),
-                              ),
-                              icon: const Icon(Icons.logout, size: 18),
-                              label: const Text('Sair'),
-                            ),
-                          ),
-                          if (_busy)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 16),
-                              child: LinearProgressIndicator(
-                                semanticsLabel: 'Aguarde',
-                              ),
-                            ),
-                        ],
-                      ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -261,12 +399,17 @@ class _ReadOnlyProfileField extends StatelessWidget {
       Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
+        alignment: Alignment.centerLeft,
         decoration: BoxDecoration(
           color: AppColors.surfaceInput,
           border: Border.all(color: AppColors.border),
           borderRadius: BorderRadius.circular(11),
         ),
-        child: SelectableText(value, semanticsLabel: '$label: $value'),
+        child: SelectableText(
+          value,
+          textAlign: TextAlign.left,
+          semanticsLabel: '$label: $value',
+        ),
       ),
     ],
   );
