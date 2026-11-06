@@ -7,6 +7,8 @@ class LayerFilterModal extends StatefulWidget {
   final Map<TipoAtivo, bool> camadasAtivasAtuais;
   final bool vegetacaoAtivaAtual;
   final bool antenasAtivasAtual;
+  final bool relevoAtivoAtual;
+  final ValueChanged<bool> onSalvarRelevo;
   final ValueChanged<Map<TipoAtivo, bool>> onSalvarFiltro;
   final ValueChanged<bool> onSalvarVegetacao;
   final ValueChanged<bool> onSalvarAntenas;
@@ -18,6 +20,8 @@ class LayerFilterModal extends StatefulWidget {
     required this.camadasAtivasAtuais,
     required this.vegetacaoAtivaAtual,
     required this.antenasAtivasAtual,
+    required this.relevoAtivoAtual,
+    required this.onSalvarRelevo,
     required this.onSalvarFiltro,
     required this.onSalvarVegetacao,
     required this.onSalvarAntenas,
@@ -30,6 +34,8 @@ class LayerFilterModal extends StatefulWidget {
     required Map<TipoAtivo, bool> camadasAtivas,
     required bool vegetacaoAtiva,
     required bool antenasAtivas,
+    required bool relevoAtivo,
+    required ValueChanged<bool> onSalvarRelevo,
     required ValueChanged<Map<TipoAtivo, bool>> onSalvarFiltro,
     required ValueChanged<bool> onSalvarVegetacao,
     required ValueChanged<bool> onSalvarAntenas,
@@ -44,6 +50,8 @@ class LayerFilterModal extends StatefulWidget {
         camadasAtivasAtuais: camadasAtivas,
         vegetacaoAtivaAtual: vegetacaoAtiva,
         antenasAtivasAtual: antenasAtivas,
+        relevoAtivoAtual: relevoAtivo,
+        onSalvarRelevo: onSalvarRelevo,
         onSalvarFiltro: onSalvarFiltro,
         onSalvarVegetacao: onSalvarVegetacao,
         onSalvarAntenas: onSalvarAntenas,
@@ -61,6 +69,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
   late Map<TipoAtivo, bool> _estadoRascunho;
   late bool _vegetacaoRascunho;
   late bool _antenasRascunho;
+  late bool _relevoRascunho;
   late bool _edificacoesRascunho;
   final List<GrupoCamadasFiltro> _grupos = CatalogoCamadas.obterGrupos();
 
@@ -71,6 +80,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
     _estadoRascunho = Map<TipoAtivo, bool>.from(widget.camadasAtivasAtuais);
     _vegetacaoRascunho = widget.vegetacaoAtivaAtual;
     _antenasRascunho = widget.antenasAtivasAtual;
+    _relevoRascunho = widget.relevoAtivoAtual;
     _edificacoesRascunho = widget.edificacoesAtivas;
   }
 
@@ -78,10 +88,11 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
       _estadoRascunho.values.where((ativa) => ativa).length +
       (_vegetacaoRascunho ? 1 : 0) +
       (_antenasRascunho ? 1 : 0) +
-      (_edificacoesRascunho ? 1 : 0);
+      (_edificacoesRascunho ? 1 : 0) +
+      (_relevoRascunho ? 1 : 0);
 
   // +3 pelas camadas de vegetação, antenas e edifícios
-  int get _totalCamadas => _estadoRascunho.length + 3;
+  int get _totalCamadas => _estadoRascunho.length + 4;
 
   void _limparGrupo(GrupoCamadasFiltro grupo) {
     setState(() {
@@ -208,6 +219,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
                     onPressed: () {
                       widget.onSalvarVegetacao(_vegetacaoRascunho);
                       widget.onSalvarAntenas(_antenasRascunho);
+                      widget.onSalvarRelevo(_relevoRascunho);
                       widget.onSalvarEdificacoes?.call(_edificacoesRascunho);
                       widget.onSalvarFiltro(_estadoRascunho);
                       Navigator.of(context).pop();
@@ -255,6 +267,17 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
               color: AppColors.textMuted,
               letterSpacing: 1.0,
             ),
+          ),
+        ),
+        _buildLinha(
+          titulo: 'Relevo 3D · Mapbox Terrain',
+          isAtiva: _relevoRascunho,
+          onChanged: (valor) =>
+              setState(() => _relevoRascunho = valor ?? false),
+          indicador: const Icon(
+            Icons.terrain,
+            color: AppColors.secondaryTeal,
+            size: 20,
           ),
         ),
         _buildLinha(

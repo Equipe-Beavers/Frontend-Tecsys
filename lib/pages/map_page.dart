@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Visibility;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
@@ -63,6 +63,7 @@ class _MapPageState extends State<MapPage> {
   List<AntenaAnatel> _antenas = [];
   VegetacaoConfig? _vegetacaoConfig;
   bool _vegetacaoAtiva = false;
+  bool _relevoAtivo = true;
   bool _antenasAtivas = false;
   bool _legendaExpandida = false;
   Map<TipoAtivo, bool> _camadasAtivas =
@@ -95,6 +96,8 @@ class _MapPageState extends State<MapPage> {
   static const int _limiteAtivos = 3000;
   static const double _ladoMaximoGrausAtivos = 0.2;
   static const String _terrainSourceId = 'study-terrain-dem';
+  static const String _vegetacaoSourceId = 'study-vegetation-source';
+  static const String _vegetacaoLayerId = 'study-vegetation-layer';
   static const String _edificacoesSourceId = 'study-buildings';
   static const String _edificacoesFillLayerId = 'study-buildings-fill';
   static const String _edificacoesLabelLayerId = 'study-buildings-label';
@@ -125,6 +128,80 @@ class _MapPageState extends State<MapPage> {
     _camadasExternasService.dispose();
     _edificacoesService.dispose();
     super.dispose();
+  }
+
+  String _montarUrlWmsVegetacao(VegetacaoConfig config) {
+    final base = config.baseUrl.endsWith('?')
+        ? config.baseUrl
+        : '${config.baseUrl}${config.baseUrl.contains('?') ? '&' : '?'}';
+
+    return '${base}SERVICE=WMS'
+        '&REQUEST=GetMap'
+        '&VERSION=1.1.1'
+        '&LAYERS=${Uri.encodeQueryComponent(config.layer)}'
+        '&STYLES='
+        '&FORMAT=${Uri.encodeQueryComponent(config.format)}'
+        '&TRANSPARENT=TRUE'
+        '&SRS=EPSG:3857'
+        '&BBOX={bbox-epsg-3857}'
+        '&WIDTH=256'
+        '&HEIGHT=256';
+  }
+
+  Future<void> _configurarCamadaVegetacao() async {
+    final map = _mapboxMap;
+    final config = _vegetacaoConfig;
+
+    if (map == null || config == null) return;
+
+    try {
+      if (!await map.styleSourceExists(_vegetacaoSourceId)) {
+        await map.addStyleSource(
+          _vegetacaoSourceId,
+          jsonEncode({
+            'type': 'raster',
+            'tiles': [_montarUrlWmsVegetacao(config)],
+            'tileSize': 256,
+            'attribution': config.attribution,
+          }),
+        );
+      }
+
+      if (!await map.styleLayerExists(_vegetacaoLayerId)) {
+        await map.addLayer(
+          RasterLayer(
+            id: _vegetacaoLayerId,
+            sourceId: _vegetacaoSourceId,
+            slot: 'top',
+            rasterOpacity: 0.65,
+            rasterFadeDuration: 0,
+            visibility: _vegetacaoAtiva ? Visibility.VISIBLE : Visibility.NONE,
+          ),
+        );
+      }
+
+      await _atualizarVisibilidadeVegetacao();
+    } catch (error, stackTrace) {
+      debugPrint('Falha ao configurar vegetação: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> _atualizarVisibilidadeVegetacao() async {
+    final map = _mapboxMap;
+    if (map == null) return;
+
+    try {
+      if (!await map.styleLayerExists(_vegetacaoLayerId)) return;
+
+      await map.setStyleLayerProperty(
+        _vegetacaoLayerId,
+        'visibility',
+        _vegetacaoAtiva ? 'visible' : 'none',
+      );
+    } catch (error) {
+      debugPrint('Falha ao alterar visibilidade da vegetação: $error');
+    }
   }
 
   void _onMapCreated(MapboxMap controller) async {
@@ -170,10 +247,18 @@ class _MapPageState extends State<MapPage> {
 
   void _onStyleLoaded(StyleLoadedEventData _) {
     unawaited(
-      Future.wait([_configurarRelevo(), _configurarCamadaEdificacoes()])
-          .whenComplete(() {
-            if (!_terrainReady.isCompleted) _terrainReady.complete();
-          }),
+      Future.wait([
+        _configurarRelevo(),
+        _configurarCamadaEdificacoes().catchError(
+          (Object error) =>
+              debugPrint('Falha ao configurar edificações: $error'),
+        ),
+        _configurarCamadaVegetacao(),
+      ]).whenComplete(() {
+        if (!_terrainReady.isCompleted) {
+          _terrainReady.complete();
+        }
+      }),
     );
   }
 
@@ -192,9 +277,7 @@ class _MapPageState extends State<MapPage> {
           }),
         );
       }
-      await map.setStyleTerrain(
-        jsonEncode({'source': _terrainSourceId, 'exaggeration': 1.0}),
-      );
+      await _atualizarVisibilidadeRelevo();
     } catch (error, stackTrace) {
       debugPrint('Falha ao configurar o relevo do Mapbox: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -204,6 +287,20 @@ class _MapPageState extends State<MapPage> {
               'Não foi possível carregar a fonte de relevo do Mapbox.';
         });
       }
+    }
+  }
+
+  Future<void> _atualizarVisibilidadeRelevo() async {
+    final map = _mapboxMap;
+    if (map == null) return;
+    try {
+      await map.setStyleTerrain(
+        _relevoAtivo
+            ? jsonEncode({'source': _terrainSourceId, 'exaggeration': 1.0})
+            : 'null',
+      );
+    } catch (error) {
+      debugPrint('Falha ao alternar relevo: $error');
     }
   }
 
@@ -886,6 +983,10 @@ class _MapPageState extends State<MapPage> {
       _vegetacaoConfig = configVegetacao;
     });
 
+    if (_mapboxMap != null) {
+      unawaited(_configurarCamadaVegetacao());
+    }
+
     try {
       final distribuidoras = await _ativosService.getDistribuidoras();
 
@@ -916,7 +1017,8 @@ class _MapPageState extends State<MapPage> {
       _camadasAtivas.values.where((ativa) => ativa).length +
       (_vegetacaoAtiva ? 1 : 0) +
       (_antenasAtivas ? 1 : 0) +
-      (_edificacoesAtivas ? 1 : 0);
+      (_edificacoesAtivas ? 1 : 0) +
+      (_relevoAtivo ? 1 : 0);
 
   Future<void> _selecionarDistribuidora(String? distribuidora) async {
     if (distribuidora == null || distribuidora == _distribuidoraSelecionada) {
@@ -1292,7 +1394,16 @@ class _MapPageState extends State<MapPage> {
       antenasAtivas: _antenasAtivas,
       edificacoesAtivas: _edificacoesAtivas,
       onSalvarVegetacao: (ativa) {
-        setState(() => _vegetacaoAtiva = ativa);
+        setState(() {
+          _vegetacaoAtiva = ativa;
+          if (!ativa) _legendaExpandida = false;
+        });
+        unawaited(_configurarCamadaVegetacao());
+      },
+      relevoAtivo: _relevoAtivo,
+      onSalvarRelevo: (ativo) {
+        setState(() => _relevoAtivo = ativo);
+        unawaited(_atualizarVisibilidadeRelevo());
       },
       onSalvarAntenas: (ativa) {
         setState(() => _antenasAtivas = ativa);
@@ -1311,7 +1422,7 @@ class _MapPageState extends State<MapPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length + 3} ativas',
+              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length + 4} ativas',
               style: const TextStyle(
                 color: AppColors.textDark,
                 fontWeight: FontWeight.bold,
@@ -1605,12 +1716,10 @@ class _MapPageState extends State<MapPage> {
                           onChanged: _aplicarBusca,
                         ),
                       ),
-                      if (_distribuidoraSelecionada != null &&
-                          _municipioSelecionado != null)
-                        LayerFilterButton(
-                          onPressed: _abrirPainelCamadas,
-                          activeLayersCount: _totalCamadasAtivas,
-                        ),
+                      LayerFilterButton(
+                        onPressed: _abrirPainelCamadas,
+                        activeLayersCount: _totalCamadasAtivas,
+                      ),
                     ],
                   ),
                   Row(
@@ -1783,6 +1892,14 @@ class _MapPageState extends State<MapPage> {
                             ),
                             const SizedBox(height: 6),
 
+                            Text(
+                              _vegetacaoConfig!.attribution,
+                              style: const TextStyle(
+                                fontSize: 9,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
                             for (final classe in _vegetacaoConfig!.classes)
                               Padding(
                                 padding: const EdgeInsets.symmetric(
