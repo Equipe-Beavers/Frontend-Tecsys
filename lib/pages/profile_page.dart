@@ -286,42 +286,8 @@ class _ProfilePageState extends State<ProfilePage> {
                                   value: user.email,
                                 ),
                                 const SizedBox(height: 24),
-                                const Text(
-                                  'Dados da sua conta. A edição de perfil ainda não está disponível.',
-                                  textAlign: TextAlign.left,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textMuted,
-                                    height: 1.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
                                 Column(
                                   children: [
-                                    SizedBox(
-                                      width: double.infinity,
-                                      height: 48,
-                                      child: OutlinedButton.icon(
-                                        onPressed: _busy
-                                            ? null
-                                            : () => _perform(
-                                                widget.controller.refreshUser,
-                                              ),
-                                        icon: const Icon(
-                                          Icons.refresh,
-                                          size: 18,
-                                        ),
-                                        label: const Text('Atualizar dados'),
-                                        style: OutlinedButton.styleFrom(
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
                                     SizedBox(
                                       width: double.infinity,
                                       height: 48,
