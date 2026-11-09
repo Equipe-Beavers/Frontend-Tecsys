@@ -75,6 +75,27 @@ class AuthService {
     await _request('POST', '/auth/logout', expected: 204, token: token);
   }
 
+  Future<void> requestPasswordReset(String email) async {
+    await _request(
+      'POST',
+      '/auth/forgot-password',
+      expected: 202,
+      payload: {'email': email.trim().toLowerCase()},
+    );
+  }
+
+  Future<void> resetPassword({
+    required String token,
+    required String password,
+  }) async {
+    await _request(
+      'POST',
+      '/auth/reset-password',
+      expected: 204,
+      payload: {'token': token, 'senha': password},
+    );
+  }
+
   AuthUser _user(dynamic value) {
     try {
       return AuthUser.fromJson(Map<String, dynamic>.from(value as Map));
@@ -107,7 +128,9 @@ class AuthService {
                       headers: headers,
                       body: payload == null ? null : jsonEncode(payload),
                     ))
-              .timeout(const Duration(seconds: 15));
+              .timeout(
+                Duration(seconds: path == '/auth/forgot-password' ? 60 : 15),
+              );
       Map<String, dynamic> body = {};
       try {
         if (response.body.isNotEmpty) {
@@ -120,7 +143,10 @@ class AuthService {
       if (response.statusCode != expected) {
         final code = body['code']?.toString();
         final message = switch (response.statusCode) {
-          400 => 'Confira os dados informados e tente novamente.',
+          400 =>
+            path == '/auth/reset-password' && code != 'INVALID_PASSWORD'
+                ? 'Este link é inválido, expirou ou já foi utilizado. Solicite outro link.'
+                : 'Confira os dados informados e tente novamente.',
           401 =>
             path == '/auth/login'
                 ? 'E-mail ou senha inválidos.'

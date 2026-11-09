@@ -13,6 +13,7 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'controllers/auth_controller.dart';
 import 'pages/auth_page.dart';
 import 'pages/profile_page.dart';
+import 'pages/password_recovery_page.dart';
 import 'services/session_store.dart';
 import 'widgets/auth/auth_scope.dart';
 
@@ -115,6 +116,19 @@ class _MyAppState extends State<MyApp> {
       routes: {
         '/cadastro': (_) => AuthPage(controller: _auth, register: true),
         '/login': (_) => AuthPage(controller: _auth),
+      },
+      onGenerateRoute: (settings) {
+        final uri = Uri.tryParse(settings.name ?? '');
+        if (uri?.path == '/redefinir-senha') {
+          return MaterialPageRoute<void>(
+            settings: settings,
+            builder: (_) => PasswordRecoveryPage(
+              controller: _auth,
+              token: uri!.queryParameters['token'] ?? '',
+            ),
+          );
+        }
+        return null;
       },
       theme: ThemeData(
         brightness: Brightness.dark,
