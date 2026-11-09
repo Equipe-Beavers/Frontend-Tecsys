@@ -29,7 +29,9 @@ void main() {
   test('desktop mantém fallback local; plataforma não sobrepõe .env', () {
     dotenv.testLoad(fileInput: '');
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-    expect(ApiConfig.baseUrl, 'http://localhost:3000');
+    expect(ApiConfig.baseUrl, 'http://127.0.0.1:3000');
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    expect(ApiConfig.baseUrl, 'http://127.0.0.1:3000');
     dotenv.testLoad(fileInput: 'API_BASE_URL=http://192.0.2.10:3000');
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     expect(ApiConfig.baseUrl, 'http://192.0.2.10:3000');
