@@ -293,12 +293,18 @@ class _MapPageState extends State<MapPage> {
   Future<void> _atualizarVisibilidadeRelevo() async {
     final map = _mapboxMap;
     if (map == null) return;
+
     try {
-      await map.setStyleTerrain(
-        _relevoAtivo
-            ? jsonEncode({'source': _terrainSourceId, 'exaggeration': 1.0})
-            : 'null',
-      );
+      if (_relevoAtivo) {
+        await map.setStyleTerrain(
+          jsonEncode({
+            'source': _terrainSourceId,
+            'exaggeration': 1.0,
+          }),
+        );
+      } else {
+        await map.removeStyleTerrain();
+      }
     } catch (error) {
       debugPrint('Falha ao alternar relevo: $error');
     }
@@ -1891,14 +1897,6 @@ class _MapPageState extends State<MapPage> {
                               ),
                             ),
                             const SizedBox(height: 6),
-
-                            Text(
-                              _vegetacaoConfig!.attribution,
-                              style: const TextStyle(
-                                fontSize: 9,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
                             const SizedBox(height: 8),
                             for (final classe in _vegetacaoConfig!.classes)
                               Padding(
