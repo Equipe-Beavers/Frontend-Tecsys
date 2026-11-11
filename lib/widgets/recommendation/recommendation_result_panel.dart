@@ -40,6 +40,18 @@ class RecommendationResultPanel extends StatelessWidget {
         const SizedBox(height: 12),
       ],
       RecommendationKpis(result: result),
+      const SizedBox(height: 12),
+      Text(
+        'Atendidos: ${result.pontosCobertos}  •  Não atendidos: ${result.pontosNaoCobertos}',
+        style: const TextStyle(color: AppColors.textWhite, fontSize: 12),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        result.capacityUsedPercent == null
+            ? 'Capacidade utilizada: sem limite configurado'
+            : 'Capacidade utilizada: ${result.capacityUsedPercent!.toStringAsFixed(1)}%',
+        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+      ),
       const SizedBox(height: 20),
       CoverageSummaryCard(result: result),
       if (result.porCategoria.isNotEmpty) ...[
