@@ -9,6 +9,7 @@ import 'package:frontend_tecsys/pages/profile_page.dart';
 import 'package:frontend_tecsys/services/auth_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/auth/auth_form_components.dart';
+import 'package:frontend_tecsys/widgets/auth/auth_loading_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -156,11 +157,9 @@ void main() {
     await fillRegistration(tester);
     await tester.tap(createButton);
     await tester.pump();
-    expect(
-      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-      isNull,
-    );
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(AuthLoadingScreen), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(createButton, findsNothing);
     expect(calls, 1);
     pending.complete(_json({'code': 'EMAIL_ALREADY_EXISTS'}, 409));
     await tester.pumpAndSettle();

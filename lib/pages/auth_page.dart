@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/auth_controller.dart';
 import '../widgets/auth/auth_shell.dart';
+import '../widgets/auth/auth_loading_screen.dart';
 import '../widgets/auth/login_form.dart';
 import '../widgets/auth/register_form.dart';
 
@@ -19,10 +20,15 @@ class _AuthPageState extends State<AuthPage> {
   bool _registered = false;
 
   @override
-  Widget build(BuildContext context) => AuthShell(
+  Widget build(BuildContext context) => AuthLoadingHost(
+    controller: widget.controller,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) => AuthShell(
     child: _register
         ? RegisterForm(
-            service: widget.controller.service,
+            controller: widget.controller,
             onBack: () => Navigator.of(context).pop(),
             onLogin: () => setState(() {
               _register = false;

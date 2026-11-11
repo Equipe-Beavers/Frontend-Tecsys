@@ -42,9 +42,7 @@ class AuthShell extends StatelessWidget {
     backgroundColor: AppColors.surfaceBackground,
     body: Stack(
       children: [
-        const Positioned.fill(
-          child: IgnorePointer(child: CustomPaint(painter: _ContoursPainter())),
-        ),
+        const Positioned.fill(child: AuthBackground()),
         SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -123,12 +121,99 @@ class AuthShell extends StatelessWidget {
   );
 }
 
+class AuthBackground extends StatelessWidget {
+  const AuthBackground({
+    super.key,
+    this.contourOpacity = .075,
+    this.topographic = false,
+  });
+  final double contourOpacity;
+  final bool topographic;
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: IgnorePointer(
+      child: CustomPaint(
+        painter: topographic
+            ? _TopographicPainter(contourOpacity)
+            : _ContoursPainter(contourOpacity),
+      ),
+    ),
+  );
+}
+
+/// Smooth contour lines for the US70 loading screen, painted once per viewport.
+class _TopographicPainter extends CustomPainter {
+  const _TopographicPainter(this.opacity);
+  final double opacity;
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    const cell = 20.0;
+    final columns = (size.width / cell).ceil();
+    final rows = (size.height / cell).ceil();
+    final grid = List<double>.generate((columns + 1) * (rows + 1), (index) {
+      final x = (index % (columns + 1)) * cell;
+      final y = (index ~/ (columns + 1)) * cell;
+      return math.sin(x / 130 + .8 * math.cos(y / 170)) +
+          .8 * math.cos(y / 110 - .5 * math.sin(x / 230)) +
+          .32 * math.sin((x + y) / 80);
+    });
+    final paint = Paint()
+      ..color = AppColors.primaryLime.withValues(alpha: opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    for (var level = -2.1; level < 2.2; level += .18) {
+      final path = Path();
+      for (var row = 0; row < rows; row++) {
+        for (var column = 0; column < columns; column++) {
+          final index = row * (columns + 1) + column;
+          final corners = [
+            Offset(column * cell, row * cell),
+            Offset((column + 1) * cell, row * cell),
+            Offset((column + 1) * cell, (row + 1) * cell),
+            Offset(column * cell, (row + 1) * cell),
+          ];
+          final values = [
+            grid[index],
+            grid[index + 1],
+            grid[index + columns + 2],
+            grid[index + columns + 1],
+          ];
+          final crossings = <Offset>[];
+          for (var edge = 0; edge < 4; edge++) {
+            final next = (edge + 1) % 4;
+            if ((values[edge] < level) != (values[next] < level)) {
+              crossings.add(
+                Offset.lerp(
+                  corners[edge],
+                  corners[next],
+                  (level - values[edge]) / (values[next] - values[edge]),
+                )!,
+              );
+            }
+          }
+          for (var point = 0; point + 1 < crossings.length; point += 2) {
+            path.moveTo(crossings[point].dx, crossings[point].dy);
+            path.lineTo(crossings[point + 1].dx, crossings[point + 1].dy);
+          }
+        }
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TopographicPainter oldDelegate) =>
+      oldDelegate.opacity != opacity;
+}
+
 class _ContoursPainter extends CustomPainter {
-  const _ContoursPainter();
+  const _ContoursPainter(this.opacity);
+  final double opacity;
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.primaryLime.withValues(alpha: .075)
+      ..color = AppColors.primaryLime.withValues(alpha: opacity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     for (var line = -7; line < 21; line++) {
@@ -150,5 +235,6 @@ class _ContoursPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ContoursPainter oldDelegate) => false;
+  bool shouldRepaint(_ContoursPainter oldDelegate) =>
+      opacity != oldDelegate.opacity;
 }
