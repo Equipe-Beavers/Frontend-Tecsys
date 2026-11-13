@@ -65,7 +65,13 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
       _ownedCoverageService = widget.coverageRepository == null
           ? ManchaCenarioService()
           : null;
-      _futureResultado.then(_loadScenarioCoverage);
+      _futureResultado.then(
+        _loadScenarioCoverage,
+        onError: (Object _, StackTrace __) {
+          // O FutureBuilder exibe erros de recomendacao para o usuario.
+          // Nao deixar tambem uma excecao assíncrona sem tratamento aqui.
+        },
+      );
     }
   }
 

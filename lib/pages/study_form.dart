@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/models/install_criterion.dart';
+import 'package:frontend_tecsys/pages/recomendacao_resultado_page.dart';
 import 'package:frontend_tecsys/services/install_criterion_service.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
 import 'package:frontend_tecsys/models/rf_profile.dart';
@@ -373,7 +374,30 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
         }
       }
       if (!mounted) return;
-      Navigator.pop(context, true);
+      if (_isEditing) {
+        Navigator.pop(context, true);
+        return;
+      }
+
+      // O cadastro do estudo nao e a recomendacao. A pagina de resultados
+      // solicita ao backend o calculo do cenario e exibe sua mancha e contagens.
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RecomendacaoResultadoPage(
+            idEstudo: _idEstudoCriado!,
+            idPerfilRf: _selectedRfProfile!.id,
+            idCriterioInstalacao: _criterioSelecionado!.id,
+            titulo: _nomeController.text.trim(),
+            subtitulo: [
+              _textoOuNulo(_cidadeController),
+              _textoOuNulo(_bairroController),
+              _textoOuNulo(_estadoController),
+            ].whereType<String>().join(' · '),
+          ),
+        ),
+      );
+      if (mounted) Navigator.pop(context, true);
     } catch (erro) {
       if (!mounted) return;
       setState(() => _salvando = false);
