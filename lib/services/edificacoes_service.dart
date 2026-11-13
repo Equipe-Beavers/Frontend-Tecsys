@@ -1,20 +1,14 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+
+import '../config/api_config.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:frontend_tecsys/models/edificacao.dart';
 
 class EdificacoesService {
-  EdificacoesService({
-    http.Client? client,
-    String? baseUrl,
-  })  : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ??
-            const String.fromEnvironment(
-              'API_BASE_URL',
-              defaultValue: kIsWeb
-                  ? 'http://localhost:3000'
-                  : 'http://10.0.2.2:3000',
-            );
+  EdificacoesService({http.Client? client, String? baseUrl})
+    : _client = client ?? http.Client(),
+      _baseUrl = ApiConfig.resolve(baseUrl);
 
   /// O back-end recusa áreas com lado maior que 0,1°.
   static const double ladoMaximoGraus = 0.1;
@@ -53,16 +47,12 @@ class EdificacoesService {
     final decoded = jsonDecode(response.body);
 
     if (decoded is! Map || decoded['data'] is! List) {
-      throw const FormatException(
-        'Resposta da API de edificações inválida.',
-      );
+      throw const FormatException('Resposta da API de edificações inválida.');
     }
 
     return (decoded['data'] as List)
         .map(
-          (item) => Edificacao.fromJson(
-            Map<String, dynamic>.from(item as Map),
-          ),
+          (item) => Edificacao.fromJson(Map<String, dynamic>.from(item as Map)),
         )
         .toList();
   }

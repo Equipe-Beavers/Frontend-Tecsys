@@ -27,6 +27,7 @@ echo "Configurando o acesso USB ao backend na porta $backend_port..."
 "$adb_bin" -s "$device_id" reverse "tcp:$backend_port" "tcp:$backend_port"
 
 echo "Iniciando o Flutter no dispositivo $device_id..."
+cd "$(dirname "$0")/.."
 exec flutter run \
   -d "$device_id" \
   --dart-define="API_BASE_URL=http://127.0.0.1:$backend_port"
