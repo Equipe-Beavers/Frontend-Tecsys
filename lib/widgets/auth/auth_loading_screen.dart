@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/auth_controller.dart';
 import '../../models/auth_operation.dart';
 import '../../theme/app_colors.dart';
-import 'auth_shell.dart';
 
 /// A single presentation boundary for US70; never used for map or study requests.
 class AuthLoadingHost extends StatelessWidget {
@@ -74,7 +73,11 @@ class AuthLoadingScreen extends StatelessWidget {
     child: Stack(
       fit: StackFit.expand,
       children: [
-        const AuthBackground(contourOpacity: .13, topographic: true),
+        Image.asset(
+          'assets/images/auth_loading_background.png',
+          fit: BoxFit.cover,
+          excludeFromSemantics: true,
+        ),
         const DecoratedBox(
           decoration: BoxDecoration(
             gradient: RadialGradient(
@@ -106,12 +109,13 @@ class AuthLoadingScreen extends StatelessWidget {
                                 const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    ImageIcon(
-                                      AssetImage(
+                                    Image(
+                                      image: AssetImage(
                                         'assets/images/logo_geomash.png',
                                       ),
-                                      size: 42,
-                                      color: AppColors.primaryLime,
+                                      width: 42,
+                                      height: 42,
+                                      excludeFromSemantics: true,
                                     ),
                                     SizedBox(width: 16),
                                     Text(
