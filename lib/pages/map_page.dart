@@ -3,17 +3,19 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/city_bairro_bottom_sheet.dart';
 import 'package:latlong2/latlong.dart' as latlong2;
+import 'package:frontend_tecsys/models/antena_anatel.dart';
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/models/edificacao.dart';
 import 'package:frontend_tecsys/models/layer_filter.dart';
+import 'package:frontend_tecsys/models/vegetacao_config.dart';
 import 'package:frontend_tecsys/services/ativos_service.dart';
+import 'package:frontend_tecsys/services/camadas_externas_service.dart';
 import 'package:frontend_tecsys/services/edificacoes_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
@@ -22,7 +24,6 @@ import 'package:frontend_tecsys/widgets/map_navigation.dart';
 import 'package:frontend_tecsys/widgets/filter_chip.dart';
 import 'package:frontend_tecsys/pages/study_form.dart';
 import 'package:frontend_tecsys/utils/map_utils.dart';
-import 'package:frontend_tecsys/widgets/map_switch.dart';
 import 'package:frontend_tecsys/widgets/study_area_step.dart';
 
 class MapPage extends StatefulWidget {
@@ -34,15 +35,19 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   MapboxMap? _mapboxMap;
-  PointAnnotationManager? _pointAnnotationManager;
+  CircleAnnotationManager? _ativoAnnotationManager;
   PolygonAnnotationManager? _polygonAnnotationManager;
   CircleAnnotationManager? _vertexAnnotationManager;
-  Cancelable? _pointTapEvents;
+  CircleAnnotationManager? _antenaAnnotationManager;
+  Cancelable? _ativoTapEvents;
+  Cancelable? _antenaTapEvents;
   final Map<String, AtivoBdgd> _ativosPorAnnotationId = {};
-  Uint8List? _poleIconImage;
+  final Map<String, AntenaAnatel> _antenasPorAnnotationId = {};
 
   final AtivosService _ativosService = AtivosService();
   final EdificacoesService _edificacoesService = EdificacoesService();
+  final CamadasExternasService _camadasExternasService =
+      CamadasExternasService();
   final TextEditingController _buscaController = TextEditingController();
 
   List<DistribuidoraResumo> _distribuidoras = [];
@@ -71,6 +76,8 @@ class _MapPageState extends State<MapPage> {
 
   Timer? _debounceTimer;
   int _sequenciaRequisicao = 0;
+  String? _consultaDadosEmAndamento;
+  String? _ultimaConsultaDados;
   int _sequenciaMunicipios = 0;
   bool _mapaPronto = false;
   bool _distribuidorasProntas = false;
@@ -80,9 +87,13 @@ class _MapPageState extends State<MapPage> {
   List<Edificacao> _edificacoes = [];
   bool _carregandoEdificacoes = false;
   String? _avisoEdificacoes;
+  String? _avisoAtivos;
   int _sequenciaEdificacoes = 0;
+  String? _consultaEdificacoesEmAndamento;
+  String? _ultimaConsultaEdificacoes;
 
   static const int _limiteAtivos = 3000;
+  static const double _ladoMaximoGrausAtivos = 0.2;
   static const String _terrainSourceId = 'study-terrain-dem';
   static const String _edificacoesSourceId = 'study-buildings';
   static const String _edificacoesFillLayerId = 'study-buildings-fill';
@@ -108,8 +119,10 @@ class _MapPageState extends State<MapPage> {
   void dispose() {
     _debounceTimer?.cancel();
     _buscaController.dispose();
-    _pointTapEvents?.cancel();
+    _ativoTapEvents?.cancel();
+    _antenaTapEvents?.cancel();
     _ativosService.dispose();
+    _camadasExternasService.dispose();
     _edificacoesService.dispose();
     super.dispose();
   }
@@ -117,26 +130,11 @@ class _MapPageState extends State<MapPage> {
   void _onMapCreated(MapboxMap controller) async {
     _mapboxMap = controller;
     controller.scaleBar.updateSettings(ScaleBarSettings(enabled: false));
-    try {
-      final image = await rootBundle.load('assets/images/PoleIcon.png');
-      _poleIconImage = image.buffer.asUint8List(
-        image.offsetInBytes,
-        image.lengthInBytes,
-      );
-    } catch (error, stackTrace) {
-      debugPrint('Falha ao carregar o ícone de poste: $error');
-      debugPrintStack(stackTrace: stackTrace);
-      if (mounted) {
-        setState(() {
-          _erroMapa = 'Não foi possível carregar o ícone dos postes.';
-        });
-      }
-    }
 
     if (!kIsWeb) {
-      _pointAnnotationManager = await controller.annotations
-          .createPointAnnotationManager();
-      _pointTapEvents = _pointAnnotationManager!.tapEvents(
+      _ativoAnnotationManager = await controller.annotations
+          .createCircleAnnotationManager();
+      _ativoTapEvents = _ativoAnnotationManager!.tapEvents(
         onTap: (annotation) {
           final ativo = _ativosPorAnnotationId[annotation.id];
           if (ativo != null) _selecionarAtivo(ativo);
@@ -146,6 +144,14 @@ class _MapPageState extends State<MapPage> {
           .createCircleAnnotationManager();
       _polygonAnnotationManager = await controller.annotations
           .createPolygonAnnotationManager();
+      _antenaAnnotationManager = await controller.annotations
+          .createCircleAnnotationManager();
+      _antenaTapEvents = _antenaAnnotationManager!.tapEvents(
+        onTap: (annotation) {
+          final antena = _antenasPorAnnotationId[annotation.id];
+          if (antena != null) _abrirDetalhesAntena(antena);
+        },
+      );
     }
 
     await controller.setBounds(
@@ -453,26 +459,26 @@ class _MapPageState extends State<MapPage> {
       }
       return;
     }
-    if (_pointAnnotationManager == null) return;
+    final manager = _ativoAnnotationManager;
+    if (manager == null) return;
 
-    List<PointAnnotationOptions> optionsList = [];
-    for (var ativo in ativosFiltrados) {
-      optionsList.add(
-        PointAnnotationOptions(
-          geometry: Point(
-            coordinates: Position(ativo.longitude, ativo.latitude),
+    final optionsList = ativosFiltrados
+        .map(
+          (ativo) => CircleAnnotationOptions(
+            geometry: Point(
+              coordinates: Position(ativo.longitude, ativo.latitude),
+            ),
+            circleRadius: _ativoSelecionado?.id == ativo.id ? 11 : 8,
+            circleColor: ativo.tipo.cor.toARGB32(),
+            circleStrokeWidth: 1.5,
+            circleStrokeColor: Colors.white.toARGB32(),
           ),
-          image: ativo.tipo == TipoAtivo.poste ? _poleIconImage : null,
-          iconSize: _ativoSelecionado?.id == ativo.id ? 3 : 4,
-        ),
-      );
-    }
+        )
+        .toList();
 
     try {
-      await _pointAnnotationManager!.deleteAll();
-      final annotations = await _pointAnnotationManager!.createMulti(
-        optionsList,
-      );
+      await manager.deleteAll();
+      final annotations = await manager.createMulti(optionsList);
       _ativosPorAnnotationId.clear();
       for (var index = 0; index < annotations.length; index++) {
         final annotation = annotations[index];
@@ -493,6 +499,46 @@ class _MapPageState extends State<MapPage> {
           _erroMapa = 'Falha ao renderizar ativos no mapa: $error';
         });
       }
+    }
+
+    await _atualizarAntenasNoMapa();
+  }
+
+  Future<void> _atualizarAntenasNoMapa() async {
+    if (kIsWeb) return;
+    final manager = _antenaAnnotationManager;
+    if (manager == null) return;
+
+    try {
+      await manager.deleteAll();
+      _antenasPorAnnotationId.clear();
+
+      if (!_antenasAtivas || _antenas.isEmpty) return;
+
+      final optionsList = _antenas
+          .map(
+            (antena) => CircleAnnotationOptions(
+              geometry: Point(
+                coordinates: Position(antena.longitude, antena.latitude),
+              ),
+              circleRadius: 7.0,
+              circleColor: AppColors.surfaceCard.toARGB32(),
+              circleStrokeWidth: 2.5,
+              circleStrokeColor: AppColors.secondaryTeal.toARGB32(),
+            ),
+          )
+          .toList();
+
+      final annotations = await manager.createMulti(optionsList);
+      for (var index = 0; index < annotations.length; index++) {
+        final annotation = annotations[index];
+        if (annotation != null) {
+          _antenasPorAnnotationId[annotation.id] = _antenas[index];
+        }
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Falha ao renderizar antenas no mapa: $error');
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
@@ -561,9 +607,10 @@ class _MapPageState extends State<MapPage> {
     final map = _mapboxMap;
     if (!_mapaPronto || map == null) return;
 
-    final sequencia = ++_sequenciaEdificacoes;
-
     if (!_edificacoesAtivas) {
+      _sequenciaEdificacoes++;
+      _consultaEdificacoesEmAndamento = null;
+      _ultimaConsultaEdificacoes = null;
       setState(() {
         _edificacoes = [];
         _carregandoEdificacoes = false;
@@ -589,6 +636,9 @@ class _MapPageState extends State<MapPage> {
 
     if (north - south > EdificacoesService.ladoMaximoGraus ||
         east - west > EdificacoesService.ladoMaximoGraus) {
+      _sequenciaEdificacoes++;
+      _consultaEdificacoesEmAndamento = null;
+      _ultimaConsultaEdificacoes = null;
       setState(() {
         _edificacoes = [];
         _carregandoEdificacoes = false;
@@ -598,6 +648,23 @@ class _MapPageState extends State<MapPage> {
       return;
     }
 
+    final consulta = jsonEncode([
+      south.toStringAsFixed(5),
+      north.toStringAsFixed(5),
+      west.toStringAsFixed(5),
+      east.toStringAsFixed(5),
+    ]);
+
+    if (consulta == _consultaEdificacoesEmAndamento) return;
+
+    final sequencia = ++_sequenciaEdificacoes;
+    if (consulta == _ultimaConsultaEdificacoes) {
+      _consultaEdificacoesEmAndamento = null;
+      setState(() => _carregandoEdificacoes = false);
+      return;
+    }
+
+    _consultaEdificacoesEmAndamento = consulta;
     setState(() {
       _carregandoEdificacoes = true;
       _avisoEdificacoes = null;
@@ -613,6 +680,8 @@ class _MapPageState extends State<MapPage> {
 
       if (!mounted || sequencia != _sequenciaEdificacoes) return;
 
+      _consultaEdificacoesEmAndamento = null;
+      _ultimaConsultaEdificacoes = consulta;
       setState(() {
         _edificacoes = edificacoes;
         _carregandoEdificacoes = false;
@@ -621,6 +690,7 @@ class _MapPageState extends State<MapPage> {
     } catch (error) {
       if (!mounted || sequencia != _sequenciaEdificacoes) return;
 
+      _consultaEdificacoesEmAndamento = null;
       setState(() {
         _carregandoEdificacoes = false;
         _avisoEdificacoes = 'Não foi possível carregar os edifícios.';
@@ -642,17 +712,22 @@ class _MapPageState extends State<MapPage> {
 
     if (!deveCarregarAtivos && !deveCarregarAntenas) {
       if (!mounted) return;
+      _sequenciaRequisicao++;
+      _consultaDadosEmAndamento = null;
+      _ultimaConsultaDados = null;
       setState(() {
         _todosAtivos = [];
         _antenas = [];
         _carregando = false;
         _erro = null;
+        _avisoAtivos = null;
       });
       _atualizarAnnotations();
       return;
     }
 
-    final sequencia = ++_sequenciaRequisicao;
+    int? sequencia;
+    String? consulta;
 
     try {
       final cameraState = await _mapboxMap!.getCameraState();
@@ -664,7 +739,56 @@ class _MapPageState extends State<MapPage> {
           pitch: cameraState.pitch,
         ),
       );
+      final minLatitude = bounds.southwest.coordinates.lat.toDouble();
+      final maxLatitude = bounds.northeast.coordinates.lat.toDouble();
+      final minLongitude = bounds.southwest.coordinates.lng.toDouble();
+      final maxLongitude = bounds.northeast.coordinates.lng.toDouble();
 
+      final areaMuitoAmpla =
+          (maxLatitude - minLatitude) > _ladoMaximoGrausAtivos ||
+          (maxLongitude - minLongitude) > _ladoMaximoGrausAtivos;
+      if (areaMuitoAmpla) {
+        if (!mounted) return;
+        _sequenciaRequisicao++;
+        _consultaDadosEmAndamento = null;
+        _ultimaConsultaDados = null;
+        setState(() {
+          _todosAtivos = [];
+          _antenas = [];
+          _carregando = false;
+          _erro = null;
+          _avisoAtivos = 'Aproxime o mapa para carregar os ativos.';
+        });
+        _atualizarAnnotations();
+        return;
+      }
+
+      final tiposOrdenados = camadasApi.toList()..sort();
+      consulta = jsonEncode([
+        minLatitude.toStringAsFixed(5),
+        maxLatitude.toStringAsFixed(5),
+        minLongitude.toStringAsFixed(5),
+        maxLongitude.toStringAsFixed(5),
+        _distribuidoraSelecionada,
+        tiposOrdenados,
+        deveCarregarAntenas,
+      ]);
+
+      if (consulta == _consultaDadosEmAndamento) return;
+
+      sequencia = ++_sequenciaRequisicao;
+      if (consulta == _ultimaConsultaDados) {
+        _consultaDadosEmAndamento = null;
+        if (mounted) {
+          setState(() {
+            _carregando = false;
+            _erro = null;
+          });
+        }
+        return;
+      }
+
+      _consultaDadosEmAndamento = consulta;
       if (mounted) {
         setState(() {
           if (_todosAtivos.isEmpty) _carregando = true;
@@ -672,41 +796,96 @@ class _MapPageState extends State<MapPage> {
         });
       }
 
-      final resultado = await _ativosService.getAtivos(
-        minLatitude: bounds.southwest.coordinates.lat.toDouble(),
-        maxLatitude: bounds.northeast.coordinates.lat.toDouble(),
-        minLongitude: bounds.southwest.coordinates.lng.toDouble(),
-        maxLongitude: bounds.northeast.coordinates.lng.toDouble(),
-        distribuidora: _distribuidoraSelecionada,
-        tipos: camadasApi,
-        limit: _limiteAtivos,
-      );
+      var ativosCarregados = <AtivoBdgd>[];
+      var antenasCarregadas = <AntenaAnatel>[];
+      String? erroCarregamento;
+
+      await Future.wait<void>([
+        () async {
+          if (!deveCarregarAtivos) return;
+          try {
+            final resultado = await _ativosService.getAtivos(
+              minLatitude: minLatitude,
+              maxLatitude: maxLatitude,
+              minLongitude: minLongitude,
+              maxLongitude: maxLongitude,
+              distribuidora: _distribuidoraSelecionada,
+              tipos: camadasApi,
+              limit: _limiteAtivos,
+            );
+            ativosCarregados = resultado.ativos;
+          } catch (error) {
+            erroCarregamento ??=
+                'Não foi possível carregar os ativos elétricos: $error';
+          }
+        }(),
+        () async {
+          if (!deveCarregarAntenas) return;
+          try {
+            final resultado = await _camadasExternasService.getAntenas(
+              minLatitude: minLatitude,
+              maxLatitude: maxLatitude,
+              minLongitude: minLongitude,
+              maxLongitude: maxLongitude,
+              limit: 1000,
+            );
+            antenasCarregadas = resultado.antenas;
+          } catch (error) {
+            erroCarregamento ??=
+                'Não foi possível carregar as estações da Anatel: $error';
+          }
+        }(),
+      ]);
 
       if (!mounted || sequencia != _sequenciaRequisicao) {
         return;
       }
 
+      _consultaDadosEmAndamento = null;
+      if (erroCarregamento == null) {
+        _ultimaConsultaDados = consulta;
+      }
       setState(() {
-        _todosAtivos = resultado.ativos;
+        _todosAtivos = ativosCarregados;
+        _antenas = antenasCarregadas;
         _carregando = false;
+        _erro = erroCarregamento;
+        _avisoAtivos = null;
       });
 
       _atualizarAnnotations();
     } catch (error, stackTrace) {
-      if (!mounted || sequencia != _sequenciaRequisicao) {
+      if (sequencia != null && sequencia != _sequenciaRequisicao) {
         return;
       }
 
-      debugPrint('Falha ao carregar ativos: $error');
+      if (sequencia == null) {
+        _sequenciaRequisicao++;
+      }
+      _consultaDadosEmAndamento = null;
+      if (!mounted) return;
+      debugPrint('Falha ao carregar dados do mapa: $error');
       debugPrintStack(stackTrace: stackTrace);
       setState(() {
-        _erro = 'Falha ao carregar ativos: $error';
+        _erro = 'Falha ao carregar dados do mapa: $error';
         _carregando = false;
       });
     }
   }
 
   Future<void> _inicializar() async {
+    var configVegetacao = VegetacaoConfig.fallback();
+    try {
+      configVegetacao = await _camadasExternasService.getVegetacaoConfig();
+    } catch (_) {
+      // A camada tem configuração pública de fallback; a falha não bloqueia o mapa.
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _vegetacaoConfig = configVegetacao;
+    });
+
     try {
       final distribuidoras = await _ativosService.getDistribuidoras();
 
@@ -731,25 +910,12 @@ class _MapPageState extends State<MapPage> {
         });
       }
     }
-    try {
-      distribuidoras = await _ativosService.getDistribuidoras();
-    } catch (_) {
-      // As camadas externas ainda podem ser usadas sem uma distribuidora.
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _vegetacaoConfig = configVegetacao;
-      _distribuidoras = distribuidoras;
-      _distribuidoraSelecionada = distribuidoras.isEmpty ? null : distribuidoras.first.nome;
-      _distribuidorasProntas = true;
-      _carregando = false;
-    });
-    _tentarCargaInicial();
   }
 
   int get _totalCamadasAtivas =>
       _camadasAtivas.values.where((ativa) => ativa).length +
+      (_vegetacaoAtiva ? 1 : 0) +
+      (_antenasAtivas ? 1 : 0) +
       (_edificacoesAtivas ? 1 : 0);
 
   Future<void> _selecionarDistribuidora(String? distribuidora) async {
@@ -798,6 +964,28 @@ class _MapPageState extends State<MapPage> {
     });
     _atualizarPoligono();
     _atualizarAnnotations();
+    if (municipio != null) {
+      unawaited(_centralizarNoMunicipio(municipio));
+    }
+  }
+
+  Future<void> _centralizarNoMunicipio(String municipio) async {
+    final map = _mapboxMap;
+    if (map == null) return;
+
+    final correspondentes = _municipios.where((m) => m.nome == municipio);
+    final selecionado = correspondentes.isEmpty ? null : correspondentes.first;
+    final latitude = selecionado?.latitude;
+    final longitude = selecionado?.longitude;
+    if (latitude == null || longitude == null) return;
+
+    await map.flyTo(
+      CameraOptions(
+        center: Point(coordinates: Position(longitude, latitude)),
+        zoom: 13.0,
+      ),
+      MapAnimationOptions(duration: 700),
+    );
   }
 
   Future<void> _iniciarEstudo() async {
@@ -1100,7 +1288,15 @@ class _MapPageState extends State<MapPage> {
     LayerFilterModal.exibir(
       context,
       camadasAtivas: _camadasAtivas,
+      vegetacaoAtiva: _vegetacaoAtiva,
+      antenasAtivas: _antenasAtivas,
       edificacoesAtivas: _edificacoesAtivas,
+      onSalvarVegetacao: (ativa) {
+        setState(() => _vegetacaoAtiva = ativa);
+      },
+      onSalvarAntenas: (ativa) {
+        setState(() => _antenasAtivas = ativa);
+      },
       onSalvarEdificacoes: (ativas) {
         _edificacoesAtivas = ativas;
       },
@@ -1115,7 +1311,7 @@ class _MapPageState extends State<MapPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length + 1} ativas',
+              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length + 3} ativas',
               style: const TextStyle(
                 color: AppColors.textDark,
                 fontWeight: FontWeight.bold,
@@ -1285,119 +1481,14 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
-  Widget _buildBotoesArea() {
-    return Row(
-      spacing: 12,
-      children: [
-        Expanded(
-          child: OutlinedButton(
-            onPressed: _cancelarArea,
-            style: OutlinedButton.styleFrom(
-              backgroundColor: AppColors.surfaceCard,
-              foregroundColor: AppColors.textWhite,
-              side: const BorderSide(color: AppColors.border),
-              padding: const EdgeInsets.symmetric(vertical: 17),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Cancelar',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ),
-        Expanded(
-          flex: 2,
-          child: ElevatedButton(
-            onPressed: _prosseguirArea,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryLime,
-              foregroundColor: AppColors.textDark,
-              elevation: 6,
-              padding: const EdgeInsets.symmetric(vertical: 17),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
-            ),
-            child: const Text(
-              'Prosseguir',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  List<Marker> _gerarMarcadores() {
-    final ativosFiltrados = _ativosVisiveis.where((a) {
-      return _camadasAtivas[a.tipo] ?? false;
-    }).toList();
-
-    return ativosFiltrados.map((ativo) {
-      final isSelected = _ativoSelecionado?.id == ativo.id;
-      final cor = ativo.tipo.cor;
-
-      final marker = Marker(
-        point: LatLng(ativo.latitude, ativo.longitude),
-        width: isSelected ? 42 : 32,
-        height: isSelected ? 42 : 32,
-        child: GestureDetector(
-          onTap: () => _selecionarAtivo(ativo),
-          child: _buildIconeMarcador(ativo, isSelected, cor),
-        ),
-        child: GestureDetector(
-          onTap: () => _selecionarAtivo(ativo),
-          child: _buildIconeMarcador(ativo, isSelected, cor),
-        ),
-      );
-
-      return marker;
-    }).toList();
-  }
-
-  List<Marker> _gerarMarcadoresAntenas() {
-    if (!_antenasAtivas) return [];
-    return _antenas.map((antena) {
-      return Marker(
-        point: LatLng(antena.latitude, antena.longitude),
-        width: 38,
-        height: 38,
-        child: GestureDetector(
-          onTap: () => _abrirDetalhesAntena(antena),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.surfaceCard,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.secondaryTeal, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.secondaryTeal.withValues(alpha: 0.35),
-                  blurRadius: 5,
-                ),
-              ],
-            ),
-            child: const Icon(Icons.cell_tower, color: AppColors.secondaryTeal, size: 21),
-          ),
-        ),
-      );
-    }).toList();
-  }
-
   Widget _linhaDetalheAntena(String titulo, String valor) {
     return Text.rich(
       TextSpan(
-        style: const TextStyle(
-          color: AppColors.textWhite,
-        ),
+        style: const TextStyle(color: AppColors.textWhite),
         children: [
           TextSpan(
             text: '$titulo: ',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           TextSpan(text: valor),
         ],
@@ -1409,7 +1500,7 @@ class _MapPageState extends State<MapPage> {
     final tecnologias = antena.tecnologias.isEmpty
         ? 'Não informado'
         : antena.tecnologias.join(', ');
-  
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surfaceCard,
@@ -1429,41 +1520,35 @@ class _MapPageState extends State<MapPage> {
                 ),
               ),
               const SizedBox(height: 12),
-  
+
               _linhaDetalheAntena(
                 'Município',
                 '${antena.municipio ?? 'Não informado'}'
-                '${antena.uf == null ? '' : ' / ${antena.uf}'}',
+                    '${antena.uf == null ? '' : ' / ${antena.uf}'}',
               ),
-  
-              _linhaDetalheAntena(
-                'Tecnologias',
-                tecnologias,
-              ),
-  
+
+              _linhaDetalheAntena('Tecnologias', tecnologias),
+
               _linhaDetalheAntena(
                 'Registros de emissão agrupados',
                 '${antena.totalRegistros}',
               ),
-  
+
               if (antena.tipoEstacao != null)
-                _linhaDetalheAntena(
-                  'Tipo de estação',
-                  antena.tipoEstacao!,
-                ),
-  
+                _linhaDetalheAntena('Tipo de estação', antena.tipoEstacao!),
+
               if (antena.alturaAntenaMediaM != null)
                 _linhaDetalheAntena(
                   'Altura média informada',
                   '${antena.alturaAntenaMediaM!.toStringAsFixed(1)} m',
                 ),
-  
+
               _linhaDetalheAntena(
                 'Latitude / longitude',
                 '${antena.latitude.toStringAsFixed(6)} / '
-                '${antena.longitude.toStringAsFixed(6)}',
+                    '${antena.longitude.toStringAsFixed(6)}',
               ),
-  
+
               const SizedBox(height: 8),
             ],
           ),
@@ -1472,38 +1557,17 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  Widget _buildIconeMarcador(AtivoBdgd ativo, bool isSelected, Color cor) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      decoration: BoxDecoration(
-        color: isSelected ? AppColors.surfaceCardLight : AppColors.surfaceCard,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: isSelected ? AppColors.primaryLime : cor,
-          width: isSelected ? 2.5 : 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (isSelected ? AppColors.primaryLime : cor).withValues(
-              alpha: isSelected ? 0.6 : 0.3,
-            ),
-            blurRadius: isSelected ? 10 : 5,
-            spreadRadius: isSelected ? 2 : 0,
-          ),
-        ],
-      ),
-      child: Center(
-        child: Icon(
-          ativo.tipo.icone,
-          color: isSelected ? AppColors.primaryLime : cor,
-          size: isSelected ? 22 : 16,
-        ),
-      ),
-    );
-  }
   bool get _emTesteDeWidget => WidgetsBinding.instance.runtimeType
       .toString()
       .contains('TestWidgetsFlutterBinding');
+
+  // Viewport usado somente na criação do mapa. Manter constante evita que
+  // rebuilds de estado (setState) recriem o CameraViewportState e o Mapbox
+  // voe de volta para a posição inicial durante a interação do usuário.
+  static final CameraViewportState _viewportInicial = CameraViewportState(
+    center: Point(coordinates: Position(-51.9253, -14.2350)),
+    zoom: 3.8,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1511,54 +1575,13 @@ class _MapPageState extends State<MapPage> {
       backgroundColor: AppColors.surfaceBackground,
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              onMapReady: _aoMapaPronto,
-              initialCenter: LatLng(-14.2350, -51.9253),
-              initialZoom: _currentZoom,
-              minZoom: 2.0,
-              maxZoom: 18.0,
-              onMapReady: _aoMapaPronto,
-              onPositionChanged: (camera, hasGesture) {
-                _currentZoom = camera.zoom;
-                _agendarCarregamento();
-              },
-              cameraConstraint: CameraConstraint.contain(
-                bounds: LatLngBounds(
-                  LatLng(-89.9, -180.0),
-                  LatLng(89.9, 180.0),
-                ),
-              ),
-              onPositionChanged: (camera, hasGesture) {
-                if (hasGesture) _agendarCarregamento();
-              },
-              onTap: (tapPosition, point) {
-                final edificacoesTocadas =
-                    _edificacaoHitNotifier.value?.hitValues ?? const [];
-                if (edificacoesTocadas.isNotEmpty) {
-                  _exibirEdificacao(edificacoesTocadas.first);
-                  return;
-                }
-
-                if (!isDrawing) {
-                  return;
-                }
-
-                setState(() {
-                  polygonPoints.add(point);
-                });
-              },
           if (_emTesteDeWidget)
             const ColoredBox(color: AppColors.surfaceBackground)
           else
             MapWidget(
               key: const ValueKey('mapWidget'),
               styleUri: MapboxStyles.STANDARD,
-              viewport: CameraViewportState(
-                center: Point(coordinates: Position(-51.9253, -14.2350)),
-                zoom: _currentZoom,
-              ),
+              viewport: _viewportInicial,
               onMapCreated: _onMapCreated,
               onStyleLoadedListener: _onStyleLoaded,
               onCameraChangeListener: (_) => unawaited(_sincronizarZoom()),
@@ -1582,10 +1605,12 @@ class _MapPageState extends State<MapPage> {
                           onChanged: _aplicarBusca,
                         ),
                       ),
-                      LayerFilterButton(
-                        onPressed: _abrirPainelCamadas,
-                        activeLayersCount: _totalCamadasAtivas,
-                      ),
+                      if (_distribuidoraSelecionada != null &&
+                          _municipioSelecionado != null)
+                        LayerFilterButton(
+                          onPressed: _abrirPainelCamadas,
+                          activeLayersCount: _totalCamadasAtivas,
+                        ),
                     ],
                   ),
                   Row(
@@ -1684,7 +1709,6 @@ class _MapPageState extends State<MapPage> {
                 ),
               ),
             ),
-          ),
           if (_vegetacaoAtiva &&
               _vegetacaoConfig != null &&
               _vegetacaoConfig!.classes.isNotEmpty)
@@ -1696,9 +1720,7 @@ class _MapPageState extends State<MapPage> {
                 decoration: BoxDecoration(
                   color: AppColors.surfaceCard,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: AppColors.border,
-                  ),
+                  border: Border.all(color: AppColors.border),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1744,10 +1766,7 @@ class _MapPageState extends State<MapPage> {
                     ),
 
                     if (_legendaExpandida) ...[
-                      const Divider(
-                        height: 1,
-                        color: AppColors.border,
-                      ),
+                      const Divider(height: 1, color: AppColors.border),
                       Padding(
                         padding: const EdgeInsets.all(10),
                         child: Column(
@@ -1807,46 +1826,6 @@ class _MapPageState extends State<MapPage> {
                 ),
               ),
             ),
-          Positioned(
-            left: 15,
-            right: 15,
-            bottom: 10,
-            child: _areaDesenhada
-                ? _buildBotoesArea()
-                : ElevatedButton(
-                    onPressed: _iniciarEstudo,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryLime,
-                      foregroundColor: AppColors.textDark,
-                      elevation: 6,
-                      padding: const EdgeInsets.symmetric(vertical: 17),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      shadowColor: AppColors.primaryLime.withValues(alpha: 0.4),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      spacing: 8,
-                      children: [
-                        Icon(
-                          Icons.add,
-                          color: AppColors.textDark,
-                          size: 16,
-                          weight: 10.0,
-                        ),
-                        Text(
-                          'Iniciar estudo',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-          ),
           if (_edificacoesAtivas &&
               (_carregandoEdificacoes || _avisoEdificacoes != null))
             Positioned(
@@ -1904,7 +1883,10 @@ class _MapPageState extends State<MapPage> {
                 child: CircularProgressIndicator(color: AppColors.primaryLime),
               ),
             ),
-          if (_erro != null || _erroMapa != null || _erroRelevo != null)
+          if (_erro != null ||
+              _erroMapa != null ||
+              _erroRelevo != null ||
+              _avisoAtivos != null)
             Positioned(
               left: 24,
               right: 24,
@@ -1918,6 +1900,7 @@ class _MapPageState extends State<MapPage> {
                       _erro,
                       _erroMapa,
                       _erroRelevo,
+                      _avisoAtivos,
                     ].whereType<String>().join('\n'),
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: AppColors.textWhite),

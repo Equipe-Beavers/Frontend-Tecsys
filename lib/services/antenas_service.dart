@@ -34,7 +34,7 @@ class AntenasService {
     required double maxLongitude,
     int limit = 1000,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/antenas').replace(
+    final uri = Uri.parse('$_baseUrl/antenas').replace(
       queryParameters: {
         'minLatitude': '$minLatitude',
         'maxLatitude': '$maxLatitude',

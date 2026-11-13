@@ -5,7 +5,6 @@ class InstallCriterionDraft {
   InstallCriterionDraft({this.original})
     : name = original?.name ?? '',
       gatewayLimitText = original?.gatewayLimit?.toString() ?? '',
-      requiresPower = original == null ? true : original.requiresPower,
       minDistanceMeters = original == null ? 10 : original.minDistanceMeters,
       maxDistanceMeters = original == null ? 500 : original.maxDistanceMeters,
       _selections = {
@@ -13,45 +12,19 @@ class InstallCriterionDraft {
           field: {...?original?.labels(field)},
       } {
     relief = _readObject(original?.relief)..remove('declividade_maxima_graus');
-    vegetation = _readObject(original?.vegetation);
-    buildings = _readObject(original?.buildings);
-    antennas = _readObject(original?.antennas);
-    final defaultAllowed = original == null
-        ? criterionVegetationTypes.keys.take(3).toList()
-        : <String>[];
-    final defaultBlocked = original == null
-        ? criterionVegetationTypes.keys.skip(3).toList()
-        : <String>[];
-    allowedVegetationTypes = _readStringList(
-      vegetation['permitidas'],
-      defaultAllowed,
-    );
-    blockedVegetationTypes = _readStringList(
-      vegetation['proibidas'],
-      defaultBlocked,
-    );
   }
 
   final InstallCriterion? original;
   String name;
   String gatewayLimitText;
-  bool? requiresPower;
   double? minDistanceMeters;
   double? maxDistanceMeters;
   late final Map<String, dynamic> relief;
-  late final Map<String, dynamic> vegetation;
-  late final Map<String, dynamic> buildings;
-  late final Map<String, dynamic> antennas;
-  late List<String> allowedVegetationTypes;
-  late List<String> blockedVegetationTypes;
   final Map<CriterionCollection, Set<String>> _selections;
   final Set<CriterionCollection> _changedCollections = {};
 
   static Map<String, dynamic> _readObject(Object? value) =>
       value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
-
-  static List<String> _readStringList(Object? value, List<String> fallback) =>
-      value is List ? value.whereType<String>().toList() : fallback;
 
   Set<String> selection(CriterionCollection field) =>
       Set.unmodifiable(_selections[field]!);
@@ -64,39 +37,18 @@ class InstallCriterionDraft {
     _changedCollections.add(field);
   }
 
-  void setVegetationTypes({
-    required bool allowed,
-    required List<String> types,
-  }) {
-    if (allowed) {
-      allowedVegetationTypes = types;
-    } else {
-      blockedVegetationTypes = types;
-    }
-  }
-
   Map<String, dynamic> toPayload({
     required int userId,
     Map<String, dynamic> reliefValues = const {},
-    Map<String, dynamic> buildingValues = const {},
-    Map<String, dynamic> antennaValues = const {},
   }) => {
     if (original == null) 'id_usuario': userId,
     'nome': name.trim(),
-    'requer_alimentacao_eletrica': requiresPower,
     'distancia_minima_ativos_m': minDistanceMeters,
     'distancia_maxima_ativos_m': maxDistanceMeters,
     'limite_gateways': gatewayLimitText.trim().isEmpty
         ? null
         : int.parse(gatewayLimitText.trim()),
     'relevo': _mergeObject(relief, reliefValues),
-    'vegetacoes': {
-      ...vegetation,
-      'permitidas': allowedVegetationTypes,
-      'proibidas': blockedVegetationTypes,
-    },
-    'edificacoes': _mergeObject(buildings, buildingValues),
-    'antenas': _mergeObject(antennas, antennaValues),
     for (final field in CriterionCollection.values)
       if (original == null || _changedCollections.contains(field))
         field.jsonKey: _selections[field]!.toList(),
@@ -141,13 +93,6 @@ class InstallCriterionDraft {
     }
     if (keys(allowed).intersection(keys(blocked)).isNotEmpty) {
       return 'Ativos: uma opção não pode ser permitida e proibida ao mesmo tempo.';
-    }
-    final vegetation = payload['vegetacoes'];
-    if (vegetation is Map &&
-        keys(vegetation['permitidas'])
-            .intersection(keys(vegetation['proibidas']))
-            .isNotEmpty) {
-      return 'Vegetação: uma opção não pode ser permitida e proibida ao mesmo tempo.';
     }
     final relief = payload['relevo'];
     if (relief is Map) {

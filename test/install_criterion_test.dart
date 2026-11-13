@@ -11,7 +11,6 @@ import 'package:frontend_tecsys/pages/library_page.dart';
 import 'package:frontend_tecsys/pages/install_criterion_form.dart';
 import 'package:frontend_tecsys/services/install_criterion_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
-import 'package:frontend_tecsys/widgets/app_panel.dart';
 
 void main() {
   test(
@@ -286,9 +285,7 @@ void main() {
     expect(find.text(fixture['nome'] as String), findsOneWidget);
   });
 
-  testWidgets('local requirements switch and meter slider save API values', (
-    tester,
-  ) async {
+  testWidgets('local meter slider saves API values', (tester) async {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -305,8 +302,6 @@ void main() {
       ),
     );
     expect(find.text('Até 500 m'), findsOneWidget);
-    await tester.ensureVisible(find.byType(Switch).first);
-    await tester.tap(find.byType(Switch).first);
     tester.widget<RangeSlider>(find.byType(RangeSlider)).onChanged!(
       const RangeValues(100, 300),
     );
@@ -314,7 +309,6 @@ void main() {
     expect(find.text('100–300 m'), findsOneWidget);
     await tester.tap(find.text('Salvar critério'));
     await tester.pumpAndSettle();
-    expect(payload!['requer_alimentacao_eletrica'], false);
     expect(payload!['distancia_minima_ativos_m'], 100);
     expect(payload!['distancia_maxima_ativos_m'], 300);
   });
@@ -382,104 +376,6 @@ void main() {
       AppColors.surfaceBackground,
     );
 
-    final vegetationPanel = find.ancestor(
-      of: find.text('Permitidas'),
-      matching: find.byType(AppPanel),
-    );
-    expect(
-      find.descendant(
-        of: vegetationPanel,
-        matching: find.widgetWithText(Chip, 'Área urbanizada'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: vegetationPanel,
-        matching: find.widgetWithText(Chip, 'Pastagem'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: vegetationPanel,
-        matching: find.widgetWithText(Chip, 'Agricultura'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: vegetationPanel,
-        matching: find.widgetWithText(Chip, 'Formação florestal'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: vegetationPanel,
-        matching: find.widgetWithText(Chip, 'Formação florestal'),
-      ),
-      findsOneWidget,
-    );
-
-    final addVegetation = find
-        .descendant(of: vegetationPanel, matching: find.text('Adicionar'))
-        .first;
-    await tester.ensureVisible(addVegetation);
-    await tester.tap(addVegetation);
-    await tester.pumpAndSettle();
-    var vegetationDialog = find.byType(AlertDialog);
-    expect(
-      find.descendant(of: vegetationDialog, matching: find.text('Permitido')),
-      findsNWidgets(3),
-    );
-    expect(
-      find.descendant(of: vegetationDialog, matching: find.text('Bloqueado')),
-      findsNWidgets(4),
-    );
-    await tester.tap(
-      find.descendant(of: vegetationDialog, matching: find.text('Cancelar')),
-    );
-    await tester.pumpAndSettle();
-
-    final forbiddenMangueChip = find.widgetWithText(Chip, 'Mangue');
-    await tester.ensureVisible(forbiddenMangueChip);
-    await tester.tap(
-      find.descendant(
-        of: forbiddenMangueChip,
-        matching: find.byIcon(Icons.close),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(addVegetation);
-    await tester.tap(addVegetation);
-    await tester.pumpAndSettle();
-    vegetationDialog = find.byType(AlertDialog);
-    expect(
-      find.descendant(of: vegetationDialog, matching: find.text('Permitido')),
-      findsNWidgets(3),
-    );
-    expect(
-      find.descendant(of: vegetationDialog, matching: find.text('Bloqueado')),
-      findsNWidgets(3),
-    );
-    await tester.tap(
-      find.descendant(of: vegetationDialog, matching: find.text('Mangue')),
-    );
-    await tester.pump();
-    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
-    await tester.tap(
-      find.descendant(of: vegetationDialog, matching: find.text('Adicionar')),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.descendant(
-        of: vegetationPanel,
-        matching: find.widgetWithText(Chip, 'Mangue'),
-      ),
-      findsOneWidget,
-    );
-
     Finder input(String label) => find.byWidgetPredicate(
       (widget) => widget is TextField && widget.decoration?.labelText == label,
     );
@@ -487,17 +383,7 @@ void main() {
     await tester.enterText(input('Mínima'), '300');
     await tester.enterText(input('Máxima').first, '1200');
     expect(find.text('Declividade em graus'), findsNothing);
-    await tester.enterText(input('Raio de análise').first, '4');
-    await tester.enterText(input('Quantidade máxima').first, '5');
-    await tester.enterText(input('Altura máxima'), '6');
-    await tester.enterText(input('Distância mínima').last, '7');
-    await tester.enterText(input('Raio de análise').last, '8');
-    await tester.enterText(input('Quantidade máxima').last, '9');
-    await tester.enterText(input('Distância máxima').last, '10');
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byType(Switch).last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(Switch).last);
     await tester.ensureVisible(find.text('Salvar critério'));
     await tester.tap(find.text('Salvar critério'));
     await tester.pumpAndSettle();
@@ -507,61 +393,47 @@ void main() {
       'altitude_minima_m': 300,
       'altitude_maxima_m': 1200,
     });
-    expect(payload!['vegetacoes'], isA<Map<String, dynamic>>());
-    expect(payload!['edificacoes'], {
-      'raio_analise_m': 4,
-      'quantidade_maxima': 5,
-      'altura_maxima_m': 6,
-      'distancia_minima_m': 7,
-    });
-    expect(payload!['antenas'], {
-      'raio_analise_m': 8,
-      'quantidade_maxima': 9,
-      'distancia_maxima_m': 10,
-      'considerar_conflito_frequencia': false,
-    });
+    expect(payload!.containsKey('vegetacoes'), isFalse);
+    expect(payload!.containsKey('edificacoes'), isFalse);
+    expect(payload!.containsKey('antenas'), isFalse);
+    expect(payload!.containsKey('requer_alimentacao_eletrica'), isFalse);
     expect(find.text('RELEVO'), findsOneWidget);
   });
 
   for (final distance in [null, 0, 7500]) {
-    testWidgets(
-      'editing preserves existing distance $distance and nullable power',
-      (tester) async {
-        tester.view.physicalSize = const Size(1440, 900);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        Map<String, dynamic>? payload;
-        await tester.pumpWidget(
-          host(
-            InstallCriterionForm(
-              criterion: InstallCriterion.fromJson({
-                ...fixture,
-                'distancia_maxima_ativos_m': distance,
-                'requer_alimentacao_eletrica': null,
-              }),
-              userId: 1,
-              onClose: () {},
-              onSave: (value) async => payload = value,
-            ),
+    testWidgets('editing preserves existing distance $distance', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      Map<String, dynamic>? payload;
+      await tester.pumpWidget(
+        host(
+          InstallCriterionForm(
+            criterion: InstallCriterion.fromJson({
+              ...fixture,
+              'distancia_maxima_ativos_m': distance,
+            }),
+            userId: 1,
+            onClose: () {},
+            onSave: (value) async => payload = value,
           ),
-        );
-        await tester.enterText(
-          find.byType(TextFormField).first,
-          'Nome revisado',
-        );
-        await tester.tap(find.text('Salvar critério'));
-        await tester.pumpAndSettle();
-        if (distance != null && (distance < 10 || distance > 500)) {
-          expect(payload, isNull);
-          expect(find.text('Use um valor de 10 a 500 m.'), findsOneWidget);
-        } else {
-          expect(payload!['distancia_maxima_ativos_m'], distance);
-          expect(payload!['requer_alimentacao_eletrica'], isNull);
-        }
-        expect(tester.takeException(), isNull);
-      },
-    );
+        ),
+      );
+      await tester.enterText(find.byType(TextFormField).first, 'Nome revisado');
+      await tester.tap(find.text('Salvar critério'));
+      await tester.pumpAndSettle();
+      if (distance != null && (distance < 10 || distance > 500)) {
+        expect(payload, isNull);
+        expect(find.text('Use um valor de 10 a 500 m.'), findsOneWidget);
+      } else {
+        expect(payload!['distancia_maxima_ativos_m'], distance);
+        expect(payload!.containsKey('requer_alimentacao_eletrica'), isFalse);
+      }
+      expect(tester.takeException(), isNull);
+    });
   }
 
   for (final size in [const Size(390, 844), const Size(1440, 900)]) {

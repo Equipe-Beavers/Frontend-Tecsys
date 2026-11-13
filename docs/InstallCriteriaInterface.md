@@ -19,13 +19,9 @@ Acesse **Biblioteca → Critérios** pela navegação lateral no desktop ou pela
 | Nome | `nome` | Obrigatório, até 150 caracteres |
 | Ativos permitidos | `tipos_elementos_permitidos` | Tipos das camadas com seleção exclusiva Permitido/Bloqueado/Neutro |
 | Ativos bloqueados | `tipos_elementos_proibidos` | Lista de códigos; selecionar um tipo remove sua seleção na lista oposta |
-| Necessita alimentação elétrica | `requer_alimentacao_eletrica` | Interruptor: ligado (`true`) ou desligado (`false`) |
 | Distância aos ativos | `distancia_minima_ativos_m` e `distancia_maxima_ativos_m` | RangeSlider com dois seletores; escala 10–500 m, em passos de 10 m; persistência em metros |
 | Máximo de gateways | `limite_gateways` | Inteiro positivo; em branco envia `null` |
 | Relevo | `relevo` | JSONB com altitude mínima e máxima |
-| Vegetação | `vegetacoes` | JSONB com listas de tipos permitidos e proibidos |
-| Edificações | `edificacoes` | JSONB com raio, quantidade máxima, altura máxima e distância mínima |
-| Antenas | `antenas` | JSONB com raio, quantidade máxima, distância máxima e controle de conflito de frequência |
 Os tipos são obtidos do mesmo `CatalogoCamadas` usado no mapa. Não existe entrada personalizada. Neutro é a última opção e o padrão; corresponde à ausência do tipo nas duas listas.
 
 Novos critérios iniciam com intervalo de 10–500 m. Limites antigos fora dessa faixa precisam ser ajustados antes de salvar; não são convertidos silenciosamente. Tipos antigos fora das camadas são exibidos em um aviso e removidos somente pela ação explícita do usuário. As seções avançadas continuam usando objetos JSONB.
@@ -86,7 +82,7 @@ Os testes da funcionalidade usam HTTP simulado, cobrem CRUD, paginação, valida
 
 - Em telas largas, nome e limite de gateways ficam no início, ao lado dos requisitos
   do local. Abaixo, as regras de ativos ficam separadas das restrições ambientais.
-- Em telas estreitas, as seções de ativos, relevo, vegetação, edificações e antenas
+- Em telas estreitas, as seções de ativos e relevo
   podem ser abertas e recolhidas. O cabeçalho mantém um resumo das configurações;
   recolher uma seção preserva os valores e não desativa sua validação.
 - Os ativos seguem os grupos de Camadas: Estruturas, Proteção e Manobra e Regulação,

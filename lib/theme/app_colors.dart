@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 abstract class AppColors {
   // Cores existentes mantidas
   static const Color navBarBackground = Color(0xFF10312C);
-  static final Color searchBarFieldsBackground = const Color(0xFF10312C).withValues(alpha: 0.95);
+  static final Color searchBarFieldsBackground = const Color(0xFF10312C)
+      .withValues(alpha: 0.95);
   static const Color backgroundColor = Color(0xFF0A2A25);
   static const Color textPrimaryColor = Color(0xFFC8F135);
   static const Color unselectedItemColor = Color(0xFFBDBDBD);
@@ -21,6 +22,8 @@ abstract class AppColors {
   static const Color primaryLime = Color(0xFFC8F135);
   static const Color textDark = Color(0xFF0A2A25);
   static const Color secondaryTeal = Color(0xFF35D6C0);
+  static const Color coverageArea = Color(0xFF2F5D30);
+  static const Color coverageBorder = Color(0xFF4D701C);
   static const Color textMuted = Color(0xFF7E9A94);
   static const Color textWhite = Color(0xFFFFFFFF);
 

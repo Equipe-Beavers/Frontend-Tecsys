@@ -48,15 +48,24 @@ class TipoDispositivoResumo {
 }
 
 class MunicipioResumo {
-  const MunicipioResumo({required this.nome, required this.uf});
+  const MunicipioResumo({
+    required this.nome,
+    required this.uf,
+    this.latitude,
+    this.longitude,
+  });
 
   final String nome;
   final String uf;
+  final double? latitude;
+  final double? longitude;
 
   factory MunicipioResumo.fromJson(Map<String, dynamic> json) {
     return MunicipioResumo(
       nome: json['nome']?.toString() ?? '',
       uf: json['uf']?.toString() ?? '',
+      latitude: (json['lat'] as num?)?.toDouble(),
+      longitude: (json['lng'] as num?)?.toDouble(),
     );
   }
 }
@@ -175,7 +184,9 @@ class AtivosService {
   Future<List<DistribuidoraResumo>> getDistribuidoras() async {
     final response = await _client
         .get(Uri.parse('$_baseUrl/distribuidoras'))
-        .timeout(const Duration(seconds: 25));
+        // A primeira chamada agrega 7M de posições no banco remoto; as
+        // seguintes são atendidas pelo cache do backend em milissegundos.
+        .timeout(const Duration(seconds: 60));
 
     if (response.statusCode != 200) {
       throw StateError(

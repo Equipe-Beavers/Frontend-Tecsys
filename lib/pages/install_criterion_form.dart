@@ -2,16 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../models/install_criterion.dart';
 import '../models/install_criterion_draft.dart';
-import '../widgets/criterion_type_dialog.dart';
 import '../widgets/criterion_asset_rules.dart';
 import '../services/install_criterion_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_panel.dart';
-import '../widgets/switch_field.dart';
 import '../widgets/form_field_wrapper.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/secondary_button.dart';
-import '../widgets/editable_chip_field.dart';
 import '../widgets/slider_field.dart';
 
 class InstallCriterionForm extends StatefulWidget {
@@ -42,17 +39,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
   late final TextEditingController _gatewayLimit;
   late final TextEditingController _minimumAltitude;
   late final TextEditingController _maximumAltitude;
-  late final TextEditingController _buildingAnalysisRadius;
-  late final TextEditingController _buildingMaximumQuantity;
-  late final TextEditingController _buildingMaximumHeight;
-  late final TextEditingController _buildingMinimumDistance;
-  late final TextEditingController _antennaAnalysisRadius;
-  late final TextEditingController _antennaMaximumQuantity;
-  late final TextEditingController _antennaMaximumDistance;
   late Map<CriterionCollection, List<String>> _assetChipItems;
-  late List<String> _allowedVegetationItems;
-  late List<String> _blockedVegetationItems;
-  late bool _considerFrequencyConflict;
   bool _saving = false;
   bool _dirty = false;
   String? _error;
@@ -79,35 +66,10 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
     _maximumAltitude = TextEditingController(
       text: _sectionText(_draft.relief, 'altitude_maxima_m'),
     );
-    _buildingAnalysisRadius = TextEditingController(
-      text: _sectionText(_draft.buildings, 'raio_analise_m'),
-    );
-    _buildingMaximumQuantity = TextEditingController(
-      text: _sectionText(_draft.buildings, 'quantidade_maxima'),
-    );
-    _buildingMaximumHeight = TextEditingController(
-      text: _sectionText(_draft.buildings, 'altura_maxima_m'),
-    );
-    _buildingMinimumDistance = TextEditingController(
-      text: _sectionText(_draft.buildings, 'distancia_minima_m'),
-    );
-    _antennaAnalysisRadius = TextEditingController(
-      text: _sectionText(_draft.antennas, 'raio_analise_m'),
-    );
-    _antennaMaximumQuantity = TextEditingController(
-      text: _sectionText(_draft.antennas, 'quantidade_maxima'),
-    );
-    _antennaMaximumDistance = TextEditingController(
-      text: _sectionText(_draft.antennas, 'distancia_maxima_m'),
-    );
-    _considerFrequencyConflict =
-        _draft.antennas['considerar_conflito_frequencia'] as bool? ?? true;
     _assetChipItems = {
       for (final field in CriterionCollection.values)
         field: _draft.selection(field).toList(),
     };
-    _allowedVegetationItems = _draft.allowedVegetationTypes;
-    _blockedVegetationItems = _draft.blockedVegetationTypes;
     if (widget.criterion == null) {
       for (final entry in _assetChipItems.entries) {
         _draft.setTypes(entry.key, entry.value);
@@ -122,9 +84,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
       ? null
       : double.parse(text.trim().replaceAll(',', '.'));
 
-  int? _optionalInteger(String text) =>
-      text.trim().isEmpty ? null : int.parse(text.trim());
-
   @override
   void dispose() {
     for (final controller in [
@@ -134,13 +93,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
       _gatewayLimit,
       _minimumAltitude,
       _maximumAltitude,
-      _buildingAnalysisRadius,
-      _buildingMaximumQuantity,
-      _buildingMaximumHeight,
-      _buildingMinimumDistance,
-      _antennaAnalysisRadius,
-      _antennaMaximumQuantity,
-      _antennaMaximumDistance,
     ]) {
       controller.dispose();
     }
@@ -192,18 +144,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
       reliefValues: {
         'altitude_minima_m': _optionalNumber(_minimumAltitude.text),
         'altitude_maxima_m': _optionalNumber(_maximumAltitude.text),
-      },
-      buildingValues: {
-        'raio_analise_m': _optionalNumber(_buildingAnalysisRadius.text),
-        'quantidade_maxima': _optionalInteger(_buildingMaximumQuantity.text),
-        'altura_maxima_m': _optionalNumber(_buildingMaximumHeight.text),
-        'distancia_minima_m': _optionalNumber(_buildingMinimumDistance.text),
-      },
-      antennaValues: {
-        'raio_analise_m': _optionalNumber(_antennaAnalysisRadius.text),
-        'quantidade_maxima': _optionalInteger(_antennaMaximumQuantity.text),
-        'distancia_maxima_m': _optionalNumber(_antennaMaximumDistance.text),
-        'considerar_conflito_frequencia': _considerFrequencyConflict,
       },
     );
     final validationError = _draft.validatePayload(values);
@@ -257,54 +197,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
       borderSide: const BorderSide(color: AppColors.secondaryTeal),
     ),
   );
-
-  Future<List<String>?> _addChipItems(
-    List<String> availableItems,
-    Set<String> existingItems, {
-    required List<String> permittedItems,
-    required List<String> forbiddenItems,
-    required Map<String, String> itemLabels,
-    required String title,
-  }) => showDialog<List<String>>(
-    context: context,
-    builder: (_) => CriterionTypeDialog(
-      availableItems: availableItems,
-      existingItems: existingItems,
-      itemLabels: itemLabels,
-      title: title,
-      existingItemLabels: {
-        for (final item in permittedItems) item: 'Permitido',
-        for (final item in forbiddenItems) item: 'Bloqueado',
-      },
-      existingItemColors: {
-        for (final item in permittedItems) item: AppColors.secondaryTeal,
-        for (final item in forbiddenItems) item: Colors.orange,
-      },
-    ),
-  );
-
-  void _updateVegetationItems({
-    required bool allowed,
-    required List<String> items,
-  }) {
-    setState(() {
-      if (allowed) {
-        _allowedVegetationItems = items;
-        _blockedVegetationItems = _blockedVegetationItems
-            .where((item) => !items.contains(item))
-            .toList();
-      } else {
-        _blockedVegetationItems = items;
-        _allowedVegetationItems = _allowedVegetationItems
-            .where((item) => !items.contains(item))
-            .toList();
-      }
-      _draft
-        ..setVegetationTypes(allowed: true, types: _allowedVegetationItems)
-        ..setVegetationTypes(allowed: false, types: _blockedVegetationItems);
-      _dirty = true;
-    });
-  }
 
   Widget _identity() => FormFieldWrapper(
     title: 'Nome do critério',
@@ -371,17 +263,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
         titleColor: const Color(0xFFABC2BC),
         child: Column(
           children: [
-            SwitchField(
-              label: 'Necessita alimentação elétrica',
-              value: _draft.requiresPower ?? false,
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() {
-                      _draft.requiresPower = value;
-                      _dirty = true;
-                    }),
-            ),
-            const SizedBox(height: 8),
             SliderField(
               label: 'Distância aos ativos',
               valueLabel: _distanceLabel,
@@ -521,220 +402,8 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
     ),
   );
 
-  Widget _vegetation() => FormFieldWrapper(
-    title: 'Vegetação',
-    titleColor: const Color(0xFFABC2BC),
-    child: AppPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Permitidas',
-            style: TextStyle(
-              color: AppColors.secondaryTeal,
-              fontSize: 11,
-              letterSpacing: 1.1,
-            ),
-          ),
-          const SizedBox(height: 10),
-          EditableChipField(
-            defaultItems: _allowedVegetationItems,
-            availableItems: criterionVegetationTypes.keys.toList(),
-            excludedItems: _blockedVegetationItems.toSet(),
-            itemLabels: criterionVegetationTypes,
-            colorVariant: ChipColorVariant.primary,
-            enabled: !_saving,
-            onAdd: (availableItems, existingItems) => _addChipItems(
-              availableItems,
-              existingItems,
-              permittedItems: _allowedVegetationItems,
-              forbiddenItems: _blockedVegetationItems,
-              itemLabels: criterionVegetationTypes,
-              title: 'Adicionar tipo de vegetação permitida',
-            ),
-            onItemsChanged: (items) =>
-                _updateVegetationItems(allowed: true, items: items),
-          ),
-          const Divider(height: 24, color: AppColors.border),
-          const Text(
-            'Proibidas',
-            style: TextStyle(
-              color: Colors.orange,
-              fontSize: 11,
-              letterSpacing: 1.1,
-            ),
-          ),
-          const SizedBox(height: 10),
-          EditableChipField(
-            defaultItems: _blockedVegetationItems,
-            availableItems: criterionVegetationTypes.keys.toList(),
-            excludedItems: _allowedVegetationItems.toSet(),
-            itemLabels: criterionVegetationTypes,
-            colorVariant: ChipColorVariant.secondary,
-            enabled: !_saving,
-            onAdd: (availableItems, existingItems) => _addChipItems(
-              availableItems,
-              existingItems,
-              permittedItems: _allowedVegetationItems,
-              forbiddenItems: _blockedVegetationItems,
-              itemLabels: criterionVegetationTypes,
-              title: 'Adicionar tipo de vegetação proibida',
-            ),
-            onItemsChanged: (items) =>
-                _updateVegetationItems(allowed: false, items: items),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  Widget _buildings() => FormFieldWrapper(
-    title: 'Edificações',
-    titleColor: const Color(0xFFABC2BC),
-    child: AppPanel(
-      child: Column(
-        children: [
-          TextFormField(
-            key: _fieldKeys.putIfAbsent(
-              '_buildingAnalysisRadius',
-              () => GlobalKey<FormFieldState<String>>(),
-            ),
-            controller: _buildingAnalysisRadius,
-            enabled: !_saving,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: _decoration(
-              'Raio de análise',
-              insideAppPanel: true,
-            ).copyWith(suffixText: 'm'),
-            validator: InstallCriterionDraft.validateOptionalNumber,
-            onChanged: (_) => setState(() => _dirty = true),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            key: _fieldKeys.putIfAbsent(
-              '_buildingMaximumQuantity',
-              () => GlobalKey<FormFieldState<String>>(),
-            ),
-            controller: _buildingMaximumQuantity,
-            enabled: !_saving,
-            keyboardType: TextInputType.number,
-            decoration: _decoration('Quantidade máxima', insideAppPanel: true),
-            validator: InstallCriterionDraft.validateOptionalInteger,
-            onChanged: (_) => setState(() => _dirty = true),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            key: _fieldKeys.putIfAbsent(
-              '_buildingMaximumHeight',
-              () => GlobalKey<FormFieldState<String>>(),
-            ),
-            controller: _buildingMaximumHeight,
-            enabled: !_saving,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: _decoration(
-              'Altura máxima',
-              insideAppPanel: true,
-            ).copyWith(suffixText: 'm'),
-            validator: InstallCriterionDraft.validateOptionalNumber,
-            onChanged: (_) => setState(() => _dirty = true),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            key: _fieldKeys.putIfAbsent(
-              '_buildingMinimumDistance',
-              () => GlobalKey<FormFieldState<String>>(),
-            ),
-            controller: _buildingMinimumDistance,
-            enabled: !_saving,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: _decoration(
-              'Distância mínima',
-              insideAppPanel: true,
-            ).copyWith(suffixText: 'm'),
-            validator: InstallCriterionDraft.validateOptionalNumber,
-            onChanged: (_) => setState(() => _dirty = true),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  Widget _antennas() => FormFieldWrapper(
-    title: 'Antenas',
-    titleColor: const Color(0xFFABC2BC),
-    child: AppPanel(
-      child: Column(
-        children: [
-          TextFormField(
-            key: _fieldKeys.putIfAbsent(
-              '_antennaAnalysisRadius',
-              () => GlobalKey<FormFieldState<String>>(),
-            ),
-            controller: _antennaAnalysisRadius,
-            enabled: !_saving,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: _decoration(
-              'Raio de análise',
-              insideAppPanel: true,
-            ).copyWith(suffixText: 'm'),
-            validator: InstallCriterionDraft.validateOptionalNumber,
-            onChanged: (_) => setState(() => _dirty = true),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            key: _fieldKeys.putIfAbsent(
-              '_antennaMaximumQuantity',
-              () => GlobalKey<FormFieldState<String>>(),
-            ),
-            controller: _antennaMaximumQuantity,
-            enabled: !_saving,
-            keyboardType: TextInputType.number,
-            decoration: _decoration('Quantidade máxima', insideAppPanel: true),
-            validator: InstallCriterionDraft.validateOptionalInteger,
-            onChanged: (_) => setState(() => _dirty = true),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            key: _fieldKeys.putIfAbsent(
-              '_antennaMaximumDistance',
-              () => GlobalKey<FormFieldState<String>>(),
-            ),
-            controller: _antennaMaximumDistance,
-            enabled: !_saving,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: _decoration(
-              'Distância máxima',
-              insideAppPanel: true,
-            ).copyWith(suffixText: 'm'),
-            validator: InstallCriterionDraft.validateOptionalNumber,
-            onChanged: (_) => setState(() => _dirty = true),
-          ),
-          const SizedBox(height: 12),
-          SwitchField(
-            label: 'Considerar conflito de frequência',
-            value: _considerFrequencyConflict,
-            onChanged: _saving
-                ? null
-                : (value) => setState(() {
-                    _considerFrequencyConflict = value;
-                    _dirty = true;
-                  }),
-          ),
-        ],
-      ),
-    ),
-  );
-
   void _revealError([BuildContext? invalidContext]) {
-    setState(
-      () => _expandedSections.addAll([
-        'assets',
-        'relief',
-        'vegetation',
-        'buildings',
-        'antennas',
-      ]),
-    );
+    setState(() => _expandedSections.addAll(['assets', 'relief']));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final target = invalidContext ?? _errorKey.currentContext;
@@ -968,38 +637,7 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                             const SizedBox(width: 24),
                             Expanded(
                               child: LayoutBuilder(
-                                builder: (context, size) => size.maxWidth >= 650
-                                    ? Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: Column(
-                                              children: [
-                                                _relief(),
-                                                _vegetation(),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 16),
-                                          Expanded(
-                                            child: Column(
-                                              children: [
-                                                _buildings(),
-                                                _antennas(),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : Column(
-                                        children: [
-                                          _relief(),
-                                          _vegetation(),
-                                          _buildings(),
-                                          _antennas(),
-                                        ],
-                                      ),
+                                builder: (context, size) => _relief(),
                               ),
                             ),
                           ],
@@ -1012,26 +650,6 @@ class _InstallCriterionFormState extends State<InstallCriterionForm> {
                           _relief(),
                           'relief',
                           _numericSummary([_minimumAltitude, _maximumAltitude]),
-                        ),
-                        _section(
-                          _vegetation(),
-                          'vegetation',
-                          '${_allowedVegetationItems.length} permitidas · ${_blockedVegetationItems.length} proibidas',
-                        ),
-                        _section(
-                          _buildings(),
-                          'buildings',
-                          _numericSummary([
-                            _buildingAnalysisRadius,
-                            _buildingMaximumQuantity,
-                            _buildingMaximumHeight,
-                            _buildingMinimumDistance,
-                          ]),
-                        ),
-                        _section(
-                          _antennas(),
-                          'antennas',
-                          '${_numericSummary([_antennaAnalysisRadius, _antennaMaximumQuantity, _antennaMaximumDistance])} · conflito de frequência ${_considerFrequencyConflict ? "sim" : "não"}',
                         ),
                         _scenarioLimits(),
                       ],

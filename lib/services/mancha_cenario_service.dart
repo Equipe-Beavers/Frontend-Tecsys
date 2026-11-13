@@ -4,7 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:frontend_tecsys/models/mancha_cenario.dart';
 import 'package:http/http.dart' as http;
 
-class ManchaCenarioService {
+abstract interface class ScenarioCoverageRepository {
+  Future<ManchaCenario> getManchaCenario(int idCenario);
+}
+
+class ManchaCenarioService implements ScenarioCoverageRepository {
   ManchaCenarioService({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
       _baseUrl =
@@ -19,6 +23,7 @@ class ManchaCenarioService {
   final http.Client _client;
   final String _baseUrl;
 
+  @override
   Future<ManchaCenario> getManchaCenario(int idCenario) async {
     final response = await _client
         .get(Uri.parse('$_baseUrl/get-scenario-coverage/$idCenario'))

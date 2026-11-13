@@ -35,7 +35,7 @@ class EmissoesRfService {
     required double maxLongitude,
     int limit = 5000,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/emissoes-rf').replace(
+    final uri = Uri.parse('$_baseUrl/emissoes-rf').replace(
       queryParameters: {
         'minLatitude': '$minLatitude',
         'maxLatitude': '$maxLatitude',

@@ -22,7 +22,7 @@ class VegetacaoService {
 
   Future<VegetacaoConfig> obterConfiguracao() async {
     final response = await _client
-        .get(Uri.parse('$_baseUrl/api/vegetacao/config'))
+        .get(Uri.parse('$_baseUrl/vegetacao/config'))
         .timeout(const Duration(seconds: 15));
 
     if (response.statusCode != 200) {
