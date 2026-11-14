@@ -10,6 +10,7 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' hide Size;
 import '../../models/mancha_cenario.dart';
 import '../../models/recomendacao_resultado.dart';
 import '../../theme/app_colors.dart';
+import 'map_snapshot_controller.dart';
 import 'recommendation_map_viewport.dart';
 
 class ResponsiveRecommendationMap extends StatefulWidget {
@@ -23,6 +24,7 @@ class ResponsiveRecommendationMap extends StatefulWidget {
     required this.lockPosition,
     this.selectedGateway,
     this.onGatewayTap,
+    this.snapshotController,
   });
 
   final List<GatewayProposto> gateways;
@@ -33,6 +35,8 @@ class ResponsiveRecommendationMap extends StatefulWidget {
   final ValueChanged<GatewayProposto>? onGatewayTap;
   final bool showBaseMap;
   final bool lockPosition;
+
+  final MapSnapshotController? snapshotController;
 
   @override
   State<ResponsiveRecommendationMap> createState() =>
@@ -98,8 +102,23 @@ class _ResponsiveRecommendationMapState
     }
   }
 
+  Future<Uint8List> _snapshot() {
+    final map = _map;
+    if (map == null || !_styleReady) {
+      return Future.error(StateError('O mapa ainda não terminou de carregar.'));
+    }
+    return map.snapshot();
+  }
+
+  @override
+  void dispose() {
+    widget.snapshotController?.detach(_snapshot);
+    super.dispose();
+  }
+
   Future<void> _onMapCreated(MapboxMap map) async {
     _map = map;
+    widget.snapshotController?.attach(_snapshot);
     _styleReady = false;
     _lastViewportSignature = null;
     await Future.wait([
