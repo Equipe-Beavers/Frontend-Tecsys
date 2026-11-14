@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/auth/auth_scope.dart';
+
 import '../services/estudos_service.dart';
 import '../services/install_criterion_service.dart';
 import '../services/rf_profile_service.dart';
@@ -18,7 +20,7 @@ class StudiesPage extends StatefulWidget {
     this.criterionService,
     this.rfProfileService,
     this.isActive = true,
-    this.userId = const int.fromEnvironment('APP_USER_ID', defaultValue: 1),
+    required this.userId,
   });
 
   final EstudosService? service;
@@ -50,7 +52,8 @@ class _StudiesPageState extends State<StudiesPage> {
   @override
   void initState() {
     super.initState();
-    _service = widget.service ?? EstudosService();
+    _service =
+        widget.service ?? EstudosService(client: AuthScope.clientOf(context));
     _load();
   }
 
@@ -107,7 +110,7 @@ class _StudiesPageState extends State<StudiesPage> {
             studyService: _service,
             criterionService: widget.criterionService,
             rfProfileService: widget.rfProfileService,
-            userId: selected?['id_usuario'] as int? ?? widget.userId,
+            userId: widget.userId,
           ),
         ),
       );

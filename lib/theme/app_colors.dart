@@ -31,6 +31,10 @@ abstract class AppColors {
   static const Color badgeSuccessBg = Color(0xFF183B33);
   static const Color badgeSuccessText = Color(0xFFC8F135);
 
+  // Feedback de erro (avisos/snackbars)
+  static const Color errorBackground = Color(0xFF4A1C1A);
+  static const Color errorText = Color(0xFFFF8A80);
+
   // Cores de camadas dos ativos BDGD
   static const Color layerPoste = Color(0xFF35D6C0);
   static const Color layerTransformador = Color(0xFF26C6DA);

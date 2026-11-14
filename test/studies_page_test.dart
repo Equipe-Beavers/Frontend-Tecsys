@@ -195,7 +195,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: StudiesPage(service: service)),
+        home: Scaffold(body: StudiesPage(userId: 1, service: service)),
       ),
     );
     await tester.pumpAndSettle();
@@ -256,6 +256,7 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: NovoEstudoPage(
+            userId: 1,
             distribuidora: 'Distribuidora local',
             municipio: 'São Paulo',
             areaKm2: 0,
@@ -475,6 +476,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: NovoEstudoPage(
+          userId: 1,
           distribuidora: '',
           municipio: null,
           areaKm2: 0,
@@ -595,6 +597,7 @@ void main() {
       await tester.pumpWidget(
         host(
           StudiesPage(
+            userId: 1,
             service: service,
             rfProfileService: rfService,
             criterionService: criterionService,
@@ -678,7 +681,7 @@ void main() {
       }),
     );
     addTearDown(service.dispose);
-    await tester.pumpWidget(host(StudiesPage(service: service)));
+    await tester.pumpWidget(host(StudiesPage(userId: 1, service: service)));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Ações de Estudo salvo'));
     await tester.pumpAndSettle();
@@ -717,7 +720,7 @@ void main() {
       }),
     );
     addTearDown(service.dispose);
-    await tester.pumpWidget(host(StudiesPage(service: service)));
+    await tester.pumpWidget(host(StudiesPage(userId: 1, service: service)));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Ações de Estudo salvo'));
     await tester.pumpAndSettle();
@@ -743,7 +746,7 @@ void main() {
     addTearDown(service.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: StudiesPage(service: service)),
+        home: Scaffold(body: StudiesPage(userId: 1, service: service)),
       ),
     );
     await tester.pumpAndSettle();
@@ -763,7 +766,7 @@ void main() {
     final service = serviceWith(http.Response('{"estudos": []}', 200));
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: StudiesPage(service: service)),
+        home: Scaffold(body: StudiesPage(userId: 1, service: service)),
       ),
     );
     await tester.pumpAndSettle();
@@ -783,7 +786,7 @@ void main() {
     addTearDown(service.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: StudiesPage(service: service)),
+        home: Scaffold(body: StudiesPage(userId: 1, service: service)),
       ),
     );
     await tester.pumpAndSettle();

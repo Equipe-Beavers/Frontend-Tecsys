@@ -25,7 +25,7 @@ abstract final class ApiConfig {
   /// URL base final, sem barra(s) no final.
   static String get baseUrl {
     const defined = String.fromEnvironment('API_BASE_URL');
-    if (defined.isNotEmpty) return _strip(defined);
+    if (defined.trim().isNotEmpty) return _strip(defined.trim());
 
     // dotenv só é inicializado no main(); em testes ele permanece vazio.
     if (dotenv.isInitialized) {
@@ -37,6 +37,10 @@ abstract final class ApiConfig {
 
     return _platformDefault();
   }
+
+  /// Explicit constructor URLs are useful for tests and take precedence locally.
+  static String resolve(String? override) =>
+      _strip((override ?? baseUrl).trim());
 
   static String _strip(String url) => url.replaceFirst(RegExp(r'/+$'), '');
 
