@@ -233,7 +233,36 @@ class AtivoBdgd {
             atributos['sit_ativ'],
         fallback: 'Não informado',
       ),
-      distribuidora: _asString(json['distribuidora'], fallback: 'Não informada'),
+      distribuidora: _asString(
+        json['distribuidora'],
+        fallback: 'Não informada',
+      ),
+    );
+  }
+
+  factory AtivoBdgd.fromBdgdPoste(
+    Map<String, dynamic> json, {
+    required String distribuidora,
+    required String municipio,
+  }) {
+    final codId = _asString(json['COD_ID']);
+    if (codId.isEmpty) {
+      throw const FormatException('Poste importado sem o campo COD_ID.');
+    }
+
+    return AtivoBdgd(
+      id: codId,
+      codId: codId,
+      tipo: TipoAtivo.poste,
+      latitude: _asDouble(json['Y']),
+      longitude: _asDouble(json['X']),
+      municipio: municipio,
+      distribuidora: distribuidora,
+      statusOperacional: _asString(json['SITCONT'], fallback: 'Não informado'),
+      material: _asString(json['MAT'], fallback: 'Não informado'),
+      esforcoTracao: _asString(json['ESF'], fallback: 'Não informado'),
+      altura: _asString(json['ALT'], fallback: 'Não informado'),
+      situacaoAtivo: _asString(json['SITCONT'], fallback: 'Não informado'),
     );
   }
 
@@ -270,8 +299,7 @@ class AtivoBdgd {
   static String _asString(dynamic value, {String fallback = ''}) =>
       value?.toString() ?? fallback;
 
-  static String? _asNullableString(dynamic value) =>
-      value?.toString();
+  static String? _asNullableString(dynamic value) => value?.toString();
 
   static int? _asInt(dynamic value) =>
       value is int ? value : int.tryParse('$value');

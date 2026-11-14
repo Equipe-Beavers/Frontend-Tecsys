@@ -26,22 +26,8 @@ class RecommendationKpis extends StatelessWidget {
           valueColor: AppColors.secondaryTeal,
         ),
       ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: _KpiCard(
-          label: 'Custo Total',
-          value: 'R\$ ${_formatValue(result.custoTotalEstimado)}',
-          valueColor: AppColors.layerChaveFusivel,
-        ),
-      ),
     ],
   );
-
-  static String _formatValue(double value) {
-    if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M';
-    if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}K';
-    return value.toStringAsFixed(0);
-  }
 }
 
 class _KpiCard extends StatelessWidget {

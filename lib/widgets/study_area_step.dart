@@ -107,7 +107,7 @@ class StudyAreaStep extends StatelessWidget {
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: const Text(
-                    'PASSO 3 DE 4',
+                    'PASSO 4 DE 5',
                     style: TextStyle(
                       color: AppColors.textDark,
                       fontSize: 11,
