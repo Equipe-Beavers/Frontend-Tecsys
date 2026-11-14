@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/auth_service.dart';
+import '../../controllers/auth_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/auth_validation.dart';
 import 'auth_form_components.dart';
@@ -9,12 +10,12 @@ import 'auth_form_components.dart';
 class RegisterForm extends StatefulWidget {
   const RegisterForm({
     super.key,
-    required this.service,
+    required this.controller,
     required this.onRegistered,
     required this.onLogin,
     required this.onBack,
   });
-  final AuthService service;
+  final AuthController controller;
   final ValueChanged<String> onRegistered;
   final VoidCallback onLogin, onBack;
   @override
@@ -49,7 +50,7 @@ class _RegisterFormState extends State<RegisterForm> {
     FocusScope.of(context).unfocus();
     setState(() => _busy = true);
     try {
-      final user = await widget.service.register(
+      final user = await widget.controller.register(
         username: _name.text,
         email: _email.text,
         password: _password.text,

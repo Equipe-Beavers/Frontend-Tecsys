@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/auth/auth_form_components.dart';
 import 'auth_page.dart';
+import '../widgets/auth/auth_loading_screen.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, required this.controller});
@@ -50,7 +51,12 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
+  Widget build(BuildContext context) => AuthLoadingHost(
+    controller: widget.controller,
+    child: PopScope(canPop: !_busy, child: _buildContent(context)),
+  );
+
+  Widget _buildContent(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
     builder: (context, _) {
       final user = widget.controller.user;

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../services/session_store.dart';
 
 import '../models/auth_user.dart';
+import '../models/auth_operation.dart';
 import '../services/auth_service.dart';
 
 class AuthController extends ChangeNotifier {
@@ -15,6 +16,56 @@ class AuthController extends ChangeNotifier {
       _ownsService = service == null;
 
   final AuthService service;
+  final Map<Object, AuthOperation> _operations = {};
+  AuthOperation? get operation =>
+      _operations.isEmpty ? null : _operations.values.last;
+
+  Future<T> _during<T>(
+    AuthOperation operation,
+    Future<T> Function() action,
+  ) async {
+    if (_disposed) throw StateError('AuthController disposed');
+    final ticket = Object();
+    _operations[ticket] = operation;
+    notifyListeners();
+    try {
+      return await action();
+    } finally {
+      _operations.remove(ticket);
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<AuthUser> register({
+    required String username,
+    required String email,
+    required String password,
+  }) => _during(
+    AuthOperation.register,
+    () =>
+        service.register(username: username, email: email, password: password),
+  );
+
+  Future<void> requestPasswordReset(String email) => _during(
+    AuthOperation.requestPasswordReset,
+    () => service.requestPasswordReset(email),
+  );
+
+  Future<void> resetPassword({
+    required String token,
+    required String password,
+  }) => _during(AuthOperation.resetPassword, () async {
+    await service.resetPassword(token: token, password: password);
+    final current = _token;
+    if (current != null) {
+      try {
+        await invalidate(current);
+      } catch (_) {
+        /* Server revocation and local memory cleanup already succeeded. */
+      }
+    }
+  });
+
   final bool _ownsService;
   final SessionStore _store;
   bool _restoring = false;
@@ -36,6 +87,11 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> restore() async {
+    if (_restoring || _disposed || _token != null) return;
+    await _during(AuthOperation.restoreSession, _restore);
+  }
+
+  Future<void> _restore() async {
     if (_restoring || _disposed || _token != null) return;
     final revision = ++_revision;
     _restoring = true;
@@ -66,7 +122,13 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  Future<void> login({required String email, required String password}) async {
+  Future<void> login({required String email, required String password}) =>
+      _during(
+        AuthOperation.login,
+        () => _login(email: email, password: password),
+      );
+
+  Future<void> _login({required String email, required String password}) async {
     final revision = ++_revision;
     final result = await service.login(email: email, password: password);
     if (_disposed || revision != _revision) return;
@@ -92,6 +154,11 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> refreshUser() async {
+    if (_token == null) return;
+    await _during(AuthOperation.restoreSession, _refreshUser);
+  }
+
+  Future<void> _refreshUser() async {
     final token = _token;
     if (token == null) return;
     try {
@@ -106,6 +173,11 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    if (_token == null) return;
+    await _during(AuthOperation.logout, _logout);
+  }
+
+  Future<void> _logout() async {
     final token = _token;
     if (token == null) return;
     try {
