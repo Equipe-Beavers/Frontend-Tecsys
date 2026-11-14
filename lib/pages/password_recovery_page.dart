@@ -30,6 +30,16 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
   bool _busy = false, _success = false, _requestAnother = false;
   String? _error;
   bool get _reset => widget.token != null && !_requestAnother;
+  bool get _invalidToken =>
+      _reset && !RegExp(r'^[a-f0-9]{64}$').hasMatch(widget.token!);
+
+  @override
+  void initState() {
+    super.initState();
+    if (_invalidToken) {
+      _error = 'Este link é inválido. Solicite outro link de recuperação.';
+    }
+  }
 
   @override
   void dispose() {
@@ -52,7 +62,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
   }
 
   Future<void> _submit() async {
-    if (_busy || !_form.currentState!.validate()) return;
+    if (_busy || _invalidToken || !_form.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
@@ -170,7 +180,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
               AuthSubmitButton(
                 label: _reset ? 'Salvar nova senha' : 'Enviar link',
                 busy: _busy,
-                onPressed: _submit,
+                onPressed: _invalidToken ? null : _submit,
               ),
               if (_reset)
                 Center(

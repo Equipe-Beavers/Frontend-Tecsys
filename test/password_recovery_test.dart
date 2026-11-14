@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,8 @@ import 'package:frontend_tecsys/controllers/auth_controller.dart';
 import 'package:frontend_tecsys/pages/password_recovery_page.dart';
 import 'package:frontend_tecsys/services/auth_service.dart';
 import 'package:frontend_tecsys/main.dart';
+import 'package:frontend_tecsys/widgets/auth/auth_loading_screen.dart';
+import 'package:frontend_tecsys/models/auth_operation.dart';
 
 Finder field(String key) => find.descendant(
   of: find.byKey(Key(key)),
@@ -36,6 +39,85 @@ Future<void> mount(
 }
 
 void main() {
+  testWidgets(
+    'token ausente ou malformado não envia redefinição e permite outro link',
+    (tester) async {
+      var calls = 0;
+      await mount(
+        tester,
+        MockClient((_) async {
+          calls++;
+          return http.Response('', 204);
+        }),
+        token: 'invalido',
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Este link é inválido'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Salvar nova senha'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(calls, 0);
+      await tester.tap(find.text('Solicitar outro link'));
+      await tester.pumpAndSettle();
+      expect(field('recovery-email'), findsOneWidget);
+    },
+  );
+
+  for (final status in [204, 400, 500]) {
+    testWidgets(
+      'redefinição usa carregamento US70 e libera a tela após HTTP $status',
+      (tester) async {
+        final response = Completer<http.Response>();
+        await mount(
+          tester,
+          MockClient((request) {
+            expect(request.url.path, '/auth/reset-password');
+            expect(jsonDecode(request.body)['token'], 'a' * 64);
+            return response.future;
+          }),
+          token: 'a' * 64,
+        );
+        await tester.enterText(field('reset-password'), 'Senha nova segura!');
+        await tester.enterText(
+          field('reset-confirmation'),
+          'Senha nova segura!',
+        );
+        await tester.tap(find.text('Salvar nova senha'));
+        await tester.pump();
+        expect(find.byType(AuthLoadingScreen), findsOneWidget);
+        expect(
+          tester
+              .widget<AuthLoadingScreen>(find.byType(AuthLoadingScreen))
+              .operation,
+          AuthOperation.resetPassword,
+        );
+        response.complete(
+          http.Response(
+            status == 204 ? '' : '{"code":"INVALID_RESET_TOKEN"}',
+            status,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(AuthLoadingScreen), findsNothing);
+        expect(
+          find.textContaining(
+            status == 204
+                ? 'Senha alterada com sucesso'
+                : status == 400
+                ? 'Este link é inválido'
+                : 'Não foi possível concluir',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+  }
+
   testWidgets('link inicial abre diretamente a redefinição sem exigir login', (
     tester,
   ) async {

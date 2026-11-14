@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -124,8 +125,19 @@ class _MyAppState extends State<MyApp> {
       onGenerateRoute: (settings) {
         final uri = Uri.tryParse(settings.name ?? '');
         if (uri?.path == '/redefinir-senha') {
+          // Keep the token only in the page state, not in navigation history.
+          if (kIsWeb) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              unawaited(
+                SystemNavigator.routeInformationUpdated(
+                  uri: Uri(path: '/redefinir-senha'),
+                  replace: true,
+                ),
+              );
+            });
+          }
           return MaterialPageRoute<void>(
-            settings: settings,
+            settings: const RouteSettings(name: '/redefinir-senha'),
             builder: (_) => PasswordRecoveryPage(
               controller: _auth,
               token: uri!.queryParameters['token'] ?? '',
