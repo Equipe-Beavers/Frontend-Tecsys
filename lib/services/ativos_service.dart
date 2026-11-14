@@ -51,19 +51,29 @@ class MunicipioResumo {
   const MunicipioResumo({
     required this.nome,
     required this.uf,
+    this.codigoIbge,
     this.latitude,
     this.longitude,
   });
 
   final String nome;
   final String uf;
+  final String? codigoIbge;
   final double? latitude;
   final double? longitude;
 
   factory MunicipioResumo.fromJson(Map<String, dynamic> json) {
+    final codigoIbge =
+        json['codigo_ibge'] ??
+        json['codigoIbge'] ??
+        json['cod_ibge'] ??
+        json['codigo_municipio'] ??
+        json['codigoMunicipio'] ??
+        json['cod_municipio'];
     return MunicipioResumo(
       nome: json['nome']?.toString() ?? '',
       uf: json['uf']?.toString() ?? '',
+      codigoIbge: codigoIbge?.toString(),
       latitude: (json['lat'] as num?)?.toDouble(),
       longitude: (json['lng'] as num?)?.toDouble(),
     );
@@ -209,6 +219,84 @@ class AtivosService {
         .toList();
   }
 
+  Future<DistribuidoraResumo> getDistribuidoraPorId(int id) async {
+    final response = await _client
+        .get(Uri.parse('$_baseUrl/distribuidoras/$id'))
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode != 200) {
+      throw StateError(
+        'A API da distribuidora respondeu com HTTP ${response.statusCode}.',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('Resposta da distribuidora inválida.');
+    }
+
+    final payload = decoded['data'] ?? decoded['distribuidora'] ?? decoded;
+    if (payload is! Map) {
+      throw const FormatException('Resposta da distribuidora inválida.');
+    }
+    final json = Map<String, dynamic>.from(payload);
+    final distribuidora = DistribuidoraResumo.fromJson(json);
+    if (distribuidora.id == 0 ||
+        distribuidora.nome.isEmpty ||
+        distribuidora.uf == null ||
+        distribuidora.uf!.isEmpty) {
+      throw const FormatException(
+        'A resposta da distribuidora não contém id, nome e UF.',
+      );
+    }
+    return distribuidora;
+  }
+
+  Future<Map<String, dynamic>> importarArquivoBdgd({
+    required String versaoBdgd,
+    required String nomeArquivo,
+    required Uint8List arquivo,
+  }) async {
+    final request =
+        http.MultipartRequest('POST', Uri.parse('$_baseUrl/import-file'))
+          ..fields['bdgd_version'] = versaoBdgd
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'file',
+              arquivo,
+              filename: nomeArquivo,
+            ),
+          );
+    final streamedResponse = await _client
+        .send(request)
+        .timeout(const Duration(minutes: 10));
+    final response = await http.Response.fromStream(streamedResponse)
+        .timeout(const Duration(minutes: 10));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detalhe = response.body.trim();
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody is Map && errorBody['message'] != null) {
+          detalhe = errorBody['message'].toString();
+        }
+      } on FormatException {
+        // Keep the raw response body when the API does not return JSON.
+      }
+
+      throw StateError(
+        'A importação respondeu com HTTP ${response.statusCode}'
+        '${detalhe.isEmpty ? '.' : ': $detalhe'}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('Resposta da importação inválida.');
+    }
+    return Map<String, dynamic>.from(decoded);
+  }
+
   Future<List<TipoDispositivoResumo>> getTiposDispositivos() async {
     final response = await _client
         .get(Uri.parse('$_baseUrl/ativos/tipos-dispositivos'))
@@ -238,7 +326,7 @@ class AtivosService {
   }
 
   Future<List<MunicipioResumo>> getMunicipios({
-    required String distribuidora,
+    String? distribuidora,
     required String uf,
   }) async {
     final municipios = <MunicipioResumo>[];
@@ -246,14 +334,16 @@ class AtivosService {
     var totalPaginas = 1;
 
     do {
-      final uri = Uri.parse('$_baseUrl/municipios').replace(
-        queryParameters: {
-          'distribuidora': distribuidora,
-          'uf': uf,
-          'limite': '100',
-          'pagina': '$pagina',
-        },
-      );
+      final queryParameters = <String, String>{
+        'uf': uf,
+        'limite': '100',
+        'pagina': '$pagina',
+      };
+      if (distribuidora != null && distribuidora.trim().isNotEmpty) {
+        queryParameters['distribuidora'] = distribuidora;
+      }
+      final uri = Uri.parse('$_baseUrl/municipios')
+          .replace(queryParameters: queryParameters);
       final response = await _client
           .get(uri)
           .timeout(const Duration(seconds: 45));

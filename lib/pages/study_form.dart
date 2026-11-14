@@ -571,7 +571,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: const Text(
-                'PASSO 4 DE 4',
+                'PASSO 5 DE 5',
                 style: TextStyle(
                   color: AppColors.textDark,
                   fontSize: 10,

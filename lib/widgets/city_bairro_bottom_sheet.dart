@@ -321,14 +321,6 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
                       ),
                     ),
                   ),
-                  Text(
-                    '${bairros.length} bairros',
-                    style: const TextStyle(
-                      color: AppColors.primaryLime,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
                 ],
               ),
             ),

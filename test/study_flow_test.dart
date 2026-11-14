@@ -3,9 +3,71 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend_tecsys/widgets/city_bairro_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/study_area_step.dart';
+import 'package:frontend_tecsys/widgets/study_database_bottom_sheet.dart';
+import 'package:frontend_tecsys/widgets/study_import_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/study_location_step.dart';
+import 'package:frontend_tecsys/services/ativos_service.dart';
 
 void main() {
+  testWidgets('base padrão é selecionada e a escolha segue ao próximo passo', (
+    tester,
+  ) async {
+    StudyDatabaseSource? selectedSource;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                selectedSource = await StudyDatabaseBottomSheet.show(
+                  context: context,
+                  distributorCount: 101,
+                  databaseYear: 2026,
+                );
+              },
+              child: const Text('Abrir'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Abrir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dados BDGD 2026'), findsOneWidget);
+    expect(find.text('101 distribuidoras disponíveis'), findsOneWidget);
+    await tester.tap(find.text('Importar minha própria base'));
+    await tester.tap(find.text('Prosseguir'));
+    await tester.pumpAndSettle();
+
+    expect(selectedSource, StudyDatabaseSource.importFile);
+  });
+
+  testWidgets('importação exige versão e arquivo', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StudyImportBottomSheet(
+            onImport: (version, fileName, file) async =>
+                const DistribuidoraResumo(
+                  id: 1,
+                  nome: 'COPEL',
+                  uf: 'PR',
+                  anoBdgd: 2026,
+                ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Importar arquivo'));
+    await tester.pump();
+
+    expect(find.text('Informe a versão da BDGD.'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('localização não pode ser aberta antes da distribuidora', (
     tester,
   ) async {
@@ -176,7 +238,7 @@ void main() {
 
     expect(find.text('Cancelar'), findsOneWidget);
     expect(find.text('Selecionar área'), findsOneWidget);
-    expect(find.text('PASSO 3 DE 4'), findsOneWidget);
+    expect(find.text('PASSO 4 DE 5'), findsOneWidget);
     expect(find.byIcon(Icons.edit_outlined), findsNothing);
     expect(find.text('Prosseguir'), findsNothing);
 
