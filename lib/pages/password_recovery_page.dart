@@ -6,6 +6,7 @@ import '../utils/auth_validation.dart';
 import '../widgets/auth/auth_form_components.dart';
 import '../widgets/auth/auth_shell.dart';
 import 'auth_page.dart';
+import '../widgets/auth/auth_loading_screen.dart';
 
 class PasswordRecoveryPage extends StatefulWidget {
   const PasswordRecoveryPage({
@@ -29,6 +30,16 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
   bool _busy = false, _success = false, _requestAnother = false;
   String? _error;
   bool get _reset => widget.token != null && !_requestAnother;
+  bool get _invalidToken =>
+      _reset && !RegExp(r'^[a-f0-9]{64}$').hasMatch(widget.token!);
+
+  @override
+  void initState() {
+    super.initState();
+    if (_invalidToken) {
+      _error = 'Este link é inválido. Solicite outro link de recuperação.';
+    }
+  }
 
   @override
   void dispose() {
@@ -51,7 +62,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
   }
 
   Future<void> _submit() async {
-    if (_busy || !_form.currentState!.validate()) return;
+    if (_busy || _invalidToken || !_form.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
@@ -59,21 +70,12 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
     });
     try {
       if (_reset) {
-        await widget.controller.service.resetPassword(
+        await widget.controller.resetPassword(
           token: widget.token!,
           password: _password.text,
         );
-        // The backend revoked every session, including one open in this browser.
-        final token = widget.controller.accessToken;
-        if (token != null) {
-          try {
-            await widget.controller.invalidate(token);
-          } catch (_) {
-            // Memory is cleared before vault cleanup; the backend already revoked the token.
-          }
-        }
       } else {
-        await widget.controller.service.requestPasswordReset(_email.text);
+        await widget.controller.requestPasswordReset(_email.text);
       }
       if (mounted) {
         setState(() {
@@ -97,7 +99,12 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
   }
 
   @override
-  Widget build(BuildContext context) => AuthShell(
+  Widget build(BuildContext context) => AuthLoadingHost(
+    controller: widget.controller,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) => AuthShell(
     child: PopScope(
       canPop: !_busy,
       child: Form(
@@ -127,7 +134,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
                     : 'Se houver uma conta com esse e-mail, enviaremos as instruções para redefinir a senha. Confira também a pasta de spam.',
               ),
               AuthSubmitButton(
-                  label: _reset ? 'Voltar para entrar' : 'Voltar',
+                label: _reset ? 'Voltar para entrar' : 'Voltar',
                 busy: false,
                 onPressed: _back,
               ),
@@ -173,7 +180,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
               AuthSubmitButton(
                 label: _reset ? 'Salvar nova senha' : 'Enviar link',
                 busy: _busy,
-                onPressed: _submit,
+                onPressed: _invalidToken ? null : _submit,
               ),
               if (_reset)
                 Center(

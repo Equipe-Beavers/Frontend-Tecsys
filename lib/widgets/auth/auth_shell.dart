@@ -42,9 +42,7 @@ class AuthShell extends StatelessWidget {
     backgroundColor: AppColors.surfaceBackground,
     body: Stack(
       children: [
-        const Positioned.fill(
-          child: IgnorePointer(child: CustomPaint(painter: _ContoursPainter())),
-        ),
+        const Positioned.fill(child: AuthBackground()),
         SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -123,12 +121,24 @@ class AuthShell extends StatelessWidget {
   );
 }
 
+class AuthBackground extends StatelessWidget {
+  const AuthBackground({super.key, this.contourOpacity = .075});
+  final double contourOpacity;
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: IgnorePointer(
+      child: CustomPaint(painter: _ContoursPainter(contourOpacity)),
+    ),
+  );
+}
+
 class _ContoursPainter extends CustomPainter {
-  const _ContoursPainter();
+  const _ContoursPainter(this.opacity);
+  final double opacity;
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.primaryLime.withValues(alpha: .075)
+      ..color = AppColors.primaryLime.withValues(alpha: opacity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     for (var line = -7; line < 21; line++) {
@@ -150,5 +160,6 @@ class _ContoursPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ContoursPainter oldDelegate) => false;
+  bool shouldRepaint(_ContoursPainter oldDelegate) =>
+      opacity != oldDelegate.opacity;
 }

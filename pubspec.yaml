@@ -30,5 +30,6 @@ flutter:
 
   assets:
     - assets/images/logo_geomash.png
+    - assets/images/auth_loading_background.png
     - assets/images/PoleIcon.png
     - .env
