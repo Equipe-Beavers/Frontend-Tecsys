@@ -152,29 +152,35 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
                   horizontal: 14,
                   vertical: 8,
                 ),
-                child: SegmentedButton<int>(
-                  showSelectedIcon: false,
-                  segments: [
-                    for (final scenario in group.scenarios)
-                      ButtonSegment(
-                        value: scenario.idCenario,
-                        label: Text(
-                          scenario.optimized ? 'Otimizada' : scenario.name,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.navBarBackground,
+                    border: Border.all(color: AppColors.border),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final scenario in group.scenarios)
+                        _ScenarioTab(
                           key: ValueKey('scenario-tab-${scenario.idCenario}'),
+                          label: scenario.optimized
+                              ? 'Otimizada'
+                              : scenario.name,
+                          selected: scenario.idCenario == result.idCenario,
+                          onTap: () {
+                            final active = group.scenarios.firstWhere(
+                              (item) => item.idCenario == scenario.idCenario,
+                            );
+                            setState(
+                              () => _activeScenarioId = active.idCenario,
+                            );
+                            unawaited(_loadScenarioCoverage(active));
+                          },
                         ),
-                        icon: scenario.idCenario == _selectedScenarioId
-                            ? const Icon(Icons.check_circle_outline, size: 16)
-                            : null,
-                      ),
-                  ],
-                  selected: {result.idCenario},
-                  onSelectionChanged: (selection) {
-                    final active = group.scenarios.firstWhere(
-                      (scenario) => scenario.idCenario == selection.first,
-                    );
-                    setState(() => _activeScenarioId = active.idCenario);
-                    unawaited(_loadScenarioCoverage(active));
-                  },
+                    ],
+                  ),
                 ),
               ),
             if (group.warning != null)
@@ -349,6 +355,45 @@ class _RecommendationContent extends StatelessWidget {
         ),
       );
     },
+  );
+}
+
+class _ScenarioTab extends StatelessWidget {
+  const _ScenarioTab({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primaryLime : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? AppColors.textDark : AppColors.textMuted,
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+      ),
+    ),
   );
 }
 
