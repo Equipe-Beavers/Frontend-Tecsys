@@ -5,8 +5,12 @@ import '../widgets/auth/auth_scope.dart';
 import '../models/mancha_cenario.dart';
 import '../models/recomendacao_resultado.dart';
 import '../services/mancha_cenario_service.dart';
+import '../services/exportacao_service.dart';
+import '../services/file_download_service.dart';
 import '../services/recomendacao_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/recommendation/export_results_button.dart';
+import '../widgets/recommendation/map_snapshot_controller.dart';
 import '../widgets/recommendation/recommendation_result_panel.dart';
 import '../widgets/recommendation_map.dart';
 import 'gateway_detail_page.dart';
@@ -23,6 +27,8 @@ class RecomendacaoResultadoPage extends StatefulWidget {
     this.showBaseMap = true,
     this.repository,
     this.coverageRepository,
+    this.exportRepository,
+    this.fileDownloader,
   });
 
   final int idEstudo;
@@ -35,6 +41,9 @@ class RecomendacaoResultadoPage extends StatefulWidget {
   final RecommendationRepository? repository;
   final ScenarioCoverageRepository? coverageRepository;
 
+  final StudyExportRepository? exportRepository;
+  final FileDownloader? fileDownloader;
+
   @override
   State<RecomendacaoResultadoPage> createState() =>
       _RecomendacaoResultadoPageState();
@@ -46,6 +55,7 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
   ManchaCenarioService? _ownedCoverageService;
   late final Future<ResultadoRecomendacao> _futureResultado;
   ManchaCenario? _scenarioCoverage;
+  final _mapSnapshot = MapSnapshotController();
 
   @override
   void initState() {
@@ -118,6 +128,14 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
           showBaseMap: widget.showBaseMap,
           scenarioCoverage: _scenarioCoverage?.gateways ?? const [],
           onGatewayTap: (gateway) => _openGateway(snapshot.data!, gateway),
+          snapshotController: _mapSnapshot,
+          exportButton: ExportResultsButton(
+            idEstudo: widget.idEstudo,
+            idCenario: snapshot.data!.idCenario,
+            snapshotController: _mapSnapshot,
+            repository: widget.exportRepository,
+            downloader: widget.fileDownloader,
+          ),
         );
       },
     ),
@@ -152,6 +170,8 @@ class _RecommendationContent extends StatelessWidget {
     required this.showBaseMap,
     required this.scenarioCoverage,
     required this.onGatewayTap,
+    required this.snapshotController,
+    required this.exportButton,
     this.subtitle,
   });
 
@@ -159,6 +179,8 @@ class _RecommendationContent extends StatelessWidget {
   final bool showBaseMap;
   final List<ManchaGatewayCenario> scenarioCoverage;
   final ValueChanged<GatewayProposto> onGatewayTap;
+  final MapSnapshotController snapshotController;
+  final Widget exportButton;
   final String? subtitle;
 
   @override
@@ -171,6 +193,7 @@ class _RecommendationContent extends StatelessWidget {
         scenarioCoverage: scenarioCoverage,
         onGatewayTap: onGatewayTap,
         showBaseMap: showBaseMap,
+        snapshotController: snapshotController,
       );
       final summary = RecommendationResultPanel(
         scrollable: desktop,
@@ -188,27 +211,55 @@ class _RecommendationContent extends StatelessWidget {
                 child: map,
               ),
             ),
-            SizedBox(width: 390, child: summary),
+            SizedBox(
+              width: 390,
+              child: Column(
+                children: [
+                  Expanded(child: summary),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: exportButton,
+                  ),
+                ],
+              ),
+            ),
           ],
         );
       }
       return SafeArea(
         top: false,
-        child: SingleChildScrollView(
-          key: const ValueKey('mobile-recommendation-scroll'),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                child: SizedBox(
-                  height: (constraints.maxHeight * .43).clamp(280.0, 360.0),
-                  child: map,
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                key: const ValueKey('mobile-recommendation-scroll'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                      child: SizedBox(
+                        height: (constraints.maxHeight * .43).clamp(
+                          280.0,
+                          360.0,
+                        ),
+                        child: map,
+                      ),
+                    ),
+                    summary,
+                  ],
                 ),
               ),
-              summary,
-            ],
-          ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              decoration: const BoxDecoration(
+                color: AppColors.surfaceBackground,
+                border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+              ),
+              child: exportButton,
+            ),
+          ],
         ),
       );
     },
