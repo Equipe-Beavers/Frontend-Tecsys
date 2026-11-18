@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../widgets/auth/auth_scope.dart';
@@ -44,8 +46,11 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
   late final RecommendationRepository _repository;
   RecomendacaoService? _ownedService;
   ManchaCenarioService? _ownedCoverageService;
-  late final Future<ResultadoRecomendacao> _futureResultado;
-  ManchaCenario? _scenarioCoverage;
+  late Future<RecommendationScenarios> _futureScenarios;
+  final Map<int, ManchaCenario> _coverageByScenario = {};
+  int? _activeScenarioId;
+  int? _selectedScenarioId;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -54,14 +59,6 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
         ? RecomendacaoService(client: AuthScope.clientOf(context))
         : null;
     _repository = widget.repository ?? _ownedService!;
-    _futureResultado = widget.resultadoInicial != null
-        ? Future.value(widget.resultadoInicial)
-        : _repository.gerarRecomendacao(
-            idEstudo: widget.idEstudo,
-            idPerfilRf: widget.idPerfilRf,
-            idCriterioInstalacao: widget.idCriterioInstalacao,
-          );
-
     final shouldLoadCoverage =
         widget.coverageRepository != null ||
         (widget.resultadoInicial == null && widget.repository == null);
@@ -69,16 +66,41 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
       _ownedCoverageService = widget.coverageRepository == null
           ? ManchaCenarioService(client: AuthScope.clientOf(context))
           : null;
-      _futureResultado.then(_loadScenarioCoverage);
     }
+    _futureScenarios = _loadScenarios();
+  }
+
+  Future<RecommendationScenarios> _loadScenarios() async {
+    final initial = widget.resultadoInicial;
+    final group = initial != null
+        ? RecommendationScenarios(scenarios: [initial])
+        : await _repository.loadScenarios(
+            studyId: widget.idEstudo,
+            profileId: widget.idPerfilRf,
+            criterionId: widget.idCriterioInstalacao,
+          );
+    if (group.scenarios.isEmpty) {
+      throw StateError('Nenhum cenário disponível para este estudo.');
+    }
+    if (!mounted) return group;
+    _selectedScenarioId = group.selectedScenarioId;
+    final active = group.scenarios.firstWhere(
+      (scenario) => scenario.idCenario == group.selectedScenarioId,
+      orElse: () => group.scenarios.first,
+    );
+    _activeScenarioId = active.idCenario;
+    unawaited(_loadScenarioCoverage(active));
+    return group;
   }
 
   Future<void> _loadScenarioCoverage(ResultadoRecomendacao result) async {
-    final repository = widget.coverageRepository ?? _ownedCoverageService!;
+    final repository = widget.coverageRepository ?? _ownedCoverageService;
+    if (repository == null || _coverageByScenario.containsKey(result.idCenario))
+      return;
     try {
       final coverage = await repository.getManchaCenario(result.idCenario);
       if (!mounted) return;
-      setState(() => _scenarioCoverage = coverage);
+      setState(() => _coverageByScenario[result.idCenario] = coverage);
     } on Object {
       // A recomendacao continua utilizavel quando a mancha ainda nao existe.
     }
@@ -103,25 +125,145 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
         style: const TextStyle(color: AppColors.textWhite, fontSize: 16),
       ),
     ),
-    body: FutureBuilder<ResultadoRecomendacao>(
-      future: _futureResultado,
+    body: FutureBuilder<RecommendationScenarios>(
+      future: _futureScenarios,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _RecommendationLoading();
         }
         if (snapshot.hasError) {
-          return _RecommendationError(message: snapshot.error.toString());
+          return _RecommendationError(
+            message: snapshot.error.toString(),
+            onRetry: () => setState(() => _futureScenarios = _loadScenarios()),
+          );
         }
-        return _RecommendationContent(
-          result: snapshot.data!,
-          subtitle: widget.subtitulo,
-          showBaseMap: widget.showBaseMap,
-          scenarioCoverage: _scenarioCoverage?.gateways ?? const [],
-          onGatewayTap: (gateway) => _openGateway(snapshot.data!, gateway),
+        final group = snapshot.data!;
+        final result = group.scenarios.firstWhere(
+          (scenario) => scenario.idCenario == _activeScenarioId,
+          orElse: () => group.scenarios.first,
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (group.scenarios.length > 1)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.navBarBackground,
+                    border: Border.all(color: AppColors.border),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final scenario in group.scenarios)
+                        _ScenarioTab(
+                          key: ValueKey('scenario-tab-${scenario.idCenario}'),
+                          label: scenario.optimized
+                              ? 'Otimizada'
+                              : scenario.name,
+                          selected: scenario.idCenario == result.idCenario,
+                          onTap: () {
+                            final active = group.scenarios.firstWhere(
+                              (item) => item.idCenario == scenario.idCenario,
+                            );
+                            setState(
+                              () => _activeScenarioId = active.idCenario,
+                            );
+                            unawaited(_loadScenarioCoverage(active));
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            if (group.warning != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                child: Text(
+                  group.warning!,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            Expanded(
+              child: _RecommendationContent(
+                key: ValueKey('scenario-content-${result.idCenario}'),
+                result: result,
+                subtitle: widget.subtitulo,
+                showBaseMap: widget.showBaseMap,
+                scenarioCoverage:
+                    _coverageByScenario[result.idCenario]?.gateways ?? const [],
+                onGatewayTap: (gateway) => _openGateway(result, gateway),
+              ),
+            ),
+            if (widget.resultadoInicial == null)
+              SafeArea(
+                top: false,
+                minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    key: const ValueKey('keep-scenario'),
+                    onPressed:
+                        _saving || result.idCenario == _selectedScenarioId
+                        ? null
+                        : () => _selectScenario(result),
+                    icon: Icon(
+                      result.idCenario == _selectedScenarioId
+                          ? Icons.check_circle
+                          : Icons.check,
+                    ),
+                    label: Text(
+                      _saving
+                          ? 'Salvando...'
+                          : result.idCenario == _selectedScenarioId
+                          ? 'Cenário mantido no estudo'
+                          : 'Manter este cenário',
+                    ),
+                  ),
+                ),
+              ),
+          ],
         );
       },
     ),
   );
+
+  Future<void> _selectScenario(ResultadoRecomendacao result) async {
+    setState(() => _saving = true);
+    try {
+      await _repository.selectScenario(
+        studyId: widget.idEstudo,
+        scenarioId: result.idCenario,
+      );
+      if (!mounted) return;
+      setState(() => _selectedScenarioId = result.idCenario);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${result.name} mantida no estudo.')),
+      );
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível manter o cenário. Tente novamente.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   void _openGateway(ResultadoRecomendacao result, GatewayProposto gateway) {
     Navigator.push<void>(
@@ -131,7 +273,7 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
           gateway: gateway,
           assets: result.ativosMapa,
           scenarioCoverage:
-              _scenarioCoverage?.gateways
+              _coverageByScenario[result.idCenario]?.gateways
                   .where(
                     (coverage) =>
                         coverage.idEstudoPonto == gateway.idEstudoPonto,
@@ -148,6 +290,7 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
 
 class _RecommendationContent extends StatelessWidget {
   const _RecommendationContent({
+    super.key,
     required this.result,
     required this.showBaseMap,
     required this.scenarioCoverage,
@@ -215,6 +358,45 @@ class _RecommendationContent extends StatelessWidget {
   );
 }
 
+class _ScenarioTab extends StatelessWidget {
+  const _ScenarioTab({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primaryLime : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? AppColors.textDark : AppColors.textMuted,
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class _RecommendationLoading extends StatelessWidget {
   const _RecommendationLoading();
 
@@ -235,9 +417,10 @@ class _RecommendationLoading extends StatelessWidget {
 }
 
 class _RecommendationError extends StatelessWidget {
-  const _RecommendationError({required this.message});
+  const _RecommendationError({required this.message, required this.onRetry});
 
   final String message;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -252,6 +435,12 @@ class _RecommendationError extends StatelessWidget {
             'Não foi possível gerar a recomendação.\n\n$message',
             style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
             textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Tentar novamente'),
           ),
         ],
       ),
