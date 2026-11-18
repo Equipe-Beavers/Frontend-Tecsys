@@ -204,7 +204,9 @@ void main() {
       }),
     );
     addTearDown(service.dispose);
-    await tester.pumpWidget(host(CriteriaLibraryPage(service: service)));
+    await tester.pumpWidget(
+      host(CriteriaLibraryPage(userId: 1, service: service)),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text(fixture['nome'] as String));
     await tester.pumpAndSettle();
@@ -269,7 +271,9 @@ void main() {
       }),
     );
     addTearDown(service.dispose);
-    await tester.pumpWidget(host(CriteriaLibraryPage(service: service)));
+    await tester.pumpWidget(
+      host(CriteriaLibraryPage(userId: 1, service: service)),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Tentar novamente'), findsOneWidget);
     fail = false;
@@ -465,7 +469,7 @@ void main() {
                         onClose: () {},
                         onSave: (_) async {},
                       )
-                    : CriteriaLibraryPage(service: service),
+                    : CriteriaLibraryPage(userId: 1, service: service),
               ),
             ),
           ),
