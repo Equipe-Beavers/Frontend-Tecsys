@@ -1108,13 +1108,7 @@ class _MapPageState extends State<MapPage> {
           nomeArquivo: nomeArquivo,
           arquivo: arquivo,
         );
-        final idValue = resultado['id_distribuidora'];
-        final id = idValue is num ? idValue.toInt() : int.tryParse('$idValue');
-        if (id == null || id <= 0) {
-          throw const FormatException(
-            'A resposta da importação não contém um ID de distribuidora válido.',
-          );
-        }
+        final metadata = DistribuidoraResumo.fromImportJson(resultado);
         final postes = resultado['postes'];
         if (postes is! List) {
           throw const FormatException(
@@ -1131,7 +1125,6 @@ class _MapPageState extends State<MapPage> {
               return Map<String, dynamic>.from(poste);
             })
             .toList(growable: false);
-        final metadata = await _ativosService.getDistribuidoraPorId(id);
         final uf = metadata.uf;
         if (uf == null || uf.isEmpty) {
           throw const FormatException(

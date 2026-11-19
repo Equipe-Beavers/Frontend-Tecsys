@@ -25,6 +25,21 @@ class DistribuidoraResumo {
       anoBdgd: (json['anoBdgd'] as num?)?.toInt() ?? 0,
     );
   }
+
+  factory DistribuidoraResumo.fromImportJson(Map<String, dynamic> json) {
+    final idValue = json['id_distribuidora'];
+    final id = idValue is num ? idValue.toInt() : int.tryParse('$idValue');
+    final nome = json['nome']?.toString().trim() ?? '';
+    final uf = json['uf']?.toString().trim();
+
+    if (id == null || id <= 0 || nome.isEmpty || uf == null || uf.isEmpty) {
+      throw const FormatException(
+        'A resposta da importação não contém id, nome e UF da distribuidora.',
+      );
+    }
+
+    return DistribuidoraResumo(id: id, nome: nome, uf: uf, anoBdgd: 0);
+  }
 }
 
 class TipoDispositivoResumo {
@@ -217,39 +232,6 @@ class AtivosService {
           ),
         )
         .toList();
-  }
-
-  Future<DistribuidoraResumo> getDistribuidoraPorId(int id) async {
-    final response = await _client
-        .get(Uri.parse('$_baseUrl/distribuidoras/$id'))
-        .timeout(const Duration(seconds: 30));
-
-    if (response.statusCode != 200) {
-      throw StateError(
-        'A API da distribuidora respondeu com HTTP ${response.statusCode}.',
-      );
-    }
-
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map) {
-      throw const FormatException('Resposta da distribuidora inválida.');
-    }
-
-    final payload = decoded['data'] ?? decoded['distribuidora'] ?? decoded;
-    if (payload is! Map) {
-      throw const FormatException('Resposta da distribuidora inválida.');
-    }
-    final json = Map<String, dynamic>.from(payload);
-    final distribuidora = DistribuidoraResumo.fromJson(json);
-    if (distribuidora.id == 0 ||
-        distribuidora.nome.isEmpty ||
-        distribuidora.uf == null ||
-        distribuidora.uf!.isEmpty) {
-      throw const FormatException(
-        'A resposta da distribuidora não contém id, nome e UF.',
-      );
-    }
-    return distribuidora;
   }
 
   Future<Map<String, dynamic>> importarArquivoBdgd({

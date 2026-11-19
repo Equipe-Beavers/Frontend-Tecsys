@@ -31,6 +31,28 @@ void main() {
     expect(poste.distribuidora, 'Distribuidora importada');
   });
 
+  test('lê os dados da distribuidora diretamente do JSON importado', () {
+    final distribuidora = DistribuidoraResumo.fromImportJson({
+      'id_distribuidora': 88,
+      'nome': 'Joao Cesa',
+      'uf': 'SC',
+    });
+
+    expect(distribuidora.id, 88);
+    expect(distribuidora.nome, 'Joao Cesa');
+    expect(distribuidora.uf, 'SC');
+  });
+
+  test('rejeita importação sem os dados da distribuidora', () {
+    expect(
+      () => DistribuidoraResumo.fromImportJson({
+        'id_distribuidora': 88,
+        'uf': 'SC',
+      }),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
   group('AtivosService', () {
     test('busca distribuidoras na rota de regiões do backend', () async {
       final service = AtivosService(
@@ -49,25 +71,6 @@ void main() {
       final result = await service.getDistribuidoras();
 
       expect(result.single.nome, 'CEMIG');
-    });
-
-    test('busca dados da distribuidora pelo ID da importação', () async {
-      final service = AtivosService(
-        client: MockClient((request) async {
-          expect(request.url.path, '/distribuidoras/88');
-          return http.Response(
-            jsonEncode({'id': 88, 'nome': 'COPEL', 'uf': 'PR'}),
-            200,
-          );
-        }),
-      );
-      addTearDown(service.dispose);
-
-      final result = await service.getDistribuidoraPorId(88);
-
-      expect(result.id, 88);
-      expect(result.nome, 'COPEL');
-      expect(result.uf, 'PR');
     });
 
     test('envia arquivo e versão em multipart para importar BDGD', () async {
