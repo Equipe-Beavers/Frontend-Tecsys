@@ -172,6 +172,7 @@ class ResultadoRecomendacao {
   final List<CategoriaCobertura> porCategoria;
   final List<GatewayProposto> gateways;
   final List<AtivoResultadoMapa> ativosMapa;
+  final List<String> avisosAmbientais;
 
   const ResultadoRecomendacao({
     required this.idCenario,
@@ -184,10 +185,23 @@ class ResultadoRecomendacao {
     required this.porCategoria,
     required this.gateways,
     this.ativosMapa = const [],
+    this.avisosAmbientais = const [],
   });
 
   factory ResultadoRecomendacao.fromJson(Map<String, dynamic> json) {
+    final ambiental = _asAttrMap(json['analise_ambiental']);
+    final fontes = _asAttrMap(ambiental['fontes']);
+    final pendentes = fontes.entries
+        .where((entry) => entry.value != 'disponivel')
+        .map((entry) => '${entry.key}: ${entry.value}')
+        .toList();
     return ResultadoRecomendacao(
+      avisosAmbientais: [
+        ...pendentes,
+        ...(ambiental['avisos'] is List
+            ? (ambiental['avisos'] as List).map((e) => e.toString())
+            : <String>[]),
+      ],
       idCenario: (json['id_cenario'] as num).toInt(),
       quantidadeGateways: (json['quantidade_gateways'] as num).toInt(),
       percentualCobertura: (json['percentual_cobertura'] as num).toInt(),
