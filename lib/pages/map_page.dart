@@ -1,4 +1,7 @@
 import 'dart:async';
+
+import '../widgets/auth/auth_scope.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -1564,6 +1567,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _prosseguirArea() async {
+    if (!await AuthScope.ensureSignedIn(context) || !mounted) return;
     final revisao = _polygonRevision;
     setState(() => isDrawing = false);
     final consultasRelevo = List<Future<void>>.of(_consultasRelevo);
@@ -1574,6 +1578,7 @@ class _MapPageState extends State<MapPage> {
       context,
       MaterialPageRoute(
         builder: (_) => NovoEstudoPage(
+          userId: AuthScope.maybeOf(context)!.controller.user!.id,
           distribuidora: _distribuidoraSelecionada ?? '',
           municipio: _municipioSelecionado,
           bairro: _bairroSelecionado,

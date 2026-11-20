@@ -73,6 +73,7 @@ void main() {
         await tester.pumpWidget(
           host(
             CriteriaLibraryPage(
+              userId: 1,
               service: criteriaService,
               rfProfileService: rfService,
             ),
@@ -308,7 +309,9 @@ void main() {
         }),
       );
       addTearDown(service.dispose);
-      await tester.pumpWidget(host(CriteriaLibraryPage(service: service)));
+      await tester.pumpWidget(
+        host(CriteriaLibraryPage(userId: 1, service: service)),
+      );
       await tester.pumpAndSettle();
       expect(pages, ['1']);
       await tester.tap(find.byTooltip('Próxima página'));

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import '../config/api_config.dart';
+
 import 'package:frontend_tecsys/models/antena_anatel.dart';
 import 'package:http/http.dart' as http;
 
@@ -13,15 +14,9 @@ class AntenasResult {
 
 class AntenasService {
   AntenasService({http.Client? client, String? baseUrl})
-      : _ownsClient = client == null,
-        _client = client ?? http.Client(),
-        _baseUrl = baseUrl ??
-            const String.fromEnvironment(
-              'API_BASE_URL',
-              defaultValue: kIsWeb
-                  ? 'http://localhost:3000'
-                  : 'http://10.0.2.2:3000',
-            );
+    : _ownsClient = client == null,
+      _client = client ?? http.Client(),
+      _baseUrl = ApiConfig.resolve(baseUrl);
 
   final bool _ownsClient;
   final http.Client _client;
@@ -44,9 +39,13 @@ class AntenasService {
       },
     );
 
-    final response = await _client.get(uri).timeout(const Duration(seconds: 25));
+    final response = await _client
+        .get(uri)
+        .timeout(const Duration(seconds: 25));
     if (response.statusCode != 200) {
-      throw StateError('A API de antenas respondeu com HTTP ${response.statusCode}.');
+      throw StateError(
+        'A API de antenas respondeu com HTTP ${response.statusCode}.',
+      );
     }
 
     final decoded = jsonDecode(response.body);
