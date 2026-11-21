@@ -25,7 +25,7 @@ class CoverageSummaryCard extends StatelessWidget {
             children: [
               const Expanded(
                 child: Text(
-                  'Ativos elétricos cobertos',
+                  'Ativos elétricos',
                   style: TextStyle(
                     color: AppColors.textWhite,
                     fontSize: 13,
@@ -49,10 +49,18 @@ class CoverageSummaryCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: progress.clamp(0.0, 1.0),
               minHeight: 8,
-              backgroundColor: AppColors.border,
+              backgroundColor: AppColors.layerChaveFusivel,
               valueColor: const AlwaysStoppedAnimation(AppColors.primaryLime),
             ),
           ),
+          if (result.porCategoria.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            for (int index = 0; index < result.porCategoria.length; index++)
+              _CategoryLine(
+                category: result.porCategoria[index],
+                showDivider: index != result.porCategoria.length - 1,
+              ),
+          ],
         ],
       ),
     );
@@ -95,22 +103,14 @@ class _CategoryLine extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
-              child: Row(
-                children: [
-                  Icon(category.tipo.icone, color: category.tipo.cor, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      category.tipo.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textWhite,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ],
+              child: Text(
+                category.tipo.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textWhite,
+                  fontSize: 11,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -125,13 +125,12 @@ class _CategoryLine extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    if (category.naoCobertos > 0)
-                      TextSpan(
-                        text: ' / ${category.naoCobertos} sem cobertura',
-                        style: const TextStyle(
-                          color: AppColors.layerChaveFusivel,
-                        ),
+                    TextSpan(
+                      text: ' / ${category.naoCobertos} sem cobertura',
+                      style: const TextStyle(
+                        color: AppColors.layerChaveFusivel,
                       ),
+                    ),
                   ],
                 ),
                 maxLines: 1,
