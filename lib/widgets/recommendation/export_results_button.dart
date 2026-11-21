@@ -9,6 +9,10 @@ import 'export_destination_sheet.dart';
 import 'export_feedback.dart';
 import 'map_snapshot_controller.dart';
 
+typedef OtherScenarioMapsCapture = Future<Map<int, Uint8List>> Function(
+  Uint8List? imagemVisivel,
+);
+
 /// Botão "Baixar em PDF": pede ao backend o relatório completo do estudo e
 /// entrega o arquivo ao dispositivo (download do navegador na web; no celular
 /// o usuário escolhe entre a pasta Downloads e outro app, como o Drive).
@@ -18,6 +22,7 @@ class ExportResultsButton extends StatefulWidget {
     required this.idEstudo,
     this.idCenario,
     this.snapshotController,
+    this.capturarOutrosMapas,
     this.repository,
     this.downloader,
   });
@@ -27,6 +32,7 @@ class ExportResultsButton extends StatefulWidget {
   /// Cenário exibido na tela, destacado no relatório.
   final int? idCenario;
   final MapSnapshotController? snapshotController;
+  final OtherScenarioMapsCapture? capturarOutrosMapas;
   final StudyExportRepository? repository;
   final FileDownloader? downloader;
 
@@ -37,6 +43,7 @@ class ExportResultsButton extends StatefulWidget {
 class _ExportResultsButtonState extends State<ExportResultsButton> {
   ExportacaoService? _ownedService;
   bool _exportando = false;
+  String _etapa = 'Gerando relatório...';
 
   StudyExportRepository get _repository =>
       widget.repository ??
@@ -64,15 +71,33 @@ class _ExportResultsButtonState extends State<ExportResultsButton> {
       destino = escolhido;
     }
 
-    setState(() => _exportando = true);
+    final capturarOutros = widget.capturarOutrosMapas;
+    setState(() {
+      _exportando = true;
+      _etapa = capturarOutros == null
+          ? 'Gerando relatório...'
+          : 'Capturando mapas dos cenários...';
+    });
     try {
       final imagem = await widget.snapshotController?.capture();
       if (!mounted) return;
+
+      var outrosMapas = const <int, Uint8List>{};
+      if (capturarOutros != null) {
+        try {
+          outrosMapas = await capturarOutros(imagem);
+        } on Object catch (error) {
+          debugPrint('Falha ao capturar os mapas dos cenários: $error');
+        }
+        if (!mounted) return;
+        setState(() => _etapa = 'Gerando relatório...');
+      }
 
       final arquivo = await _repository.exportarPdf(
         idEstudo: widget.idEstudo,
         idCenario: widget.idCenario,
         imagemMapa: imagem,
+        imagensMapa: outrosMapas,
       );
       if (!mounted) return;
 
@@ -167,22 +192,23 @@ class _ExportResultsButtonState extends State<ExportResultsButton> {
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      child: _ConteudoBotao(exportando: _exportando),
+      child: _ConteudoBotao(exportando: _exportando, etapa: _etapa),
     ),
   );
 }
 
 class _ConteudoBotao extends StatelessWidget {
-  const _ConteudoBotao({required this.exportando});
+  const _ConteudoBotao({required this.exportando, required this.etapa});
 
   final bool exportando;
+  final String etapa;
 
   @override
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: exportando
-        ? const [
-            SizedBox(
+        ? [
+            const SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
@@ -190,12 +216,12 @@ class _ConteudoBotao extends StatelessWidget {
                 color: AppColors.textDark,
               ),
             ),
-            SizedBox(width: 10),
+            const SizedBox(width: 10),
             Flexible(
               child: Text(
-                'Gerando relatório...',
+                etapa,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.w600),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
           ]

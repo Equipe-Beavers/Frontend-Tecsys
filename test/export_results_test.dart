@@ -457,6 +457,7 @@ class _FakeExportRepository implements StudyExportRepository {
   int chamadas = 0;
   int? idEstudo;
   int? idCenario;
+  Map<int, Uint8List>? imagensMapa;
 
   final _resposta = Completer<void>();
   void concluir() => _resposta.complete();
@@ -466,8 +467,10 @@ class _FakeExportRepository implements StudyExportRepository {
     required int idEstudo,
     int? idCenario,
     Uint8List? imagemMapa,
+    Map<int, Uint8List> imagensMapa = const {},
   }) async {
     chamadas++;
+    this.imagensMapa = imagensMapa;
     this.idEstudo = idEstudo;
     this.idCenario = idCenario;
     if (erro != null) throw erro!;

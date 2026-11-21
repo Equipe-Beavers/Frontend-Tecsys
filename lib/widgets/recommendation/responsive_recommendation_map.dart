@@ -66,6 +66,9 @@ class _ResponsiveRecommendationMapState
   double _minimumZoom = recommendationMinimumAllowedZoom;
   late final CameraViewportState _initialViewport;
   bool _constrainingCenter = false;
+  bool _dataApplied = false;
+  bool _mapLoaded = false;
+  bool _awaitingReadyIdle = false;
 
   @override
   void initState() {
@@ -167,6 +170,8 @@ class _ResponsiveRecommendationMapState
       _styleReady = true;
       await _updateMapData();
       await _fitCamera(force: true);
+      _dataApplied = true;
+      _scheduleReadySignal();
     } catch (error, stackTrace) {
       debugPrint('Falha ao configurar o mapa de recomendação: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -178,7 +183,30 @@ class _ResponsiveRecommendationMapState
     // the final size imposed by the result/detail layout. Refit on the next
     // frame so backend coverage is not cropped by that provisional size.
     await WidgetsBinding.instance.endOfFrame;
-    if (mounted) await _fitCamera(force: true);
+    if (!mounted) return;
+    await _fitCamera(force: true);
+    _mapLoaded = true;
+    _scheduleReadySignal();
+  }
+
+  void _scheduleReadySignal() {
+    final controller = widget.snapshotController;
+    if (controller == null || controller.isReady) return;
+    if (!_dataApplied || !_mapLoaded) return;
+    _awaitingReadyIdle = true;
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      if (mounted && _awaitingReadyIdle) _signalReady();
+    });
+  }
+
+  void _onMapIdle() {
+    unawaited(_constrainCenter());
+    if (_awaitingReadyIdle) _signalReady();
+  }
+
+  void _signalReady() {
+    _awaitingReadyIdle = false;
+    widget.snapshotController?.markReady();
   }
 
   Future<void> _addSourcesAndLayers(MapboxMap map) async {
@@ -561,7 +589,7 @@ class _ResponsiveRecommendationMapState
                       EagerGestureRecognizer.new,
                     ),
                   },
-                  onMapIdleListener: (_) => unawaited(_constrainCenter()),
+                  onMapIdleListener: (_) => _onMapIdle(),
                   onMapCreated: _onMapCreated,
                   onStyleLoadedListener: _onStyleLoaded,
                   onMapLoadedListener: _onMapLoaded,

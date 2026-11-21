@@ -30,6 +30,7 @@ abstract interface class StudyExportRepository {
     required int idEstudo,
     int? idCenario,
     Uint8List? imagemMapa,
+    Map<int, Uint8List> imagensMapa = const {},
   });
 }
 
@@ -48,10 +49,17 @@ class ExportacaoService implements StudyExportRepository {
     required int idEstudo,
     int? idCenario,
     Uint8List? imagemMapa,
+    Map<int, Uint8List> imagensMapa = const {},
   }) async {
     if (idEstudo < 1) {
       throw const ExportacaoException('Estudo não encontrado.');
     }
+
+    final outrosMapas = {
+      for (final MapEntry(key: id, value: imagem) in imagensMapa.entries)
+        if (id > 0 && id != idCenario && imagem.isNotEmpty)
+          '$id': base64Encode(imagem),
+    };
 
     // `incluir_alternativas` não é enviado: o padrão do backend já traz todos
     // os cenários do estudo e o comparativo.
@@ -68,6 +76,7 @@ class ExportacaoService implements StudyExportRepository {
               'id_cenario': ?idCenario,
               if (imagemMapa != null && imagemMapa.isNotEmpty)
                 'imagem_mapa': base64Encode(imagemMapa),
+              if (outrosMapas.isNotEmpty) 'imagens_mapa': outrosMapas,
             }),
           )
           .timeout(const Duration(seconds: 120));

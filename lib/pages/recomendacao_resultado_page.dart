@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/auth/auth_scope.dart';
@@ -14,6 +15,7 @@ import '../theme/app_colors.dart';
 import '../widgets/recommendation/export_results_button.dart';
 import '../widgets/recommendation/map_snapshot_controller.dart';
 import '../widgets/recommendation/recommendation_result_panel.dart';
+import '../widgets/recommendation/scenario_map_capture.dart';
 import '../widgets/recommendation_map.dart';
 import 'gateway_detail_page.dart';
 
@@ -58,6 +60,7 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
   late Future<RecommendationScenarios> _futureScenarios;
   final Map<int, ManchaCenario> _coverageByScenario = {};
   final _mapSnapshot = MapSnapshotController();
+  final _scenarioCapture = ScenarioMapCaptureController();
   int? _activeScenarioId;
   int? _selectedScenarioId;
   bool _saving = false;
@@ -122,6 +125,23 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
     _ownedCoverageService?.dispose();
     super.dispose();
   }
+
+  Future<Map<int, Uint8List>> _captureOtherScenarioMaps(
+    RecommendationScenarios group,
+    ResultadoRecomendacao visible,
+    Uint8List? imagemVisivel,
+  ) => OtherScenarioMapsCollector(capturar: _scenarioCapture.capturar).coletar(
+    cenarios: [
+      for (final scenario in group.scenarios)
+        ScenarioMapData.fromResult(
+          scenario,
+          coverage:
+              _coverageByScenario[scenario.idCenario]?.gateways ?? const [],
+        ),
+    ],
+    idCenarioVisivel: visible.idCenario,
+    imagemVisivel: imagemVisivel,
+  );
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -217,10 +237,18 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
                     _coverageByScenario[result.idCenario]?.gateways ?? const [],
                 onGatewayTap: (gateway) => _openGateway(result, gateway),
                 snapshotController: _mapSnapshot,
+                scenarioCaptureHost: ScenarioMapCaptureHost(
+                  controller: _scenarioCapture,
+                  showBaseMap: widget.showBaseMap,
+                ),
                 exportButton: ExportResultsButton(
                   idEstudo: widget.idEstudo,
                   idCenario: result.idCenario,
                   snapshotController: _mapSnapshot,
+                  capturarOutrosMapas: group.scenarios.length > 1
+                      ? (imagem) =>
+                            _captureOtherScenarioMaps(group, result, imagem)
+                      : null,
                   repository: widget.exportRepository,
                   downloader: widget.fileDownloader,
                 ),
@@ -314,6 +342,7 @@ class _RecommendationContent extends StatelessWidget {
     required this.scenarioCoverage,
     required this.onGatewayTap,
     required this.snapshotController,
+    required this.scenarioCaptureHost,
     required this.exportButton,
     this.subtitle,
   });
@@ -323,6 +352,7 @@ class _RecommendationContent extends StatelessWidget {
   final List<ManchaGatewayCenario> scenarioCoverage;
   final ValueChanged<GatewayProposto> onGatewayTap;
   final MapSnapshotController snapshotController;
+  final Widget scenarioCaptureHost;
   final Widget exportButton;
   final String? subtitle;
 
@@ -330,13 +360,20 @@ class _RecommendationContent extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final desktop = constraints.maxWidth >= 900;
-      final map = RecommendationMap(
-        gateways: result.gateways,
-        assets: result.ativosMapa,
-        scenarioCoverage: scenarioCoverage,
-        onGatewayTap: onGatewayTap,
-        showBaseMap: showBaseMap,
-        snapshotController: snapshotController,
+      final map = Stack(
+        children: [
+          Positioned.fill(child: scenarioCaptureHost),
+          Positioned.fill(
+            child: RecommendationMap(
+              gateways: result.gateways,
+              assets: result.ativosMapa,
+              scenarioCoverage: scenarioCoverage,
+              onGatewayTap: onGatewayTap,
+              showBaseMap: showBaseMap,
+              snapshotController: snapshotController,
+            ),
+          ),
+        ],
       );
       final summary = RecommendationResultPanel(
         scrollable: desktop,
