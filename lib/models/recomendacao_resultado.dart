@@ -165,7 +165,6 @@ class ResultadoRecomendacao {
   final int idCenario;
   final int quantidadeGateways;
   final int percentualCobertura;
-  final double custoTotalEstimado;
   final int pontosInteresse;
   final int pontosCobertos;
   final int pontosNaoCobertos;
@@ -178,7 +177,6 @@ class ResultadoRecomendacao {
     required this.idCenario,
     required this.quantidadeGateways,
     required this.percentualCobertura,
-    required this.custoTotalEstimado,
     required this.pontosInteresse,
     required this.pontosCobertos,
     required this.pontosNaoCobertos,
@@ -205,7 +203,6 @@ class ResultadoRecomendacao {
       idCenario: (json['id_cenario'] as num).toInt(),
       quantidadeGateways: (json['quantidade_gateways'] as num).toInt(),
       percentualCobertura: (json['percentual_cobertura'] as num).toInt(),
-      custoTotalEstimado: (json['custo_total_estimado'] as num).toDouble(),
       pontosInteresse: (json['pontos_interesse'] as num).toInt(),
       pontosCobertos: (json['pontos_cobertos'] as num).toInt(),
       pontosNaoCobertos: (json['pontos_nao_cobertos'] as num).toInt(),

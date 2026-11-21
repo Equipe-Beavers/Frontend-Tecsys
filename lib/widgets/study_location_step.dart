@@ -41,22 +41,6 @@ class StudyLocationStep extends StatelessWidget {
     return municipios;
   }
 
-  Map<String, List<String>> get _bairrosPorMunicipio {
-    return {
-      for (final municipio in _municipiosDisponiveis)
-        municipio:
-            (ativos
-                .where((ativo) => ativo.municipio.trim() == municipio)
-                .map((ativo) => ativo.bairro.trim())
-                .where(
-                  (bairro) => bairro.isNotEmpty && bairro != 'Não informado',
-                )
-                .toSet()
-                .toList()
-              ..sort()),
-    };
-  }
-
   Future<void> _abrirSelecaoDistribuidora(BuildContext context) {
     return SelectionBottomSheet.show<DistribuidoraResumo>(
       context: context,
@@ -87,11 +71,9 @@ class StudyLocationStep extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => CidadeBairroBottomSheet(
+      builder: (context) => CidadeBottomSheet(
         cidades: municipios,
-        bairrosPorCidade: _bairrosPorMunicipio,
         cidadeSelecionada: municipioSelecionado,
-        bairroSelecionado: bairroSelecionado,
         stepLabel: 'PASSO 2 DE 4',
         allowEmptySelection: false,
         breadcrumb: nomeDistribuidora == null
@@ -100,7 +82,7 @@ class StudyLocationStep extends StatelessWidget {
         notFoundMessage: municipios.isEmpty
             ? 'Nenhuma cidade encontrada para a distribuidora selecionada.'
             : 'Não encontrada',
-        onProsseguir: onLocationConfirmed,
+        onProsseguir: (cidade) => onLocationConfirmed(cidade, null),
       ),
     );
   }
@@ -116,7 +98,7 @@ class StudyLocationStep extends StatelessWidget {
           onTap: () => _abrirSelecaoDistribuidora(context),
         ),
         FilterChipWidget(
-          label: municipioSelecionado ?? 'Cidade / bairro',
+          label: municipioSelecionado ?? 'Cidade',
           onTap: () {
             if (!localizacaoHabilitada || distribuidoraSelecionada == null) {
               ScaffoldMessenger.of(context).showSnackBar(

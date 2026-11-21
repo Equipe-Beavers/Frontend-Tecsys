@@ -94,11 +94,12 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
   // +3 pelas camadas de vegetação, antenas e edifícios
   int get _totalCamadas => _estadoRascunho.length + 4;
 
-  void _limparGrupo(GrupoCamadasFiltro grupo) {
+  void _limparTodasCamadas() {
     setState(() {
-      for (final item in grupo.itens) {
-        _estadoRascunho[item.tipo] = false;
-      }
+      _estadoRascunho.updateAll((_, _) => false);
+      _vegetacaoRascunho = false;
+      _antenasRascunho = false;
+      _edificacoesRascunho = false;
     });
   }
 
@@ -310,7 +311,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Cabeçalho da Seção com Título e Ação "Limpar" (se for o primeiro grupo como no Figma)
+        // A ação global de limpar aparece no cabeçalho do primeiro grupo.
         Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 4, left: 4, right: 4),
           child: Row(
@@ -327,7 +328,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
               ),
               if (podeLimpar)
                 GestureDetector(
-                  onTap: () => _limparGrupo(grupo),
+                  onTap: _limparTodasCamadas,
                   child: const Text(
                     'Limpar',
                     style: TextStyle(
