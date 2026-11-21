@@ -84,6 +84,8 @@ class _MapPageState extends State<MapPage> {
   int _sequenciaMunicipios = 0;
   bool _mapaPronto = false;
   bool _distribuidorasProntas = false;
+  bool _carregandoDistribuidoras = false;
+  String? _erroDistribuidoras;
   bool _cargaInicialFeita = false;
 
   bool _edificacoesAtivas = false;
@@ -877,6 +879,15 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _inicializar() async {
+    // As duas cargas são independentes: a de distribuidoras pode levar dezenas
+    // de segundos e não deve esperar a configuração de vegetação.
+    await Future.wait([
+      _carregarConfigVegetacao(),
+      _carregarDistribuidoras(),
+    ]);
+  }
+
+  Future<void> _carregarConfigVegetacao() async {
     var configVegetacao = VegetacaoConfig.fallback();
     try {
       configVegetacao = await _camadasExternasService.getVegetacaoConfig();
@@ -888,6 +899,16 @@ class _MapPageState extends State<MapPage> {
     setState(() {
       _vegetacaoConfig = configVegetacao;
     });
+  }
+
+  Future<void> _carregarDistribuidoras({bool novaTentativa = false}) async {
+    if (_carregandoDistribuidoras) return;
+
+    // Na primeira carga isto roda dentro de initState, onde setState não é
+    // permitido; o build inicial já lê os campos atualizados.
+    _carregandoDistribuidoras = true;
+    _erroDistribuidoras = null;
+    if (novaTentativa) setState(() {});
 
     try {
       final distribuidoras = await _ativosService.getDistribuidoras();
@@ -898,8 +919,11 @@ class _MapPageState extends State<MapPage> {
         _distribuidoras = distribuidoras;
         _distribuidoraSelecionada = null;
         _distribuidorasProntas = true;
+        _carregandoDistribuidoras = false;
+        _erroDistribuidoras = distribuidoras.isEmpty
+            ? 'Nenhuma distribuidora encontrada.'
+            : null;
         _carregando = false;
-        _erro = null;
       });
 
       if (distribuidoras.isNotEmpty) _tentarCargaInicial();
@@ -908,11 +932,40 @@ class _MapPageState extends State<MapPage> {
       debugPrintStack(stackTrace: stackTrace);
       if (mounted) {
         setState(() {
+          _carregandoDistribuidoras = false;
           _carregando = false;
-          _erro = 'Não foi possível carregar as distribuidoras.';
+          _erroDistribuidoras = 'Não foi possível carregar as distribuidoras.';
         });
       }
     }
+  }
+
+  /// Garante que a lista de distribuidoras está disponível antes de abrir um
+  /// seletor. Enquanto carrega, avisa o usuário; se falhou, tenta de novo.
+  bool _distribuidorasDisponiveis() {
+    if (_distribuidoras.isNotEmpty) return true;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+
+    if (_carregandoDistribuidoras) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Carregando distribuidoras… isso pode levar até 1 minuto.',
+          ),
+        ),
+      );
+      return false;
+    }
+
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Tentando carregar as distribuidoras novamente…'),
+      ),
+    );
+    _carregarDistribuidoras(novaTentativa: true);
+    return false;
   }
 
   int get _totalCamadasAtivas =>
@@ -992,6 +1045,8 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _iniciarEstudo() async {
+    if (!_distribuidorasDisponiveis()) return;
+
     await SelectionBottomSheet.show<String>(
       context: context,
       title: 'Distribuidora',
@@ -1622,11 +1677,16 @@ class _MapPageState extends State<MapPage> {
                     spacing: 10,
                     children: [
                       FilterChipWidget(
-                        label: _distribuidoraSelecionada == null
-                            ? 'DIST.'
-                            : 'DIST. $_distribuidoraSelecionada',
+                        label: _distribuidoraSelecionada != null
+                            ? 'DIST. $_distribuidoraSelecionada'
+                            : _carregandoDistribuidoras
+                                ? 'DIST. (carregando…)'
+                                : _distribuidoras.isEmpty
+                                    ? 'DIST. (tentar novamente)'
+                                    : 'DIST.',
                         isSelected: _distribuidoraSelecionada != null,
                         onTap: () {
+                          if (!_distribuidorasDisponiveis()) return;
                           SelectionBottomSheet.show<String>(
                             context: context,
                             title: 'Distribuidora',
@@ -1889,6 +1949,7 @@ class _MapPageState extends State<MapPage> {
               ),
             ),
           if (_erro != null ||
+              _erroDistribuidoras != null ||
               _erroMapa != null ||
               _erroRelevo != null ||
               _avisoAtivos != null)
@@ -1900,15 +1961,35 @@ class _MapPageState extends State<MapPage> {
                 color: AppColors.surfaceCard,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text(
-                    [
-                      _erro,
-                      _erroMapa,
-                      _erroRelevo,
-                      _avisoAtivos,
-                    ].whereType<String>().join('\n'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.textWhite),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        [
+                          _erroDistribuidoras,
+                          _erro,
+                          _erroMapa,
+                          _erroRelevo,
+                          _avisoAtivos,
+                        ].whereType<String>().join('\n'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.textWhite),
+                      ),
+                      if (_erroDistribuidoras != null &&
+                          !_carregandoDistribuidoras)
+                        TextButton.icon(
+                          onPressed: () =>
+                              _carregarDistribuidoras(novaTentativa: true),
+                          icon: const Icon(
+                            Icons.refresh,
+                            color: AppColors.primaryLime,
+                          ),
+                          label: const Text(
+                            'Tentar novamente',
+                            style: TextStyle(color: AppColors.primaryLime),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
