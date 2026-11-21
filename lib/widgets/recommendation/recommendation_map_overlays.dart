@@ -39,11 +39,6 @@ class RecommendationMapLegend extends StatelessWidget {
           color: AppColors.secondaryTeal,
           label: 'Ativo coberto',
         ),
-        const SizedBox(height: 5),
-        const _LegendLine(
-          color: AppColors.layerChaveFusivel,
-          label: 'Sem cobertura',
-        ),
       ],
     ),
   );

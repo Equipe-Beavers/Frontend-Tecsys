@@ -1,8 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
+import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
+import 'package:frontend_tecsys/mocks/recomendacao_mock.dart';
+import 'package:frontend_tecsys/pages/recomendacao_resultado_page.dart';
+import 'package:frontend_tecsys/services/recomendacao_service.dart';
+import 'package:frontend_tecsys/widgets/recommendation_map.dart';
 import 'package:frontend_tecsys/pages/studies_page.dart';
 import 'package:frontend_tecsys/pages/study_form.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
@@ -354,6 +360,7 @@ void main() {
     addTearDown(rfService.dispose);
     addTearDown(criterionService.dispose);
     addTearDown(studyService.dispose);
+    final recommendation = _PendingRecommendation();
     bool? created;
     await tester.pumpWidget(
       MaterialApp(
@@ -374,6 +381,7 @@ void main() {
                       rfProfileService: rfService,
                       criterionService: criterionService,
                       studyService: studyService,
+                      recommendationRepository: recommendation,
                     ),
                   ),
                 );
@@ -451,9 +459,22 @@ void main() {
         .removeCurrentSnackBar();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continuar salvamento'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(created, isTrue);
     expect(find.byType(NovoEstudoPage), findsNothing);
+    expect(find.byType(RecomendacaoResultadoPage), findsOneWidget);
+    expect(
+      find.text('Calculando a recomendação de cobertura...'),
+      findsOneWidget,
+    );
+    expect(recommendation.request, (81, 32, 47));
+    recommendation.result.complete(buildRecommendationMock(studyId: 81));
+    await tester.pumpAndSettle();
+    expect(find.byType(RecommendationMap), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Abrir formulário'), findsOneWidget);
     expect(payloads.length, 2);
     expect(pontosPayloads.length, 2);
     expect(requisicoesEstudo, 2);
@@ -796,4 +817,20 @@ void main() {
     expect(find.text('Nenhum estudo cadastrado'), findsOneWidget);
     expect(requests, 2);
   });
+}
+
+class _PendingRecommendation implements RecommendationRepository {
+  final result = Completer<ResultadoRecomendacao>();
+  (int, int, int?)? request;
+
+  @override
+  Future<ResultadoRecomendacao> gerarRecomendacao({
+    required int idEstudo,
+    required int idPerfilRf,
+    int? idCriterioInstalacao,
+    String? nomeCenario,
+  }) {
+    request = (idEstudo, idPerfilRf, idCriterioInstalacao);
+    return result.future;
+  }
 }

@@ -90,7 +90,6 @@ void main() {
     expect(result.pontosInteresse, 9);
     expect(result.pontosCobertos, database.cenarioAtendimentos.length);
     expect(result.pontosNaoCobertos, 3);
-    expect(result.custoTotalEstimado, 405000);
   });
 
   test(

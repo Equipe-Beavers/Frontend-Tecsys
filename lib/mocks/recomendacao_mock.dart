@@ -210,18 +210,12 @@ ResultadoRecomendacao buildRecommendationMock({int studyId = 1}) {
     }
   }
 
-  final totalCost = database.cenarioGateways.fold<double>(
-    0,
-    (total, row) =>
-        total + _asDouble(_asMap(row['parametros_calculo'])['custo_estimado']),
-  );
   final scenario = database.cenario;
 
   return ResultadoRecomendacao(
     idCenario: scenario['id_cenario'] as int,
     quantidadeGateways: (scenario['quantidade_gateways'] as num).toInt(),
     percentualCobertura: (scenario['percentual_cobertura'] as num).toInt(),
-    custoTotalEstimado: totalCost,
     pontosInteresse: (scenario['pontos_interesse'] as num).toInt(),
     pontosCobertos: (scenario['pontos_cobertos'] as num).toInt(),
     pontosNaoCobertos: (scenario['pontos_nao_cobertos'] as num).toInt(),
@@ -299,7 +293,7 @@ Map<String, dynamic> _scenarioGateway(
   'ordem': order,
   'quantidade_pontos_atendidos': 2,
   'capacidade_utilizada_pct': 2,
-  'parametros_calculo': {'raio_cobertura_m': radius, 'custo_estimado': 135000},
+  'parametros_calculo': {'raio_cobertura_m': radius},
   'mancha_cobertura': null,
 };
 

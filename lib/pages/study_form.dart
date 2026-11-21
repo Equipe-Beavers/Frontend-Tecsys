@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../utils/study_area_format.dart';
+
 import '../widgets/auth/auth_scope.dart';
+import '../services/recomendacao_service.dart';
+import 'recomendacao_resultado_page.dart';
 
 import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/models/install_criterion.dart';
@@ -26,6 +30,7 @@ class NovoEstudoPage extends StatefulWidget {
   final InstallCriterionService? criterionService;
   final RFProfileService? rfProfileService;
   final EstudosService? studyService;
+  final RecommendationRepository? recommendationRepository;
   final int userId;
   final Map<String, dynamic>? study;
 
@@ -41,6 +46,7 @@ class NovoEstudoPage extends StatefulWidget {
     this.criterionService,
     this.rfProfileService,
     this.studyService,
+    this.recommendationRepository,
     this.study,
     required this.userId,
   });
@@ -153,7 +159,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     }
     if (widget.pontosArea.isEmpty) return 'Área não definida';
     final local = widget.municipio ?? widget.distribuidora;
-    return '$local · ${_formatarNumero(widget.areaKm2)} km²';
+    return '$local · ${formatStudyArea(widget.areaKm2)}';
   }
 
   Future<void> _selectRfProfile() async {
@@ -382,7 +388,28 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
         }
       }
       if (!mounted) return;
-      Navigator.pop(context, true);
+      if (_isEditing) {
+        Navigator.pop(context, true);
+      } else {
+        Navigator.pushReplacement<bool, bool>(
+          context,
+          MaterialPageRoute<bool>(
+            builder: (_) => RecomendacaoResultadoPage(
+              idEstudo: _idEstudoCriado!,
+              idPerfilRf: _selectedRfProfile!.id,
+              idCriterioInstalacao: _criterioSelecionado!.id,
+              titulo: _nomeController.text.trim(),
+              subtitulo: [
+                _textoOuNulo(_cidadeController),
+                _textoOuNulo(_bairroController),
+                _textoOuNulo(_estadoController)?.toUpperCase(),
+              ].whereType<String>().join(' · '),
+              repository: widget.recommendationRepository,
+            ),
+          ),
+          result: true,
+        );
+      }
     } catch (erro) {
       if (!mounted) return;
       setState(() => _salvando = false);
@@ -538,7 +565,6 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    _buildRotulo('ATIVOS A COBRIR'),
                   ],
                 ),
               ),
