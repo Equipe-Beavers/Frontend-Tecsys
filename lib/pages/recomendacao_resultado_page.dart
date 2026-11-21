@@ -72,14 +72,10 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
           : null;
       _futureResultado.then(
         _loadScenarioCoverage,
-<<<<<<< HEAD
         onError: (Object _, StackTrace __) {
           // O FutureBuilder exibe erros de recomendacao para o usuario.
           // Nao deixar tambem uma excecao assíncrona sem tratamento aqui.
         },
-=======
-        onError: (Object error, StackTrace stackTrace) {},
->>>>>>> origin/develop
       );
     }
   }
