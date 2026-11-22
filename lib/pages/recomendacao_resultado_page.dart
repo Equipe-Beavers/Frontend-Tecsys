@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/auth/auth_scope.dart';
+import '../widgets/branded_loading_screen.dart';
+
 import '../models/mancha_cenario.dart';
 import '../models/recomendacao_resultado.dart';
 import '../services/mancha_cenario_service.dart';
@@ -48,7 +51,9 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
   @override
   void initState() {
     super.initState();
-    _ownedService = widget.repository == null ? RecomendacaoService() : null;
+    _ownedService = widget.repository == null
+        ? RecomendacaoService(client: AuthScope.clientOf(context))
+        : null;
     _repository = widget.repository ?? _ownedService!;
     _futureResultado = widget.resultadoInicial != null
         ? Future.value(widget.resultadoInicial)
@@ -63,9 +68,15 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
         (widget.resultadoInicial == null && widget.repository == null);
     if (shouldLoadCoverage) {
       _ownedCoverageService = widget.coverageRepository == null
-          ? ManchaCenarioService()
+          ? ManchaCenarioService(client: AuthScope.clientOf(context))
           : null;
-      _futureResultado.then(_loadScenarioCoverage);
+      _futureResultado.then(
+        _loadScenarioCoverage,
+        onError: (Object _, StackTrace __) {
+          // O FutureBuilder exibe erros de recomendacao para o usuario.
+          // Nao deixar tambem uma excecao assíncrona sem tratamento aqui.
+        },
+      );
     }
   }
 
@@ -88,35 +99,37 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: AppColors.surfaceBackground,
-    appBar: AppBar(
-      backgroundColor: AppColors.surfaceBackground,
-      elevation: 0,
-      leading: const BackButton(color: AppColors.textWhite),
-      title: Text(
-        widget.titulo ?? 'Resultado da recomendação',
-        style: const TextStyle(color: AppColors.textWhite, fontSize: 16),
-      ),
-    ),
-    body: FutureBuilder<ResultadoRecomendacao>(
-      future: _futureResultado,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const _RecommendationLoading();
-        }
-        if (snapshot.hasError) {
-          return _RecommendationError(message: snapshot.error.toString());
-        }
-        return _RecommendationContent(
-          result: snapshot.data!,
-          subtitle: widget.subtitulo,
-          showBaseMap: widget.showBaseMap,
-          scenarioCoverage: _scenarioCoverage?.gateways ?? const [],
-          onGatewayTap: (gateway) => _openGateway(snapshot.data!, gateway),
+  Widget build(BuildContext context) => FutureBuilder<ResultadoRecomendacao>(
+    future: _futureResultado,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const BrandedLoadingScreen(
+          message: 'Calculando a recomendação de cobertura...',
         );
-      },
-    ),
+      }
+      return Scaffold(
+        backgroundColor: AppColors.surfaceBackground,
+        appBar: AppBar(
+          backgroundColor: AppColors.surfaceBackground,
+          elevation: 0,
+          leading: const BackButton(color: AppColors.textWhite),
+          title: Text(
+            widget.titulo ?? 'Resultado da recomendação',
+            style: const TextStyle(color: AppColors.textWhite, fontSize: 16),
+          ),
+        ),
+        body: snapshot.hasError
+            ? _RecommendationError(message: snapshot.error.toString())
+            : _RecommendationContent(
+                result: snapshot.data!,
+                subtitle: widget.subtitulo,
+                showBaseMap: widget.showBaseMap,
+                scenarioCoverage: _scenarioCoverage?.gateways ?? const [],
+                onGatewayTap: (gateway) =>
+                    _openGateway(snapshot.data!, gateway),
+              ),
+      );
+    },
   );
 
   void _openGateway(ResultadoRecomendacao result, GatewayProposto gateway) {
@@ -208,25 +221,6 @@ class _RecommendationContent extends StatelessWidget {
         ),
       );
     },
-  );
-}
-
-class _RecommendationLoading extends StatelessWidget {
-  const _RecommendationLoading();
-
-  @override
-  Widget build(BuildContext context) => const Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        CircularProgressIndicator(color: AppColors.primaryLime),
-        SizedBox(height: 16),
-        Text(
-          'Calculando a recomendação de cobertura...',
-          style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-        ),
-      ],
-    ),
   );
 }
 

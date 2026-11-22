@@ -1,6 +1,9 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:latlong2/latlong.dart';
+
+import '../config/api_config.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 
@@ -105,15 +108,7 @@ class AtivosResult {
 class AtivosService {
   AtivosService({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrl =
-          (baseUrl ??
-                  const String.fromEnvironment(
-                    'API_BASE_URL',
-                    defaultValue: kIsWeb
-                        ? 'http://localhost:3000'
-                        : 'http://10.0.2.2:3000',
-                  ))
-              .replaceFirst(RegExp(r'/+$'), '');
+      _baseUrl = ApiConfig.resolve(baseUrl);
 
   final http.Client _client;
   final String _baseUrl;
@@ -362,6 +357,42 @@ class AtivosService {
     } while (pagina <= totalPaginas);
 
     return municipios;
+  }
+
+  Future<int> contarAtivosNaArea(
+    List<LatLng> pontos, {
+    String? distribuidora,
+  }) async {
+    final coordinates = pontos.map((p) => [p.longitude, p.latitude]).toList();
+    if (coordinates.length < 3) {
+      throw ArgumentError('Desenhe uma área com três pontos.');
+    }
+    if (coordinates.first[0] != coordinates.last[0] ||
+        coordinates.first[1] != coordinates.last[1]) {
+      coordinates.add(coordinates.first);
+    }
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/ativos/contagem-area'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'geom': {
+              'type': 'Polygon',
+              'coordinates': [coordinates],
+            },
+            if (distribuidora != null && distribuidora.isNotEmpty)
+              'distribuidora': distribuidora,
+          }),
+        )
+        .timeout(const Duration(seconds: 45));
+    if (response.statusCode != 200) {
+      throw StateError('Não foi possível contar os ativos da área.');
+    }
+    final body = jsonDecode(response.body);
+    if (body is! Map || body['total'] is! num || body['total'] < 0) {
+      throw const FormatException('Contagem de ativos inválida.');
+    }
+    return (body['total'] as num).toInt();
   }
 
   Future<AtivoBdgd> getAtivoPorId(String id) async {

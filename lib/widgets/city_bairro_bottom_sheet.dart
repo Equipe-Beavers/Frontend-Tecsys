@@ -1,24 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 
-class CidadeBairroBottomSheet extends StatefulWidget {
+class CidadeBottomSheet extends StatefulWidget {
   final List<String> cidades;
-  final Map<String, List<String>> bairrosPorCidade;
   final String? cidadeSelecionada;
-  final String? bairroSelecionado;
   final String? stepLabel;
   final String? breadcrumb;
   final String notFoundMessage;
   final bool allowEmptySelection;
 
-  final Function(String? cidade, String? bairro) onProsseguir;
+  final Function(String? cidade) onProsseguir;
 
-  const CidadeBairroBottomSheet({
+  const CidadeBottomSheet({
     super.key,
     required this.cidades,
-    required this.bairrosPorCidade,
     this.cidadeSelecionada,
-    this.bairroSelecionado,
     this.stepLabel,
     this.breadcrumb,
     this.notFoundMessage = 'Não encontrada',
@@ -27,13 +23,11 @@ class CidadeBairroBottomSheet extends StatefulWidget {
   });
 
   @override
-  State<CidadeBairroBottomSheet> createState() =>
-      _CidadeBairroBottomSheetState();
+  State<CidadeBottomSheet> createState() => _CidadeBottomSheetState();
 }
 
-class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
+class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
   String? _cidadeSelecionada;
-  String? _bairroSelecionado;
   final TextEditingController _buscaController = TextEditingController();
   String _busca = '';
 
@@ -41,7 +35,6 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
   void initState() {
     super.initState();
     _cidadeSelecionada = widget.cidadeSelecionada;
-    _bairroSelecionado = widget.bairroSelecionado;
   }
 
   @override
@@ -56,8 +49,7 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
 
     return widget.cidades.where((cidade) {
       if (cidade.toLowerCase().contains(termo)) return true;
-      final bairros = widget.bairrosPorCidade[cidade] ?? [];
-      return bairros.any((bairro) => bairro.toLowerCase().contains(termo));
+      return false;
     }).toList();
   }
 
@@ -98,7 +90,7 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
                 children: [
                   const Expanded(
                     child: Text(
-                      'Cidade / bairro',
+                      'Cidade',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -145,7 +137,7 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Selecione a cidade e o bairro para o estudo.',
+                  'Selecione a cidade para o estudo.',
                   style: TextStyle(fontSize: 13, color: AppColors.textMuted),
                 ),
               ),
@@ -160,7 +152,7 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
                 onChanged: (valor) => setState(() => _busca = valor),
                 style: const TextStyle(color: AppColors.textWhite),
                 decoration: InputDecoration(
-                  hintText: 'Buscar cidade ou bairro',
+                  hintText: 'Buscar cidade',
                   hintStyle: const TextStyle(color: AppColors.textMuted),
                   prefixIcon: const Icon(
                     Icons.search,
@@ -226,7 +218,6 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
                     onPressed: () {
                       setState(() {
                         _cidadeSelecionada = null;
-                        _bairroSelecionado = null;
                         _buscaController.clear();
                         _busca = '';
                       });
@@ -241,10 +232,7 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
                     child: ElevatedButton(
                       onPressed: _podeProsseguir
                           ? () {
-                              widget.onProsseguir(
-                                _cidadeSelecionada,
-                                _bairroSelecionado,
-                              );
+                              widget.onProsseguir(_cidadeSelecionada);
                               Navigator.of(context).pop();
                             }
                           : null,
@@ -274,7 +262,6 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
 
   Widget _buildCidade(String cidade) {
     final selecionada = cidade == _cidadeSelecionada;
-    final bairros = widget.bairrosPorCidade[cidade] ?? [];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -296,7 +283,6 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
             onTap: () {
               setState(() {
                 _cidadeSelecionada = cidade;
-                _bairroSelecionado = null;
               });
             },
             child: Padding(
@@ -325,43 +311,7 @@ class _CidadeBairroBottomSheetState extends State<CidadeBairroBottomSheet> {
               ),
             ),
           ),
-          if (selecionada && bairros.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [for (final bairro in bairros) _buildBairro(bairro)],
-              ),
-            ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBairro(String bairro) {
-    final selecionado = bairro == _bairroSelecionado;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _bairroSelecionado = bairro;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: selecionado ? AppColors.primaryLime : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          bairro,
-          style: TextStyle(
-            color: selecionado ? AppColors.textDark : AppColors.textWhite,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
       ),
     );
   }

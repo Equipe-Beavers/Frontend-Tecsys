@@ -17,6 +17,7 @@ dependencies:
   flutter_map_marker_cluster: ^8.2.2
   geolocator: ^14.0.3
   http: ^1.6.0
+  flutter_secure_storage: 10.3.4
   mapbox_maps_flutter: ^3.0.1
   file_picker: ^13.3.3
 
@@ -30,5 +31,6 @@ flutter:
 
   assets:
     - assets/images/logo_geomash.png
+    - assets/images/auth_loading_background.png
     - assets/images/PoleIcon.png
     - .env

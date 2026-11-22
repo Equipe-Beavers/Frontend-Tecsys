@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+import '../config/api_config.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
 
@@ -15,12 +18,7 @@ abstract interface class RecommendationRepository {
 class RecomendacaoService implements RecommendationRepository {
   RecomendacaoService({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrl =
-          baseUrl ??
-          const String.fromEnvironment(
-            'API_BASE_URL',
-            defaultValue: 'http://localhost:3000',
-          );
+      _baseUrl = ApiConfig.resolve(baseUrl);
 
   final http.Client _client;
   final String _baseUrl;

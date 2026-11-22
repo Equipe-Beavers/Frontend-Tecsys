@@ -46,25 +46,22 @@ class GatewayRecommendationCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               if (gateway.idAtivoBdgd != null)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      gateway.idAtivoBdgd!,
-                      style: const TextStyle(
-                        color: AppColors.secondaryTeal,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                Flexible(
+                  child: Text(
+                    gateway.idAtivoBdgd!,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.secondaryTeal,
+                      fontSize: 12,
                     ),
-                    const SizedBox(width: 6),
-                    const Icon(
-                      Icons.chevron_right,
-                      color: AppColors.textMuted,
-                      size: 17,
-                    ),
-                  ],
+                  ),
                 ),
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.chevron_right,
+                color: AppColors.textMuted,
+                size: 20,
+              ),
             ],
           ),
           const SizedBox(height: 10),

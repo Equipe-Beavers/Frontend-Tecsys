@@ -88,7 +88,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Cidade / bairro'));
+    await tester.tap(find.text('Cidade'));
     await tester.pump();
 
     expect(
@@ -97,7 +97,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.byType(CidadeBairroBottomSheet), findsNothing);
+    expect(find.byType(CidadeBottomSheet), findsNothing);
   });
 
   testWidgets('município é obrigatório para confirmar a localização', (
@@ -108,11 +108,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: CidadeBairroBottomSheet(
+          body: CidadeBottomSheet(
             cidades: const [],
-            bairrosPorCidade: const {},
             allowEmptySelection: false,
-            onProsseguir: (municipio, _) {
+            onProsseguir: (municipio) {
               municipioConfirmado = municipio;
             },
           ),
@@ -167,11 +166,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: CidadeBairroBottomSheet(
+          body: CidadeBottomSheet(
             cidades: const [],
-            bairrosPorCidade: const {},
             allowEmptySelection: true,
-            onProsseguir: (municipio, _) {
+            onProsseguir: (municipio) {
               municipioConfirmado = municipio;
             },
           ),
@@ -193,13 +191,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: CidadeBairroBottomSheet(
+          body: CidadeBottomSheet(
             cidades: const ['Cidade A'],
-            bairrosPorCidade: const {
-              'Cidade A': ['Centro'],
-            },
             allowEmptySelection: false,
-            onProsseguir: (municipio, _) {
+            onProsseguir: (municipio) {
               municipioConfirmado = municipio;
             },
           ),
@@ -208,8 +203,6 @@ void main() {
     );
 
     await tester.tap(find.text('Cidade A'));
-    await tester.pump();
-    await tester.tap(find.text('Centro'));
     await tester.pump();
     await tester.tap(find.text('Prosseguir'));
     await tester.pump();
