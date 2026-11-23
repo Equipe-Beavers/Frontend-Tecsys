@@ -7,6 +7,7 @@ import 'package:frontend_tecsys/services/ativos_service.dart';
 import 'package:frontend_tecsys/widgets/city_bairro_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/study_area_step.dart';
+import 'package:frontend_tecsys/widgets/study_import_bottom_sheet.dart';
 
 void main() {
   Future<void> mount(WidgetTester tester, _DelayedAtivos service) async {
@@ -20,6 +21,13 @@ void main() {
     await tester.tap(find.widgetWithText(ElevatedButton, 'Prosseguir'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+  }
+
+  Future<void> continueWithSystemDatabase(WidgetTester tester) async {
+    await tester.tap(find.text('Iniciar estudo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Prosseguir'));
+    await tester.pumpAndSettle();
   }
 
   testWidgets('cidades carregam com o filtro ainda aberto', (tester) async {
@@ -70,8 +78,7 @@ void main() {
     final service = _DelayedAtivos();
     addTearDown(service.dispose);
     await mount(tester, service);
-    await tester.tap(find.text('Iniciar estudo'));
-    await tester.pumpAndSettle();
+    await continueWithSystemDatabase(tester);
     await confirmDistributor(tester);
     expect(find.byType(SelectionBottomSheet<String>), findsNothing);
     service.municipios.complete(const [
@@ -79,26 +86,26 @@ void main() {
     ]);
     await tester.pumpAndSettle();
     expect(find.byType(CidadeBottomSheet), findsOneWidget);
-    expect(find.text('PASSO 2 DE 4'), findsOneWidget);
+    expect(find.text('PASSO 3 DE 5'), findsOneWidget);
     await tester.tap(find.text('Cidade A'));
     await tester.pump();
     await tester.tap(find.text('Prosseguir'));
     await tester.pumpAndSettle();
     expect(find.byType(CidadeBottomSheet), findsNothing);
     expect(find.byType(StudyAreaStep), findsOneWidget);
-    expect(find.text('PASSO 3 DE 4'), findsOneWidget);
+    expect(find.text('PASSO 4 DE 5'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('estudo sem opções não fecha a etapa seguinte por engano', (
     tester,
   ) async {
-    final service = _DelayedAtivos(empty: true);
+    final service = _DelayedAtivos();
     addTearDown(service.dispose);
     await mount(tester, service);
-    await tester.tap(find.text('Iniciar estudo'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Prosseguir'));
+    await continueWithSystemDatabase(tester);
+    await confirmDistributor(tester);
+    service.municipios.complete(const []);
     await tester.pumpAndSettle();
     expect(find.byType(CidadeBottomSheet), findsOneWidget);
     await tester.tap(find.text('Prosseguir'));
@@ -107,14 +114,30 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'selecionar importação abre formulário sem seletor de distribuidora',
+    (tester) async {
+      final service = _DelayedAtivos();
+      addTearDown(service.dispose);
+      await mount(tester, service);
+      await tester.tap(find.text('Iniciar estudo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Importar minha própria base'));
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Prosseguir'));
+      await tester.pumpAndSettle();
+      expect(find.byType(StudyImportBottomSheet), findsOneWidget);
+      expect(find.byType(SelectionBottomSheet<String>), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('dispensar distribuidora não abre a etapa de cidade', (
     tester,
   ) async {
     final service = _DelayedAtivos();
     addTearDown(service.dispose);
     await mount(tester, service);
-    await tester.tap(find.text('Iniciar estudo'));
-    await tester.pumpAndSettle();
+    await continueWithSystemDatabase(tester);
     Navigator.of(tester.element(find.byType(SelectionBottomSheet<String>)))
         .pop();
     await tester.pumpAndSettle();
@@ -125,21 +148,18 @@ void main() {
 }
 
 class _DelayedAtivos extends AtivosService {
-  _DelayedAtivos({this.empty = false});
-  final bool empty;
+  _DelayedAtivos();
   final municipios = Completer<List<MunicipioResumo>>();
 
   @override
-  Future<List<DistribuidoraResumo>> getDistribuidoras() async => empty
-      ? []
-      : [
-          const DistribuidoraResumo(
-            id: 1,
-            nome: 'Distribuidora A',
-            uf: 'SP',
-            anoBdgd: 2024,
-          ),
-        ];
+  Future<List<DistribuidoraResumo>> getDistribuidoras() async => [
+    const DistribuidoraResumo(
+      id: 1,
+      nome: 'Distribuidora A',
+      uf: 'SP',
+      anoBdgd: 2024,
+    ),
+  ];
 
   @override
   Future<List<MunicipioResumo>> getMunicipios({

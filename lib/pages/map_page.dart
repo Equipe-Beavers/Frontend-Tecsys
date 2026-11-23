@@ -3,6 +3,7 @@ import 'dart:async';
 import '../controllers/study_area_count_controller.dart';
 
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Visibility;
@@ -29,6 +30,8 @@ import 'package:frontend_tecsys/widgets/filter_chip.dart';
 import 'package:frontend_tecsys/pages/study_form.dart';
 import 'package:frontend_tecsys/utils/map_utils.dart';
 import 'package:frontend_tecsys/widgets/study_area_step.dart';
+import 'package:frontend_tecsys/widgets/study_database_bottom_sheet.dart';
+import 'package:frontend_tecsys/widgets/study_import_bottom_sheet.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key, this.ativosService});
@@ -67,6 +70,7 @@ class _MapPageState extends State<MapPage> {
   String _textoBusca = '';
 
   List<AtivoBdgd> _todosAtivos = [];
+  List<AtivoBdgd>? _ativosImportados;
   List<AntenaAnatel> _antenas = [];
   VegetacaoConfig? _vegetacaoConfig;
   bool _vegetacaoAtiva = false;
@@ -521,6 +525,7 @@ class _MapPageState extends State<MapPage> {
     _contagemArea.updateArea(
       polygonPoints,
       distributor: _distribuidoraSelecionada,
+      ativosImportados: _ativosImportados,
     );
   }
 
@@ -858,6 +863,7 @@ class _MapPageState extends State<MapPage> {
         minLongitude.toStringAsFixed(5),
         maxLongitude.toStringAsFixed(5),
         _distribuidoraSelecionada,
+        _ativosImportados != null,
         tiposOrdenados,
         deveCarregarAntenas,
       ]);
@@ -892,16 +898,31 @@ class _MapPageState extends State<MapPage> {
         () async {
           if (!deveCarregarAtivos) return;
           try {
-            final resultado = await _ativosService.getAtivos(
-              minLatitude: minLatitude,
-              maxLatitude: maxLatitude,
-              minLongitude: minLongitude,
-              maxLongitude: maxLongitude,
-              distribuidora: _distribuidoraSelecionada,
-              tipos: camadasApi,
-              limit: _limiteAtivos,
-            );
-            ativosCarregados = resultado.ativos;
+            final ativosImportados = _ativosImportados;
+            if (ativosImportados != null) {
+              ativosCarregados = ativosImportados
+                  .where(
+                    (ativo) =>
+                        ativo.latitude >= minLatitude &&
+                        ativo.latitude <= maxLatitude &&
+                        ativo.longitude >= minLongitude &&
+                        ativo.longitude <= maxLongitude &&
+                        camadasApi.contains(ativo.tipo.apiValue),
+                  )
+                  .take(_limiteAtivos)
+                  .toList();
+            } else {
+              final resultado = await _ativosService.getAtivos(
+                minLatitude: minLatitude,
+                maxLatitude: maxLatitude,
+                minLongitude: minLongitude,
+                maxLongitude: maxLongitude,
+                distribuidora: _distribuidoraSelecionada,
+                tipos: camadasApi,
+                limit: _limiteAtivos,
+              );
+              ativosCarregados = resultado.ativos;
+            }
           } catch (error) {
             erroCarregamento ??=
                 'Não foi possível carregar os ativos elétricos: $error';
@@ -1084,7 +1105,9 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _selecionarDistribuidora(String? distribuidora) async {
-    if (distribuidora == null || distribuidora == _distribuidoraSelecionada) {
+    if (distribuidora == null ||
+        (distribuidora == _distribuidoraSelecionada &&
+            _ativosImportados == null)) {
       return;
     }
 
@@ -1097,6 +1120,10 @@ class _MapPageState extends State<MapPage> {
       _estadoSelecionado = selecionada?.uf;
       _municipios = [];
       _erroMunicipios = null;
+      _ativosImportados = null;
+      _ultimaConsultaDados = null;
+      _consultaDadosEmAndamento = null;
+      _sequenciaRequisicao++;
       _todosAtivos = [];
       _ativoSelecionado = null;
       _municipioSelecionado = null;
@@ -1155,16 +1182,139 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _iniciarEstudo() async {
-    if (!_distribuidorasDisponiveis()) return;
     if (_iniciandoEstudo) return;
     _iniciandoEstudo = true;
     try {
+      final anoBdgd = _distribuidoras.fold<int>(
+        0,
+        (ano, distribuidora) =>
+            distribuidora.anoBdgd > ano ? distribuidora.anoBdgd : ano,
+      );
+      final fonte = await StudyDatabaseBottomSheet.show(
+        context: context,
+        distributorCount: _distribuidoras.length,
+        databaseYear: anoBdgd == 0 ? DateTime.now().year : anoBdgd,
+      );
+      if (!mounted || fonte == null) return;
+
+      if (fonte == StudyDatabaseSource.importFile) {
+        List<AtivoBdgd>? ativosImportados;
+        List<MunicipioResumo>? municipiosImportados;
+
+        final distribuidora = await StudyImportBottomSheet.show(
+          context: context,
+          onImport: (versaoBdgd, nomeArquivo, arquivo) async {
+            final resposta = await _ativosService.importarArquivoBdgd(
+              versaoBdgd: versaoBdgd,
+              nomeArquivo: nomeArquivo,
+              arquivo: arquivo,
+            );
+            final metadata = DistribuidoraResumo.fromImportJson(resposta);
+            final dadosPostes = resposta['postes'];
+            if (dadosPostes is! List) {
+              throw const FormatException(
+                'A resposta da importação não contém a lista de postes.',
+              );
+            }
+            final postes = dadosPostes
+                .map((item) {
+                  if (item is! Map) {
+                    throw const FormatException(
+                      'A lista de postes contém um item inválido.',
+                    );
+                  }
+                  return Map<String, dynamic>.from(item);
+                })
+                .toList(growable: false);
+            final municipios = await _carregarMunicipios(
+              metadata,
+              filtrarPorDistribuidora: false,
+            );
+            if (municipios == null) {
+              throw StateError(
+                _erroMunicipios ?? 'Não foi possível carregar os municípios.',
+              );
+            }
+
+            final municipiosPorCodigo = <String, String>{};
+            ativosImportados = postes.map((poste) {
+              final codigo = _normalizarCodigoMunicipio(poste['MUN']);
+              final chave = codigo.isEmpty
+                  ? _normalizarCodigoMunicipio(poste['COD_ID'])
+                  : codigo;
+              final nomeMunicipio = municipiosPorCodigo.putIfAbsent(
+                chave,
+                () => _municipioDoPoste(poste, municipios),
+              );
+              return AtivoBdgd.fromBdgdPoste(
+                poste,
+                distribuidora: metadata.nome,
+                municipio: nomeMunicipio,
+              );
+            }).toList();
+            municipiosImportados = municipios;
+            return metadata;
+          },
+        );
+        if (!mounted || distribuidora == null) return;
+        final ativos = ativosImportados;
+        final municipios = municipiosImportados;
+        if (ativos == null || municipios == null) {
+          throw StateError('A importação não retornou os dados esperados.');
+        }
+
+        setState(() {
+          _ativosImportados = ativos;
+          _camadasAtivas = {
+            ..._camadasAtivas,
+            TipoAtivo.poste: true,
+          };
+          _ultimaConsultaDados = null;
+          _consultaDadosEmAndamento = null;
+          _sequenciaRequisicao++;
+        });
+        await _selecionarDistribuidoraParaEstudo(
+          distribuidora,
+          municipiosPrecarregados: municipios,
+        );
+        return;
+      }
+
+      final trocarBaseImportada = _ativosImportados != null;
+      setState(() {
+        _ativosImportados = null;
+        _sequenciaMunicipios++;
+        _ultimaConsultaDados = null;
+        _consultaDadosEmAndamento = null;
+        _sequenciaRequisicao++;
+        if (trocarBaseImportada) {
+          _distribuidoraSelecionada = null;
+          _estadoSelecionado = null;
+          _municipioSelecionado = null;
+          _bairroSelecionado = null;
+          _municipios = [];
+          _erroMunicipios = null;
+          _carregandoMunicipios.value = false;
+          _todosAtivos = [];
+          _ativoSelecionado = null;
+          _carregando = false;
+          _limparPontosDesenho();
+          isDrawing = false;
+        }
+      });
+      if (trocarBaseImportada) {
+        await _atualizarAnnotations();
+        await _atualizarPoligono();
+      }
+      if (!mounted) return;
+      if (!_distribuidorasDisponiveis()) return;
+
       var confirmado = false;
       String? distribuidoraEscolhida;
       await SelectionBottomSheet.show<String>(
         context: context,
         title: 'Distribuidora',
-        stepLabel: 'PASSO 1 DE 4',
+        stepLabel: 'PASSO 2 DE 5',
         searchHint: 'Buscar distribuidora',
         notFoundMessage: _distribuidoras.isEmpty
             ? 'Não foi possível carregar as distribuidoras.'
@@ -1182,7 +1332,10 @@ class _MapPageState extends State<MapPage> {
       if (!mounted || !confirmado) return;
       final distribuidora = distribuidoraEscolhida;
       if (distribuidora != null) {
-        await _selecionarDistribuidoraParaEstudo(distribuidora);
+        final resumo = _distribuidoras
+            .where((item) => item.nome == distribuidora)
+            .first;
+        await _selecionarDistribuidoraParaEstudo(resumo);
         return;
       }
       _debounceTimer?.cancel();
@@ -1192,6 +1345,7 @@ class _MapPageState extends State<MapPage> {
         _municipioSelecionado = null;
         _bairroSelecionado = null;
         _municipios = [];
+        _ativosImportados = null;
         _sequenciaMunicipios++;
         _carregandoMunicipios.value = false;
         _erroMunicipios = null;
@@ -1206,10 +1360,15 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
-  Future<void> _selecionarDistribuidoraParaEstudo(String distribuidora) async {
+  Future<void> _selecionarDistribuidoraParaEstudo(
+    DistribuidoraResumo distribuidora, {
+    List<MunicipioResumo>? municipiosPrecarregados,
+  }) async {
     if (!mounted) return;
+    final nome = distribuidora.nome;
 
-    if (distribuidora == _distribuidoraSelecionada &&
+    if (municipiosPrecarregados == null &&
+        nome == _distribuidoraSelecionada &&
         !_carregandoMunicipios.value &&
         _erroMunicipios == null &&
         _municipios.isNotEmpty) {
@@ -1223,14 +1382,11 @@ class _MapPageState extends State<MapPage> {
     }
 
     _debounceTimer?.cancel();
-    final distribuidoraSelecionada = _distribuidoras
-        .where((item) => item.nome == distribuidora)
-        .first;
 
     setState(() {
-      _distribuidoraSelecionada = distribuidora;
-      _estadoSelecionado = distribuidoraSelecionada.uf;
-      _municipios = [];
+      _distribuidoraSelecionada = nome;
+      _estadoSelecionado = distribuidora.uf;
+      _municipios = municipiosPrecarregados ?? [];
       _erroMunicipios = null;
       _todosAtivos = [];
       _ativoSelecionado = null;
@@ -1244,7 +1400,12 @@ class _MapPageState extends State<MapPage> {
     });
 
     await _atualizarPoligono();
-    await _carregarMunicipios(distribuidoraSelecionada);
+    if (municipiosPrecarregados == null) {
+      await _carregarMunicipios(distribuidora);
+    } else {
+      _sequenciaMunicipios++;
+      _carregandoMunicipios.value = false;
+    }
     if (!mounted) return;
     // A seleção da cidade depende dos municípios, não das camadas do mapa.
     _agendarCarregamento();
@@ -1262,7 +1423,7 @@ class _MapPageState extends State<MapPage> {
           cidades: cidades,
           cidadeSelecionada: _municipioSelecionado,
           bairroSelecionado: _bairroSelecionado,
-          stepLabel: 'PASSO 2 DE 4',
+          stepLabel: 'PASSO 3 DE 5',
           breadcrumb: _distribuidoraSelecionada != null
               ? '$_distribuidoraSelecionada · Selecione o município'
               : null,
@@ -1310,7 +1471,59 @@ class _MapPageState extends State<MapPage> {
     return _municipios.map((municipio) => municipio.nome).toList();
   }
 
-  Future<void> _carregarMunicipios(DistribuidoraResumo distribuidora) async {
+  String _municipioDoPoste(
+    Map<String, dynamic> poste,
+    List<MunicipioResumo> municipios,
+  ) {
+    final codigo = _normalizarCodigoMunicipio(poste['MUN']);
+    if (codigo.isNotEmpty) {
+      for (final municipio in municipios) {
+        if (_normalizarCodigoMunicipio(municipio.codigoIbge) == codigo) {
+          return municipio.nome;
+        }
+      }
+    }
+
+    final latitude = _numero(poste['Y']);
+    final longitude = _numero(poste['X']);
+    if (latitude == null || longitude == null) {
+      return codigo.isEmpty ? 'Não informado' : codigo;
+    }
+
+    MunicipioResumo? maisProximo;
+    var menorDistancia = double.infinity;
+    final correcaoLongitude = math.cos(latitude * math.pi / 180);
+    for (final municipio in municipios) {
+      final latMunicipio = municipio.latitude;
+      final lngMunicipio = municipio.longitude;
+      if (latMunicipio == null || lngMunicipio == null) continue;
+
+      final deltaLat = latitude - latMunicipio;
+      final deltaLng = (longitude - lngMunicipio) * correcaoLongitude;
+      final distancia = deltaLat * deltaLat + deltaLng * deltaLng;
+      if (distancia < menorDistancia) {
+        menorDistancia = distancia;
+        maisProximo = municipio;
+      }
+    }
+    return maisProximo?.nome ?? (codigo.isEmpty ? 'Não informado' : codigo);
+  }
+
+  String _normalizarCodigoMunicipio(dynamic codigo) {
+    final texto = codigo?.toString().trim() ?? '';
+    final numerico = num.tryParse(texto);
+    return numerico == null ? texto : numerico.toInt().toString();
+  }
+
+  double? _numero(dynamic valor) {
+    final numero = valor is num ? valor.toDouble() : double.tryParse('$valor');
+    return numero != null && numero.isFinite ? numero : null;
+  }
+
+  Future<List<MunicipioResumo>?> _carregarMunicipios(
+    DistribuidoraResumo distribuidora, {
+    bool filtrarPorDistribuidora = true,
+  }) async {
     final sequencia = ++_sequenciaMunicipios;
     final uf = distribuidora.uf?.trim();
 
@@ -1321,7 +1534,7 @@ class _MapPageState extends State<MapPage> {
         _erroMunicipios =
             'A distribuidora selecionada não possui UF cadastrada.';
       });
-      return;
+      return null;
     }
 
     setState(() {
@@ -1332,17 +1545,18 @@ class _MapPageState extends State<MapPage> {
 
     try {
       final municipios = await _ativosService.getMunicipios(
-        distribuidora: distribuidora.nome,
+        distribuidora: filtrarPorDistribuidora ? distribuidora.nome : null,
         uf: uf,
       );
-      if (!mounted || sequencia != _sequenciaMunicipios) return;
+      if (!mounted || sequencia != _sequenciaMunicipios) return null;
 
       setState(() {
         _municipios = municipios;
         _carregandoMunicipios.value = false;
       });
+      return municipios;
     } catch (error, stackTrace) {
-      if (!mounted || sequencia != _sequenciaMunicipios) return;
+      if (!mounted || sequencia != _sequenciaMunicipios) return null;
 
       debugPrint('Falha ao carregar municípios: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -1351,6 +1565,7 @@ class _MapPageState extends State<MapPage> {
         _carregandoMunicipios.value = false;
         _erroMunicipios = 'Não foi possível carregar os municípios: $error';
       });
+      return null;
     }
   }
 
