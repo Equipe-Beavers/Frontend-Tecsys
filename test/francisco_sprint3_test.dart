@@ -85,7 +85,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'Jac');await tester.pump();
     expect(find.text('Jacareí'), findsOneWidget);
   });
-  testWidgets('gateway sem ID BDGD também tem seta e não há custo nem legenda removida', (tester) async {
+  testWidgets('gateway sem ID BDGD tem seta e legenda de ativos não cobertos sem custo', (tester) async {
     final gateway = GatewayProposto(idEstudoPonto: 1, idAtivoBdgd: null, rotulo: 'Manual', latitude: -23, longitude: -45, quantidadeAtendidos: 0, atributos: const {}, atendidos: const []);
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: Column(children: [
       GatewayRecommendationCard(gateway: gateway, onTap: () {}),
@@ -94,7 +94,7 @@ void main() {
     ]))));
     expect(find.byIcon(Icons.chevron_right), findsOneWidget);
     expect(find.textContaining('CUSTO'), findsNothing);
-    expect(find.text('Sem cobertura'), findsNothing);
+    expect(find.text('Ativo não coberto'), findsOneWidget);
   });
   testWidgets('área pequena e falha da contagem exibem unidade e ação corretas', (tester) async {
     var retry = false;

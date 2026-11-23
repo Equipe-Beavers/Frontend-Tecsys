@@ -19,6 +19,34 @@ import 'package:frontend_tecsys/widgets/recommendation/recommendation_result_pan
 
 void main() {
   for (final size in [const Size(390, 844), const Size(1440, 900)]) {
+    testWidgets('cenário único não oferece seleção de alternativas em $size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository = _FakeRecommendationRepository();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecomendacaoResultadoPage(
+            idEstudo: 27,
+            idPerfilRf: 8,
+            repository: repository,
+            showBaseMap: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(RecommendationMap), findsOneWidget);
+      expect(find.byKey(const ValueKey('keep-scenario')), findsNothing);
+      expect(find.text('Manter este cenário'), findsNothing);
+      expect(find.text('Ativo não coberto'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final size in [const Size(390, 844), const Size(1440, 900)]) {
     testWidgets('loading do estudo reutiliza visual de autenticação em $size', (
       tester,
     ) async {
@@ -166,11 +194,28 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('scenario-tab-1003')));
     await tester.tap(find.byKey(const ValueKey('scenario-tab-1003')));
     await tester.pumpAndSettle();
+    final keptCheck = find.descendant(
+      of: find.byKey(const ValueKey('scenario-tab-1003')),
+      matching: find.byIcon(Icons.check),
+    );
+    expect(keptCheck, findsNothing);
     await tester.tap(find.byKey(const ValueKey('keep-scenario')));
     await tester.pumpAndSettle();
     expect(repository.selectedId, 1003);
     expect(find.text('Cenário mantido no estudo'), findsOneWidget);
+    expect(keptCheck, findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('scenario-tab-1001')));
+    await tester.pumpAndSettle();
+    expect(keptCheck, findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('scenario-tab-1001')),
+        matching: find.byIcon(Icons.check),
+      ),
+      findsNothing,
+    );
     await open('reopened');
+    expect(keptCheck, findsOneWidget);
     expect(
       tester
           .widget<RecommendationResultPanel>(
@@ -181,6 +226,23 @@ void main() {
       1003,
     );
     expect(repository.loadCount, 2);
+  });
+
+  testWidgets('dois resultados permitem manter um cenário', (tester) async {
+    final repository = _ScenarioRepository();
+    repository.scenarios.removeRange(2, repository.scenarios.length);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecomendacaoResultadoPage(
+          idEstudo: 1,
+          idPerfilRf: 1,
+          repository: repository,
+          showBaseMap: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('keep-scenario')), findsOneWidget);
   });
 
   testWidgets('selection failures do not mark a scenario as kept', (

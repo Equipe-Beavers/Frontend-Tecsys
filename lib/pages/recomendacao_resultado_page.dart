@@ -209,6 +209,9 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
                                         : scenario.name,
                                     selected:
                                         scenario.idCenario == result.idCenario,
+                                    kept:
+                                        scenario.idCenario ==
+                                        _selectedScenarioId,
                                     onTap: () {
                                       final active = group.scenarios.firstWhere(
                                         (item) =>
@@ -272,7 +275,8 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
                           ),
                         ),
                       ),
-                      if (widget.resultadoInicial == null)
+                      if (widget.resultadoInicial == null &&
+                          group.scenarios.length > 1)
                         SafeArea(
                           top: false,
                           minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -472,17 +476,21 @@ class _ScenarioTab extends StatelessWidget {
     super.key,
     required this.label,
     required this.selected,
+    required this.kept,
     required this.onTap,
   });
 
   final String label;
   final bool selected;
+  final bool kept;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     selected: selected,
+    label: kept ? '$label, cenário mantido no estudo' : label,
+    excludeSemantics: true,
     child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(9),
@@ -493,13 +501,26 @@ class _ScenarioTab extends StatelessWidget {
           borderRadius: BorderRadius.circular(9),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? AppColors.textDark : AppColors.textMuted,
-            fontSize: 11,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (kept) ...[
+              Icon(
+                Icons.check,
+                size: 16,
+                color: selected ? AppColors.textDark : AppColors.primaryLime,
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? AppColors.textDark : AppColors.textMuted,
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
         ),
       ),
     ),
