@@ -40,7 +40,7 @@ class LayerFilterModal extends StatefulWidget {
     required ValueChanged<bool> onSalvarVegetacao,
     required ValueChanged<bool> onSalvarAntenas,
     bool edificacoesAtivas = false,
-    ValueChanged<bool>? onSalvarEdificacoes, required bool relevoAtivo,
+    ValueChanged<bool>? onSalvarEdificacoes,
   }) {
     return showModalBottomSheet(
       context: context,
