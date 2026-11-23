@@ -1,24 +1,23 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import '../config/api_config.dart';
+
 import 'package:frontend_tecsys/models/mancha_cenario.dart';
 import 'package:http/http.dart' as http;
 
-class ManchaCenarioService {
+abstract interface class ScenarioCoverageRepository {
+  Future<ManchaCenario> getManchaCenario(int idCenario);
+}
+
+class ManchaCenarioService implements ScenarioCoverageRepository {
   ManchaCenarioService({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrl =
-          baseUrl ??
-          const String.fromEnvironment(
-            'API_BASE_URL',
-            defaultValue: kIsWeb
-                ? 'http://localhost:3000'
-                : 'http://10.0.2.2:3000',
-          );
+      _baseUrl = ApiConfig.resolve(baseUrl);
 
   final http.Client _client;
   final String _baseUrl;
 
+  @override
   Future<ManchaCenario> getManchaCenario(int idCenario) async {
     final response = await _client
         .get(Uri.parse('$_baseUrl/get-scenario-coverage/$idCenario'))

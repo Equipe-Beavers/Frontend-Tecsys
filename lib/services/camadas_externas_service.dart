@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart';
+import '../config/api_config.dart';
+
 import 'package:frontend_tecsys/models/vegetacao_config.dart';
 import 'package:frontend_tecsys/services/antenas_service.dart';
 import 'package:frontend_tecsys/services/vegetacao_service.dart';
@@ -8,14 +9,8 @@ export 'antenas_service.dart' show AntenasResult;
 
 class CamadasExternasService {
   CamadasExternasService({http.Client? client, String? baseUrl})
-      : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ??
-            const String.fromEnvironment(
-              'API_BASE_URL',
-              defaultValue: kIsWeb
-                  ? 'http://localhost:3000'
-                  : 'http://10.0.2.2:3000',
-            ) {
+    : _client = client ?? http.Client(),
+      _baseUrl = ApiConfig.resolve(baseUrl) {
     _antenasService = AntenasService(client: _client, baseUrl: _baseUrl);
     _vegetacaoService = VegetacaoService(client: _client, baseUrl: _baseUrl);
   }

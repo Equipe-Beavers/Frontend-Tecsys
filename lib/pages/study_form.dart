@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+
+import '../utils/study_area_format.dart';
+
+import '../widgets/auth/auth_scope.dart';
+import '../services/recomendacao_service.dart';
+import 'recomendacao_resultado_page.dart';
+
 import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/models/install_criterion.dart';
 import 'package:frontend_tecsys/services/install_criterion_service.dart';
@@ -8,6 +15,8 @@ import 'package:frontend_tecsys/services/rf_profile_service.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
+import 'package:frontend_tecsys/widgets/primary_button.dart';
+import 'package:frontend_tecsys/widgets/secondary_button.dart';
 import 'package:latlong2/latlong.dart';
 
 class NovoEstudoPage extends StatefulWidget {
@@ -21,6 +30,7 @@ class NovoEstudoPage extends StatefulWidget {
   final InstallCriterionService? criterionService;
   final RFProfileService? rfProfileService;
   final EstudosService? studyService;
+  final RecommendationRepository? recommendationRepository;
   final int userId;
   final Map<String, dynamic>? study;
 
@@ -36,8 +46,9 @@ class NovoEstudoPage extends StatefulWidget {
     this.criterionService,
     this.rfProfileService,
     this.studyService,
+    this.recommendationRepository,
     this.study,
-    this.userId = const int.fromEnvironment('APP_USER_ID', defaultValue: 1),
+    required this.userId,
   });
 
   @override
@@ -45,10 +56,8 @@ class NovoEstudoPage extends StatefulWidget {
 }
 
 class _NovoEstudoPageState extends State<NovoEstudoPage> {
-  late final EstudosService _estudosService =
-      widget.studyService ?? EstudosService();
-  late final RFProfileService _rfProfileService =
-      widget.rfProfileService ?? RFProfileService();
+  late final EstudosService _estudosService;
+  late final RFProfileService _rfProfileService;
   final _formKey = GlobalKey<FormState>();
   late final _nomeController = TextEditingController(
     text: widget.study?['nome']?.toString(),
@@ -70,18 +79,28 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   bool _loadingRfProfiles = false;
   bool _loadingCriteria = false;
   InstallCriterion? _criterioSelecionado;
-  late final InstallCriterionService _criterionService =
-      widget.criterionService ?? InstallCriterionService();
+  late final InstallCriterionService _criterionService;
   bool _salvando = false;
   bool _loadingSelections = false;
   int? _idEstudoCriado;
   final Set<int> _pontosSalvos = {};
 
   bool get _isEditing => widget.study != null;
+  bool get _saveDisabled =>
+      _salvando || _loadingRfProfiles || _loadingCriteria || _loadingSelections;
 
   @override
   void initState() {
     super.initState();
+    _estudosService =
+        widget.studyService ??
+        EstudosService(client: AuthScope.clientOf(context));
+    _rfProfileService =
+        widget.rfProfileService ??
+        RFProfileService(client: AuthScope.clientOf(context));
+    _criterionService =
+        widget.criterionService ??
+        InstallCriterionService(client: AuthScope.clientOf(context));
     if (_isEditing) _loadSelections();
   }
 
@@ -140,7 +159,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     }
     if (widget.pontosArea.isEmpty) return 'Área não definida';
     final local = widget.municipio ?? widget.distribuidora;
-    return '$local · ${_formatarNumero(widget.areaKm2)} km²';
+    return '$local · ${formatStudyArea(widget.areaKm2)}';
   }
 
   Future<void> _selectRfProfile() async {
@@ -369,7 +388,28 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
         }
       }
       if (!mounted) return;
-      Navigator.pop(context, true);
+      if (_isEditing) {
+        Navigator.pop(context, true);
+      } else {
+        Navigator.pushReplacement<bool, bool>(
+          context,
+          MaterialPageRoute<bool>(
+            builder: (_) => RecomendacaoResultadoPage(
+              idEstudo: _idEstudoCriado!,
+              idPerfilRf: _selectedRfProfile!.id,
+              idCriterioInstalacao: _criterioSelecionado!.id,
+              titulo: _nomeController.text.trim(),
+              subtitulo: [
+                _textoOuNulo(_cidadeController),
+                _textoOuNulo(_bairroController),
+                _textoOuNulo(_estadoController)?.toUpperCase(),
+              ].whereType<String>().join(' · '),
+              repository: widget.recommendationRepository,
+            ),
+          ),
+          result: true,
+        );
+      }
     } catch (erro) {
       if (!mounted) return;
       setState(() => _salvando = false);
@@ -387,6 +427,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final desktop = MediaQuery.sizeOf(context).width >= 760;
     return Scaffold(
       backgroundColor: AppColors.surfaceBackground,
       body: SafeArea(
@@ -394,7 +435,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           key: _formKey,
           child: Column(
             children: [
-              _buildCabecalho(),
+              _buildCabecalho(desktop),
               if (_loadingSelections)
                 const LinearProgressIndicator(color: AppColors.primaryLime),
               Expanded(
@@ -511,8 +552,6 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                             _buildDetalhe(
                               'Escolha um critério cadastrado na Biblioteca.',
                             ),
-                          if (_criterioSelecionado?.requiresPower == true)
-                            _buildEtiqueta('Requer alimentação'),
                           if (_criterioSelecionado?.maxDistanceMeters != null)
                             _buildEtiqueta(
                               'Dist. máx. ${_formatarNumero(_criterioSelecionado!.maxDistanceMeters!)} m',
@@ -526,11 +565,10 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    _buildRotulo('ATIVOS A COBRIR'),
                   ],
                 ),
               ),
-              _buildRodape(),
+              if (!desktop) _buildRodape(),
             ],
           ),
         ),
@@ -538,26 +576,25 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
     );
   }
 
-  Widget _buildCabecalho() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 20, 8),
+  Widget _buildCabecalho(bool desktop) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
       child: Row(
         children: [
           IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(
-              Icons.arrow_back_ios_new,
-              color: AppColors.textWhite,
-              size: 18,
-            ),
+            onPressed: _salvando ? null : () => Navigator.pop(context),
+            tooltip: 'Voltar',
+            icon: const Icon(Icons.arrow_back, size: 20),
           ),
           Expanded(
             child: Text(
               _isEditing ? 'Editar estudo' : 'Novo estudo',
               style: const TextStyle(
                 color: AppColors.textWhite,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -569,7 +606,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: const Text(
-                'PASSO 4 DE 4',
+                'PASSO 5 DE 5',
                 style: TextStyle(
                   color: AppColors.textDark,
                   fontSize: 10,
@@ -578,6 +615,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
                 ),
               ),
             ),
+          if (desktop) ...[const SizedBox(width: 12), _buildAcoes()],
         ],
       ),
     );
@@ -781,54 +819,44 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
 
   Widget _buildRodape() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
       decoration: const BoxDecoration(
         color: AppColors.surfaceCard,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed:
-              _salvando ||
-                  _loadingRfProfiles ||
-                  _loadingCriteria ||
-                  _loadingSelections
-              ? null
-              : _criarEstudo,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryLime,
-            foregroundColor: AppColors.textDark,
-            disabledBackgroundColor: AppColors.primaryLime.withValues(
-              alpha: 0.6,
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 17),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: _salvando
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.textDark,
-                  ),
-                )
-              : Text(
-                  _isEditing
-                      ? 'Salvar alterações'
-                      : _idEstudoCriado == null
-                      ? 'Criar estudo e simular'
-                      : 'Continuar salvamento',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(child: _buildCancelar()),
+            const SizedBox(width: 8),
+            Expanded(child: _buildSalvar()),
+          ],
         ),
       ),
     );
   }
+
+  Widget _buildAcoes() => Wrap(
+    crossAxisAlignment: WrapCrossAlignment.center,
+    runSpacing: 8,
+    children: [_buildCancelar(), const SizedBox(width: 12), _buildSalvar()],
+  );
+
+  Widget _buildCancelar() => SecondaryButton(
+    label: 'Cancelar',
+    onPressed: _salvando ? null : () => Navigator.pop(context),
+  );
+
+  Widget _buildSalvar() => PrimaryButton(
+    label: _salvando
+        ? 'Salvando...'
+        : _isEditing
+        ? 'Salvar alterações'
+        : _idEstudoCriado == null
+        ? 'Criar estudo e simular'
+        : 'Continuar salvamento',
+    onPressed: _saveDisabled ? null : _criarEstudo,
+  );
 }

@@ -1,21 +1,26 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
-import 'package:frontend_tecsys/services/recomendacao_service.dart';
-import 'package:frontend_tecsys/theme/app_colors.dart';
-import 'package:frontend_tecsys/models/ativo_bdgd.dart';
-import 'package:frontend_tecsys/widgets/mancha_cobertura_mapa.dart';
+
+import '../widgets/auth/auth_scope.dart';
+import '../widgets/branded_loading_screen.dart';
+
+import '../models/mancha_cenario.dart';
+import '../models/recomendacao_resultado.dart';
+import '../services/mancha_cenario_service.dart';
+import '../services/exportacao_service.dart';
+import '../services/file_download_service.dart';
+import '../services/recomendacao_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/recommendation/export_results_button.dart';
+import '../widgets/recommendation/map_snapshot_controller.dart';
+import '../widgets/recommendation/recommendation_result_panel.dart';
+import '../widgets/recommendation/scenario_map_capture.dart';
+import '../widgets/recommendation_map.dart';
+import 'gateway_detail_page.dart';
 
 class RecomendacaoResultadoPage extends StatefulWidget {
-  final int idEstudo;
-  final int idPerfilRf;
-  final int? idCriterioInstalacao;
-
-  final String? titulo;
-  final String? subtitulo;
-
-
-  final ResultadoRecomendacao? resultadoInicial;
-
   const RecomendacaoResultadoPage({
     super.key,
     required this.idEstudo,
@@ -23,368 +28,512 @@ class RecomendacaoResultadoPage extends StatefulWidget {
     this.idCriterioInstalacao,
     this.titulo,
     this.subtitulo,
-
     this.resultadoInicial,
+    this.showBaseMap = true,
+    this.repository,
+    this.coverageRepository,
+    this.exportRepository,
+    this.fileDownloader,
   });
+
+  final int idEstudo;
+  final int idPerfilRf;
+  final int? idCriterioInstalacao;
+  final String? titulo;
+  final String? subtitulo;
+  final ResultadoRecomendacao? resultadoInicial;
+  final bool showBaseMap;
+  final RecommendationRepository? repository;
+  final ScenarioCoverageRepository? coverageRepository;
+
+  final StudyExportRepository? exportRepository;
+  final FileDownloader? fileDownloader;
 
   @override
   State<RecomendacaoResultadoPage> createState() =>
       _RecomendacaoResultadoPageState();
 }
 
-class _RecomendacaoResultadoPageState
-    extends State<RecomendacaoResultadoPage> {
-  final _service = RecomendacaoService();
-  late Future<ResultadoRecomendacao> _futureResultado;
+class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
+  late final RecommendationRepository _repository;
+  RecomendacaoService? _ownedService;
+  ManchaCenarioService? _ownedCoverageService;
+  late Future<RecommendationScenarios> _futureScenarios;
+  final Map<int, ManchaCenario> _coverageByScenario = {};
+  final _mapSnapshot = MapSnapshotController();
+  final _scenarioCapture = ScenarioMapCaptureController();
+  int? _activeScenarioId;
+  int? _selectedScenarioId;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-  
-    if (widget.resultadoInicial != null) {
-      _futureResultado = Future.value(widget.resultadoInicial);
-    } else {
-      _futureResultado = _service.gerarRecomendacao(
-        idEstudo: widget.idEstudo,
-        idPerfilRf: widget.idPerfilRf,
-        idCriterioInstalacao: widget.idCriterioInstalacao,
-      );
+    _ownedService = widget.repository == null
+        ? RecomendacaoService(client: AuthScope.clientOf(context))
+        : null;
+    _repository = widget.repository ?? _ownedService!;
+    final shouldLoadCoverage =
+        widget.coverageRepository != null ||
+        (widget.resultadoInicial == null && widget.repository == null);
+    if (shouldLoadCoverage) {
+      _ownedCoverageService = widget.coverageRepository == null
+          ? ManchaCenarioService(client: AuthScope.clientOf(context))
+          : null;
+    }
+    _futureScenarios = _loadScenarios();
+  }
+
+  Future<RecommendationScenarios> _loadScenarios() async {
+    final initial = widget.resultadoInicial;
+    final group = initial != null
+        ? RecommendationScenarios(scenarios: [initial])
+        : await _repository.loadScenarios(
+            studyId: widget.idEstudo,
+            profileId: widget.idPerfilRf,
+            criterionId: widget.idCriterioInstalacao,
+          );
+    if (group.scenarios.isEmpty) {
+      throw StateError('Nenhum cenário disponível para este estudo.');
+    }
+    if (!mounted) return group;
+    _selectedScenarioId = group.selectedScenarioId;
+    final active = group.scenarios.firstWhere(
+      (scenario) => scenario.idCenario == group.selectedScenarioId,
+      orElse: () => group.scenarios.first,
+    );
+    _activeScenarioId = active.idCenario;
+    unawaited(_loadScenarioCoverage(active));
+    return group;
+  }
+
+  Future<void> _loadScenarioCoverage(ResultadoRecomendacao result) async {
+    final repository = widget.coverageRepository ?? _ownedCoverageService;
+    if (repository == null ||
+        _coverageByScenario.containsKey(result.idCenario)) {
+      return;
+    }
+    try {
+      final coverage = await repository.getManchaCenario(result.idCenario);
+      if (!mounted) return;
+      setState(() => _coverageByScenario[result.idCenario] = coverage);
+    } on Object {
+      // A recomendacao continua utilizavel quando a mancha ainda nao existe.
     }
   }
 
   @override
   void dispose() {
-    _service.dispose();
+    _ownedService?.dispose();
+    _ownedCoverageService?.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surfaceBackground,
-      appBar: AppBar(
-        backgroundColor: AppColors.surfaceBackground,
-        elevation: 0,
-        leading: const BackButton(color: AppColors.textWhite),
-        title: Text(
-          widget.titulo ?? 'Resultado da recomendação',
-          style: const TextStyle(color: AppColors.textWhite, fontSize: 16),
+  Future<Map<int, Uint8List>> _captureOtherScenarioMaps(
+    RecommendationScenarios group,
+    ResultadoRecomendacao visible,
+    Uint8List? imagemVisivel,
+  ) => OtherScenarioMapsCollector(capturar: _scenarioCapture.capturar).coletar(
+    cenarios: [
+      for (final scenario in group.scenarios)
+        ScenarioMapData.fromResult(
+          scenario,
+          coverage:
+              _coverageByScenario[scenario.idCenario]?.gateways ?? const [],
         ),
-      ),
-      body: FutureBuilder<ResultadoRecomendacao>(
-        future: _futureResultado,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildCarregando();
-          }
-          if (snapshot.hasError) {
-            return _buildErro(snapshot.error.toString());
-          }
-          return _buildConteudo(snapshot.data!);
-        },
+    ],
+    idCenarioVisivel: visible.idCenario,
+    imagemVisivel: imagemVisivel,
+  );
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<RecommendationScenarios>(
+    future: _futureScenarios,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const BrandedLoadingScreen(
+          message: 'Calculando a recomendação de cobertura...',
+        );
+      }
+      return Scaffold(
+        backgroundColor: AppColors.surfaceBackground,
+        appBar: AppBar(
+          backgroundColor: AppColors.surfaceBackground,
+          elevation: 0,
+          leading: const BackButton(color: AppColors.textWhite),
+          title: Text(
+            widget.titulo ?? 'Resultado da recomendação',
+            style: const TextStyle(color: AppColors.textWhite, fontSize: 16),
+          ),
+        ),
+        body: snapshot.hasError
+            ? _RecommendationError(
+                message: snapshot.error.toString(),
+                onRetry: () =>
+                    setState(() => _futureScenarios = _loadScenarios()),
+              )
+            : Builder(
+                builder: (context) {
+                  final group = snapshot.data!;
+                  final result = group.scenarios.firstWhere(
+                    (scenario) => scenario.idCenario == _activeScenarioId,
+                    orElse: () => group.scenarios.first,
+                  );
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (group.scenarios.length > 1)
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.navBarBackground,
+                              border: Border.all(color: AppColors.border),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (final scenario in group.scenarios)
+                                  _ScenarioTab(
+                                    key: ValueKey(
+                                      'scenario-tab-${scenario.idCenario}',
+                                    ),
+                                    label: scenario.optimized
+                                        ? 'Otimizada'
+                                        : scenario.name,
+                                    selected:
+                                        scenario.idCenario == result.idCenario,
+                                    onTap: () {
+                                      final active = group.scenarios.firstWhere(
+                                        (item) =>
+                                            item.idCenario ==
+                                            scenario.idCenario,
+                                      );
+                                      setState(
+                                        () => _activeScenarioId =
+                                            active.idCenario,
+                                      );
+                                      unawaited(_loadScenarioCoverage(active));
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (group.warning != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 6,
+                          ),
+                          child: Text(
+                            group.warning!,
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: _RecommendationContent(
+                          key: ValueKey('scenario-content-${result.idCenario}'),
+                          result: result,
+                          subtitle: widget.subtitulo,
+                          showBaseMap: widget.showBaseMap,
+                          scenarioCoverage:
+                              _coverageByScenario[result.idCenario]?.gateways ??
+                              const [],
+                          onGatewayTap: (gateway) =>
+                              _openGateway(result, gateway),
+                          snapshotController: _mapSnapshot,
+                          scenarioCaptureHost: ScenarioMapCaptureHost(
+                            controller: _scenarioCapture,
+                            showBaseMap: widget.showBaseMap,
+                          ),
+                          exportButton: ExportResultsButton(
+                            idEstudo: widget.idEstudo,
+                            idCenario: result.idCenario,
+                            snapshotController: _mapSnapshot,
+                            capturarOutrosMapas: group.scenarios.length > 1
+                                ? (imagem) => _captureOtherScenarioMaps(
+                                    group,
+                                    result,
+                                    imagem,
+                                  )
+                                : null,
+                            repository: widget.exportRepository,
+                            downloader: widget.fileDownloader,
+                          ),
+                        ),
+                      ),
+                      if (widget.resultadoInicial == null)
+                        SafeArea(
+                          top: false,
+                          minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton.icon(
+                              key: const ValueKey('keep-scenario'),
+                              onPressed:
+                                  _saving ||
+                                      result.idCenario == _selectedScenarioId
+                                  ? null
+                                  : () => _selectScenario(result),
+                              icon: Icon(
+                                result.idCenario == _selectedScenarioId
+                                    ? Icons.check_circle
+                                    : Icons.check,
+                              ),
+                              label: Text(
+                                _saving
+                                    ? 'Salvando...'
+                                    : result.idCenario == _selectedScenarioId
+                                    ? 'Cenário mantido no estudo'
+                                    : 'Manter este cenário',
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+      );
+    },
+  );
+
+  Future<void> _selectScenario(ResultadoRecomendacao result) async {
+    setState(() => _saving = true);
+    try {
+      await _repository.selectScenario(
+        studyId: widget.idEstudo,
+        scenarioId: result.idCenario,
+      );
+      if (!mounted) return;
+      setState(() => _selectedScenarioId = result.idCenario);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${result.name} mantida no estudo.')),
+      );
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível manter o cenário. Tente novamente.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _openGateway(ResultadoRecomendacao result, GatewayProposto gateway) {
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GatewayDetailPage(
+          gateway: gateway,
+          assets: result.ativosMapa,
+          scenarioCoverage:
+              _coverageByScenario[result.idCenario]?.gateways
+                  .where(
+                    (coverage) =>
+                        coverage.idEstudoPonto == gateway.idEstudoPonto,
+                  )
+                  .toList() ??
+              const [],
+          studyTitle: widget.titulo,
+          showBaseMap: widget.showBaseMap,
+        ),
       ),
     );
   }
+}
 
-  Widget _buildCarregando() {
-    return const Center(
+class _RecommendationContent extends StatelessWidget {
+  const _RecommendationContent({
+    super.key,
+    required this.result,
+    required this.showBaseMap,
+    required this.scenarioCoverage,
+    required this.onGatewayTap,
+    required this.snapshotController,
+    required this.scenarioCaptureHost,
+    required this.exportButton,
+    this.subtitle,
+  });
+
+  final ResultadoRecomendacao result;
+  final bool showBaseMap;
+  final List<ManchaGatewayCenario> scenarioCoverage;
+  final ValueChanged<GatewayProposto> onGatewayTap;
+  final MapSnapshotController snapshotController;
+  final Widget scenarioCaptureHost;
+  final Widget exportButton;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final desktop = constraints.maxWidth >= 900;
+      final map = Stack(
+        children: [
+          Positioned.fill(child: scenarioCaptureHost),
+          Positioned.fill(
+            child: RecommendationMap(
+              gateways: result.gateways,
+              assets: result.ativosMapa,
+              scenarioCoverage: scenarioCoverage,
+              onGatewayTap: onGatewayTap,
+              showBaseMap: showBaseMap,
+              snapshotController: snapshotController,
+            ),
+          ),
+        ],
+      );
+      final summary = RecommendationResultPanel(
+        scrollable: desktop,
+        result: result,
+        subtitle: subtitle,
+        onGatewayTap: onGatewayTap,
+      );
+
+      if (desktop) {
+        return Row(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 0, 14),
+                child: map,
+              ),
+            ),
+            SizedBox(
+              width: 390,
+              child: Column(
+                children: [
+                  Expanded(child: summary),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: exportButton,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      }
+      return SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                key: const ValueKey('mobile-recommendation-scroll'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                      child: SizedBox(
+                        height: (constraints.maxHeight * .43).clamp(
+                          280.0,
+                          360.0,
+                        ),
+                        child: map,
+                      ),
+                    ),
+                    summary,
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              decoration: const BoxDecoration(
+                color: AppColors.surfaceBackground,
+                border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+              ),
+              child: exportButton,
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+class _ScenarioTab extends StatelessWidget {
+  const _ScenarioTab({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primaryLime : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? AppColors.textDark : AppColors.textMuted,
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _RecommendationError extends StatelessWidget {
+  const _RecommendationError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(color: AppColors.primaryLime),
-          SizedBox(height: 16),
-          Text(
-            'Calculando a recomendação de cobertura...',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErro(String mensagem) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, color: AppColors.textMuted, size: 32),
-            const SizedBox(height: 12),
-            Text(
-              'Não foi possível gerar a recomendação.\n$mensagem',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConteudo(ResultadoRecomendacao r) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      children: [
-        if (widget.subtitulo != null) ...[
-          Text(
-            widget.subtitulo!.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
+          const Icon(Icons.error_outline, color: AppColors.textMuted, size: 32),
           const SizedBox(height: 12),
-        ],
-        _buildKpis(r),
-        ManchaCoberturaMapa(idCenario: r.idCenario),
-        const SizedBox(height: 20),
-        _buildCoberturaGeral(r),
-        if (r.porCategoria.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          _buildPorCategoria(r),
-        ],
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Gateways propostos',
-              style: TextStyle(
-                color: AppColors.textWhite,
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              '${r.gateways.length} de ${r.quantidadeGateways}',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        ...r.gateways.map(_buildGatewayCard),
-      ],
-    );
-  }
-
-  Widget _buildKpis(ResultadoRecomendacao r) {
-    return Row(
-      children: [
-        Expanded(
-          child: _kpiCard(
-            'Cobertura',
-            '${r.percentualCobertura}%',
-            AppColors.primaryLime,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _kpiCard(
-            'Gateways',
-            '${r.quantidadeGateways}',
-            AppColors.secondaryTeal,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _kpiCard(
-            'Custo Total',
-            'R\$ ${_formatarValor(r.custoTotalEstimado)}',
-            AppColors.layerChaveFusivel, 
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _formatarValor(double valor) {
-    if (valor >= 1000000) return '${(valor / 1000000).toStringAsFixed(1)}M';
-    if (valor >= 1000) return '${(valor / 1000).toStringAsFixed(1)}K';
-    return valor.toStringAsFixed(0);
-  }
-
-  Widget _kpiCard(String label, String valor, Color corValor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border, width: 1),
-      ),
-      child: Column(
-        children: [
           Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.4,
-            ),
+            'Não foi possível gerar a recomendação.\n\n$message',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 6),
-          Text(
-            valor,
-            style: TextStyle(
-              color: corValor,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Tentar novamente'),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCoberturaGeral(ResultadoRecomendacao r) {
-    final progresso =
-        r.pontosInteresse > 0 ? r.pontosCobertos / r.pontosInteresse : 0.0;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Ativos elétricos cobertos',
-                style: TextStyle(color: AppColors.textWhite, fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-              Text(
-                '${r.pontosCobertos} de ${r.pontosInteresse}',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: progresso.clamp(0.0, 1.0),
-              minHeight: 8,
-              backgroundColor: AppColors.border,
-              valueColor: const AlwaysStoppedAnimation(AppColors.primaryLime),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPorCategoria(ResultadoRecomendacao r) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border, width: 1),
-      ),
-      child: Column(
-        children: [
-          for (int i = 0; i < r.porCategoria.length; i++)
-            _buildLinhaCategoria(r.porCategoria[i], i != r.porCategoria.length - 1),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLinhaCategoria(CategoriaCobertura c, bool mostrarDivisor) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(c.tipo.icone, color: c.tipo.cor, size: 16),
-                  const SizedBox(width: 8),
-                  Text(c.tipo.label, style: const TextStyle(color: AppColors.textWhite, fontSize: 13)),
-                ],
-              ),
-              Row(
-                children: [
-                  Text(
-                    '${c.cobertos}',
-                    style: const TextStyle(color: AppColors.textWhite, fontSize: 13, fontWeight: FontWeight.bold),
-                  ),
-                  if (c.naoCobertos > 0)
-                    Text(
-                      ' / ${c.naoCobertos} sem cobertura',
-                      style: const TextStyle(color: AppColors.layerChaveFusivel, fontSize: 12),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        if (mostrarDivisor) const Divider(color: AppColors.borderSubtle, height: 1),
-      ],
-    );
-  }
-
-  Widget _buildGatewayCard(GatewayProposto g) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                g.rotulo ?? 'Gateway ${g.idEstudoPonto}',
-                style: const TextStyle(color: AppColors.textWhite, fontSize: 14, fontWeight: FontWeight.bold),
-              ),
-              if (g.idAtivoBdgd != null)
-                Text(
-                  g.idAtivoBdgd!,
-                  style: const TextStyle(color: AppColors.secondaryTeal, fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _linhaAtributo('Coordenadas', '${g.latitude.toStringAsFixed(4)}, ${g.longitude.toStringAsFixed(4)}'),
-          if (g.descricaoAtivo != null) _linhaAtributo('Ativo elétrico', g.descricaoAtivo!),
-          if (g.alimentador != null) _linhaAtributo('Alimentador', g.alimentador!),
-          _linhaAtributo('Atende', '${g.quantidadeAtendidos} ativo(s)'),
-        ],
-      ),
-    );
-  }
-
-  Widget _linhaAtributo(String rotulo, String valor) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(rotulo, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-          Flexible(
-            child: Text(
-              valor,
-              textAlign: TextAlign.right,
-              style: const TextStyle(color: AppColors.textWhite, fontSize: 12, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    ),
+  );
 }

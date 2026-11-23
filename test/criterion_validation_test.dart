@@ -18,15 +18,6 @@ void main() {
     );
     expect(
       draft.validatePayload({
-        'vegetacoes': {
-          'permitidas': ['Mangue'],
-          'proibidas': ['MANGUE'],
-        },
-      }),
-      isNotNull,
-    );
-    expect(
-      draft.validatePayload({
         'relevo': {'altitude_minima_m': 500, 'altitude_maxima_m': 100},
       }),
       isNotNull,

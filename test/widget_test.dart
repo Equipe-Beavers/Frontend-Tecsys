@@ -6,6 +6,29 @@ import 'package:frontend_tecsys/widgets/asset_detail_sheet.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_modal.dart';
 import 'package:frontend_tecsys/widgets/navbar.dart';
 import 'package:frontend_tecsys/main.dart';
+import 'package:frontend_tecsys/controllers/auth_controller.dart';
+import 'package:frontend_tecsys/services/auth_service.dart';
+import 'package:http/testing.dart';
+import 'package:http/http.dart' as http;
+
+Future<AuthController> signedInController() async {
+  final service = AuthService(
+    client: MockClient(
+      (_) async => http.Response(
+        '{"access_token":"test-token","usuario":{"id_usuario":17,"username":"Teste","email":"teste@example.com"}}',
+        200,
+      ),
+    ),
+  );
+  final controller = AuthController(service: service);
+  addTearDown(controller.dispose);
+  addTearDown(service.dispose);
+  await controller.login(
+    email: 'teste@example.com',
+    password: 'Senha de teste!',
+  );
+  return controller;
+}
 
 void main() {
   testWidgets('menu lateral desktop possui Material para seleção e toque', (
@@ -16,13 +39,46 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(MyApp(authController: AuthController()));
     await tester.pump();
 
     expect(find.byType(ListTile), findsNWidgets(4));
     for (final tile in tester.widgetList<ListTile>(find.byType(ListTile))) {
       expect(tile.selectedTileColor, isNotNull);
     }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mantém estudos montado ao alternar entre mobile e desktop', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(440, 956);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final auth = await signedInController();
+    await tester.pumpWidget(MyApp(authController: auth));
+    expect(find.byType(Navbar), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
+    await tester.tap(
+      find.descendant(of: find.byType(Navbar), matching: find.text('Estudos')),
+    );
+    await tester.pump();
+    expect(find.text('Buscar estudos'), findsOneWidget);
+
+    tester.view.physicalSize = const Size(1440, 956);
+    await tester.pump();
+    expect(find.text('Buscar estudos'), findsOneWidget);
+    expect(find.byType(Navbar), findsNothing);
+    expect(find.byType(ListTile), findsNWidgets(4));
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(440, 956);
+    await tester.pump();
+    expect(find.text('Buscar estudos'), findsOneWidget);
+    expect(find.byType(Navbar), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -96,6 +152,12 @@ void main() {
         home: Scaffold(
           body: LayerFilterModal(
             camadasAtivasAtuais: camadasIniciais,
+            vegetacaoAtivaAtual: false,
+            antenasAtivasAtual: false,
+            relevoAtivoAtual: false,
+            onSalvarRelevo: (_) {},
+            onSalvarVegetacao: (_) {},
+            onSalvarAntenas: (_) {},
             onSalvarFiltro: (novas) {
               camadasSalvas = novas;
             },
@@ -111,11 +173,11 @@ void main() {
     expect(find.text('REGULAÇÃO'), findsOneWidget);
     expect(find.text('EDIFICAÇÕES'), findsOneWidget);
     expect(find.text('Edifícios'), findsOneWidget);
-    expect(find.text('0 de 11 camadas ativas'), findsOneWidget);
+    expect(find.text('0 de 14 camadas ativas'), findsOneWidget);
 
     await tester.tap(find.text('Poste'));
     await tester.pump();
-    expect(find.text('1 de 11 camadas ativas'), findsOneWidget);
+    expect(find.text('1 de 14 camadas ativas'), findsOneWidget);
     expect(find.text('Salvar filtro'), findsOneWidget);
 
     // Acionar botão "Salvar filtro"

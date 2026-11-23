@@ -10,10 +10,6 @@ class RFProfile {
     this.deviceHeightM,
     this.maximumEquipment,
     this.additionalAttenuationDb,
-    required this.considersRelief,
-    required this.considersVegetation,
-    required this.considersBuildings,
-    required this.considersAntennas,
   });
 
   final int id;
@@ -26,10 +22,6 @@ class RFProfile {
   final double? deviceHeightM;
   final int? maximumEquipment;
   final double? additionalAttenuationDb;
-  final bool considersRelief;
-  final bool considersVegetation;
-  final bool considersBuildings;
-  final bool considersAntennas;
 
   factory RFProfile.fromJson(Map<String, dynamic> json) => RFProfile(
     id: _integer(json['id_perfil_rf'], required: true)!,
@@ -48,10 +40,6 @@ class RFProfile {
     deviceHeightM: _number(json['altura_dispositivo_m']),
     maximumEquipment: _integer(json['capacidade_max_equipamentos']),
     additionalAttenuationDb: _number(json['atenuacao_adicional_db']),
-    considersRelief: _boolean(json['considera_relevo'], fallback: true),
-    considersVegetation: _boolean(json['considera_vegetacao'], fallback: true),
-    considersBuildings: _boolean(json['considera_edificacoes'], fallback: true),
-    considersAntennas: _boolean(json['considera_antenas'], fallback: true),
   );
 
   static String? _string(Object? value, {bool required = false}) {
@@ -83,7 +71,4 @@ class RFProfile {
     }
     return parsed.toInt();
   }
-
-  static bool _boolean(Object? value, {required bool fallback}) =>
-      value is bool ? value : fallback;
 }

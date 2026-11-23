@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/auth/auth_scope.dart';
+
 import '../services/estudos_service.dart';
 import '../services/install_criterion_service.dart';
 import '../services/rf_profile_service.dart';
@@ -9,6 +11,7 @@ import '../widgets/library_record_card.dart';
 import '../widgets/name_filter_field.dart';
 import '../widgets/primary_button.dart';
 import 'study_form.dart';
+import 'recomendacao_resultado_page.dart';
 
 class StudiesPage extends StatefulWidget {
   const StudiesPage({
@@ -17,7 +20,7 @@ class StudiesPage extends StatefulWidget {
     this.criterionService,
     this.rfProfileService,
     this.isActive = true,
-    this.userId = const int.fromEnvironment('APP_USER_ID', defaultValue: 1),
+    required this.userId,
   });
 
   final EstudosService? service;
@@ -49,7 +52,8 @@ class _StudiesPageState extends State<StudiesPage> {
   @override
   void initState() {
     super.initState();
-    _service = widget.service ?? EstudosService();
+    _service =
+        widget.service ?? EstudosService(client: AuthScope.clientOf(context));
     _load();
   }
 
@@ -106,7 +110,7 @@ class _StudiesPageState extends State<StudiesPage> {
             studyService: _service,
             criterionService: widget.criterionService,
             rfProfileService: widget.rfProfileService,
-            userId: selected?['id_usuario'] as int? ?? widget.userId,
+            userId: widget.userId,
           ),
         ),
       );
@@ -171,6 +175,25 @@ class _StudiesPageState extends State<StudiesPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _openResult(Map<String, dynamic> study) async {
+    final id = study['id_estudo'] as int? ?? 1;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecomendacaoResultadoPage(
+          idEstudo: id,
+          idPerfilRf: study['id_perfil_rf'] as int? ?? 1,
+          idCriterioInstalacao: study['id_criterio_instalacao'] as int?,
+          titulo: study['nome']?.toString() ?? 'Resultado do estudo',
+          subtitulo: [study['municipio'], study['bairro'], study['uf']]
+              .whereType<String>()
+              .where((value) => value.trim().isNotEmpty)
+              .join(' · '),
+        ),
+      ),
+    );
   }
 
   Widget _message(IconData icon, String title, {bool retry = false}) => Center(
@@ -288,42 +311,52 @@ class _StudiesPageState extends State<StudiesPage> {
                       return SingleChildScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.all(22),
-                        child: Wrap(
-                          spacing: 16,
-                          runSpacing: 16,
-                          children: [
-                            for (final study in studies)
-                              SizedBox(
-                                width: width,
-                                child: LibraryRecordCard(
-                                  enabled: !_busy,
-                                  onTap: () => _openStudy(study),
-                                  actions: const [
-                                    LibraryRecordAction(
-                                      value: 'edit',
-                                      label: 'Editar',
-                                    ),
-                                    LibraryRecordAction(
-                                      value: 'delete',
-                                      label: 'Excluir',
-                                    ),
-                                  ],
-                                  onAction: (action) {
-                                    if (action == 'edit') {
-                                      _openStudy(study);
-                                    } else {
-                                      _deleteStudy(study);
-                                    }
-                                  },
-                                  title:
-                                      study['nome']?.toString() ?? 'Sem nome',
-                                  parameters: _parameters(study),
-                                  emptyMessage:
-                                      study['descricao']?.toString() ??
-                                      'Nenhuma informação adicional definida',
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Wrap(
+                            alignment: WrapAlignment.start,
+                            spacing: 16,
+                            runSpacing: 16,
+                            children: [
+                              for (final study in studies)
+                                SizedBox(
+                                  width: width,
+                                  child: LibraryRecordCard(
+                                    enabled: !_busy,
+                                    onTap: () => _openStudy(study),
+                                    actions: const [
+                                      LibraryRecordAction(
+                                        value: 'result',
+                                        label: 'Visualizar resultado',
+                                      ),
+                                      LibraryRecordAction(
+                                        value: 'edit',
+                                        label: 'Editar',
+                                      ),
+                                      LibraryRecordAction(
+                                        value: 'delete',
+                                        label: 'Excluir',
+                                      ),
+                                    ],
+                                    onAction: (action) {
+                                      if (action == 'result') {
+                                        _openResult(study);
+                                      } else if (action == 'edit') {
+                                        _openStudy(study);
+                                      } else {
+                                        _deleteStudy(study);
+                                      }
+                                    },
+                                    title:
+                                        study['nome']?.toString() ?? 'Sem nome',
+                                    parameters: _parameters(study),
+                                    emptyMessage:
+                                        study['descricao']?.toString() ??
+                                        'Nenhuma informação adicional definida',
+                                  ),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
                       );
                     },

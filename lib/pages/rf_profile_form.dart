@@ -12,7 +12,6 @@ import '../widgets/app_panel.dart';
 import '../widgets/form_field_wrapper.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/secondary_button.dart';
-import '../widgets/switch_field.dart';
 
 class RFProfileForm extends StatefulWidget {
   const RFProfileForm({
@@ -50,10 +49,6 @@ class _RFProfileFormState extends State<RFProfileForm> {
   late final TextEditingController _gatewayHeight;
   late final TextEditingController _deviceHeight;
   late final TextEditingController _maximumEquipment;
-  bool _considersRelief = true;
-  bool _considersVegetation = true;
-  bool _considersBuildings = true;
-  bool _considersAntennas = true;
   bool _saving = false;
   bool _dirty = false;
   bool _rangeCalculating = false;
@@ -97,10 +92,6 @@ class _RFProfileFormState extends State<RFProfileForm> {
     _maximumEquipment = TextEditingController(
       text: profile?.maximumEquipment?.toString() ?? '',
     );
-    _considersRelief = profile?.considersRelief ?? true;
-    _considersVegetation = profile?.considersVegetation ?? true;
-    _considersBuildings = profile?.considersBuildings ?? true;
-    _considersAntennas = profile?.considersAntennas ?? true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _scheduleRangeCalculation();
     });
@@ -172,10 +163,6 @@ class _RFProfileFormState extends State<RFProfileForm> {
       'altura_dispositivo_m': _optionalNumber(_deviceHeight.text),
       'capacidade_max_equipamentos': _optionalInteger(_maximumEquipment.text),
       'atenuacao_adicional_db': _optionalNumber(_additionalAttenuation.text),
-      'considera_relevo': _considersRelief,
-      'considera_vegetacao': _considersVegetation,
-      'considera_edificacoes': _considersBuildings,
-      'considera_antenas': _considersAntennas,
     };
     try {
       await widget.onSave(values);
@@ -535,50 +522,6 @@ class _RFProfileFormState extends State<RFProfileForm> {
               validator: _validateCapacity,
               unit: '',
               integer: true,
-            ),
-            const SizedBox(height: 12),
-            SwitchField(
-              label: 'Consideração de relevo',
-              value: _considersRelief,
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() {
-                      _considersRelief = value;
-                      _dirty = true;
-                    }),
-            ),
-            const SizedBox(height: 8),
-            SwitchField(
-              label: 'Consideração de vegetação',
-              value: _considersVegetation,
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() {
-                      _considersVegetation = value;
-                      _dirty = true;
-                    }),
-            ),
-            const SizedBox(height: 8),
-            SwitchField(
-              label: 'Consideração de edificações',
-              value: _considersBuildings,
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() {
-                      _considersBuildings = value;
-                      _dirty = true;
-                    }),
-            ),
-            const SizedBox(height: 8),
-            SwitchField(
-              label: 'Consideração de antenas',
-              value: _considersAntennas,
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() {
-                      _considersAntennas = value;
-                      _dirty = true;
-                    }),
             ),
           ],
         ),

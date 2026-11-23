@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/auth/auth_scope.dart';
+
 import '../models/install_criterion.dart';
 import '../models/rf_profile.dart';
 import '../services/install_criterion_service.dart';
@@ -17,7 +19,7 @@ class CriteriaLibraryPage extends StatefulWidget {
     this.service,
     this.rfProfileService,
     this.onEditingChanged,
-    this.userId = const int.fromEnvironment('APP_USER_ID', defaultValue: 1),
+    required this.userId,
   });
   final InstallCriterionService? service;
   final RFProfileService? rfProfileService;
@@ -40,8 +42,12 @@ class _CriteriaLibraryPageState extends State<CriteriaLibraryPage> {
   @override
   void initState() {
     super.initState();
-    _service = widget.service ?? InstallCriterionService();
-    _rfProfileService = widget.rfProfileService ?? RFProfileService();
+    _service =
+        widget.service ??
+        InstallCriterionService(client: AuthScope.clientOf(context));
+    _rfProfileService =
+        widget.rfProfileService ??
+        RFProfileService(client: AuthScope.clientOf(context));
   }
 
   @override

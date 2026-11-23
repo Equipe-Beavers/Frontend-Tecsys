@@ -1,6 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
+import 'package:latlong2/latlong.dart';
+
+import '../config/api_config.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 
@@ -25,6 +29,21 @@ class DistribuidoraResumo {
       anoBdgd: (json['anoBdgd'] as num?)?.toInt() ?? 0,
     );
   }
+
+  factory DistribuidoraResumo.fromImportJson(Map<String, dynamic> json) {
+    final idValue = json['id_distribuidora'];
+    final id = idValue is num ? idValue.toInt() : int.tryParse('$idValue');
+    final nome = json['nome']?.toString().trim() ?? '';
+    final uf = json['uf']?.toString().trim();
+
+    if (id == null || id <= 0 || nome.isEmpty || uf == null || uf.isEmpty) {
+      throw const FormatException(
+        'A resposta da importação não contém id, nome e UF da distribuidora.',
+      );
+    }
+
+    return DistribuidoraResumo(id: id, nome: nome, uf: uf, anoBdgd: 0);
+  }
 }
 
 class TipoDispositivoResumo {
@@ -48,15 +67,34 @@ class TipoDispositivoResumo {
 }
 
 class MunicipioResumo {
-  const MunicipioResumo({required this.nome, required this.uf});
+  const MunicipioResumo({
+    required this.nome,
+    required this.uf,
+    this.codigoIbge,
+    this.latitude,
+    this.longitude,
+  });
 
   final String nome;
   final String uf;
+  final String? codigoIbge;
+  final double? latitude;
+  final double? longitude;
 
   factory MunicipioResumo.fromJson(Map<String, dynamic> json) {
+    final codigoIbge =
+        json['codigo_ibge'] ??
+        json['codigoIbge'] ??
+        json['cod_ibge'] ??
+        json['codigo_municipio'] ??
+        json['codigoMunicipio'] ??
+        json['cod_municipio'];
     return MunicipioResumo(
       nome: json['nome']?.toString() ?? '',
       uf: json['uf']?.toString() ?? '',
+      codigoIbge: codigoIbge?.toString(),
+      latitude: (json['lat'] as num?)?.toDouble(),
+      longitude: (json['lng'] as num?)?.toDouble(),
     );
   }
 }
@@ -71,15 +109,7 @@ class AtivosResult {
 class AtivosService {
   AtivosService({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
-      _baseUrl =
-          (baseUrl ??
-                  const String.fromEnvironment(
-                    'API_BASE_URL',
-                    defaultValue: kIsWeb
-                        ? 'http://localhost:3000'
-                        : 'http://10.0.2.2:3000',
-                  ))
-              .replaceFirst(RegExp(r'/+$'), '');
+      _baseUrl = ApiConfig.resolve(baseUrl);
 
   final http.Client _client;
   final String _baseUrl;
@@ -175,7 +205,9 @@ class AtivosService {
   Future<List<DistribuidoraResumo>> getDistribuidoras() async {
     final response = await _client
         .get(Uri.parse('$_baseUrl/distribuidoras'))
-        .timeout(const Duration(seconds: 25));
+        // A primeira chamada agrega 7M de posições no banco remoto; as
+        // seguintes são atendidas pelo cache do backend em milissegundos.
+        .timeout(const Duration(seconds: 60));
 
     if (response.statusCode != 200) {
       throw StateError(
@@ -196,6 +228,51 @@ class AtivosService {
           ),
         )
         .toList();
+  }
+
+  Future<Map<String, dynamic>> importarArquivoBdgd({
+    required String versaoBdgd,
+    required String nomeArquivo,
+    required Uint8List arquivo,
+  }) async {
+    final request =
+        http.MultipartRequest('POST', Uri.parse('$_baseUrl/import-file'))
+          ..fields['bdgd_version'] = versaoBdgd
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'file',
+              arquivo,
+              filename: nomeArquivo,
+            ),
+          );
+    final streamedResponse = await _client
+        .send(request)
+        .timeout(const Duration(minutes: 10));
+    final response = await http.Response.fromStream(streamedResponse)
+        .timeout(const Duration(minutes: 10));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detalhe = response.body.trim();
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody is Map && errorBody['message'] != null) {
+          detalhe = errorBody['message'].toString();
+        }
+      } on FormatException {
+        // Keep the raw response body when the API does not return JSON.
+      }
+
+      throw StateError(
+        'A importação respondeu com HTTP ${response.statusCode}'
+        '${detalhe.isEmpty ? '.' : ': $detalhe'}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('Resposta da importação inválida.');
+    }
+    return Map<String, dynamic>.from(decoded);
   }
 
   Future<List<TipoDispositivoResumo>> getTiposDispositivos() async {
@@ -227,7 +304,7 @@ class AtivosService {
   }
 
   Future<List<MunicipioResumo>> getMunicipios({
-    required String distribuidora,
+    String? distribuidora,
     required String uf,
   }) async {
     final municipios = <MunicipioResumo>[];
@@ -235,14 +312,16 @@ class AtivosService {
     var totalPaginas = 1;
 
     do {
-      final uri = Uri.parse('$_baseUrl/municipios').replace(
-        queryParameters: {
-          'distribuidora': distribuidora,
-          'uf': uf,
-          'limite': '100',
-          'pagina': '$pagina',
-        },
-      );
+      final queryParameters = <String, String>{
+        'uf': uf,
+        'limite': '100',
+        'pagina': '$pagina',
+      };
+      if (distribuidora != null && distribuidora.trim().isNotEmpty) {
+        queryParameters['distribuidora'] = distribuidora;
+      }
+      final uri = Uri.parse('$_baseUrl/municipios')
+          .replace(queryParameters: queryParameters);
       final response = await _client
           .get(uri)
           .timeout(const Duration(seconds: 45));
@@ -279,6 +358,42 @@ class AtivosService {
     } while (pagina <= totalPaginas);
 
     return municipios;
+  }
+
+  Future<int> contarAtivosNaArea(
+    List<LatLng> pontos, {
+    String? distribuidora,
+  }) async {
+    final coordinates = pontos.map((p) => [p.longitude, p.latitude]).toList();
+    if (coordinates.length < 3) {
+      throw ArgumentError('Desenhe uma área com três pontos.');
+    }
+    if (coordinates.first[0] != coordinates.last[0] ||
+        coordinates.first[1] != coordinates.last[1]) {
+      coordinates.add(coordinates.first);
+    }
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/ativos/contagem-area'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'geom': {
+              'type': 'Polygon',
+              'coordinates': [coordinates],
+            },
+            if (distribuidora != null && distribuidora.isNotEmpty)
+              'distribuidora': distribuidora,
+          }),
+        )
+        .timeout(const Duration(seconds: 45));
+    if (response.statusCode != 200) {
+      throw StateError('Não foi possível contar os ativos da área.');
+    }
+    final body = jsonDecode(response.body);
+    if (body is! Map || body['total'] is! num || body['total'] < 0) {
+      throw const FormatException('Contagem de ativos inválida.');
+    }
+    return (body['total'] as num).toInt();
   }
 
   Future<AtivoBdgd> getAtivoPorId(String id) async {

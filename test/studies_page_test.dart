@@ -1,8 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
+import 'package:frontend_tecsys/models/recomendacao_resultado.dart';
+import 'package:frontend_tecsys/mocks/recomendacao_mock.dart';
+import 'package:frontend_tecsys/pages/recomendacao_resultado_page.dart';
+import 'package:frontend_tecsys/services/recomendacao_service.dart';
+import 'package:frontend_tecsys/widgets/recommendation_map.dart';
 import 'package:frontend_tecsys/pages/studies_page.dart';
 import 'package:frontend_tecsys/pages/study_form.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
@@ -10,6 +16,8 @@ import 'package:frontend_tecsys/services/install_criterion_service.dart';
 import 'package:frontend_tecsys/services/rf_profile_service.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
 import 'package:frontend_tecsys/widgets/name_filter_field.dart';
+import 'package:frontend_tecsys/widgets/primary_button.dart';
+import 'package:frontend_tecsys/widgets/secondary_button.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:latlong2/latlong.dart';
@@ -193,7 +201,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: StudiesPage(service: service)),
+        home: Scaffold(body: StudiesPage(userId: 1, service: service)),
       ),
     );
     await tester.pumpAndSettle();
@@ -240,6 +248,43 @@ void main() {
     );
     expect(study.toJson()['geom'], isNull);
     expect(study.toJson()['id_perfil_rf'], 1);
+  });
+
+  testWidgets('ações do estudo seguem o padrão no desktop e no mobile', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final size in [const Size(1440, 900), const Size(390, 844)]) {
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: NovoEstudoPage(
+            userId: 1,
+            distribuidora: 'Distribuidora local',
+            municipio: 'São Paulo',
+            areaKm2: 0,
+            pontosArea: [],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(PrimaryButton), findsOneWidget);
+      expect(find.byType(SecondaryButton), findsOneWidget);
+      expect(find.text('Cancelar'), findsOneWidget);
+      expect(find.text('Criar estudo e simular'), findsOneWidget);
+
+      final actionsTop = tester.getTopLeft(find.byType(PrimaryButton)).dy;
+      if (size.width >= 760) {
+        expect(actionsTop, lessThan(80));
+      } else {
+        expect(actionsTop, greaterThan(size.height - 100));
+      }
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('salva dados do formulário com o perfil e critério escolhidos', (
@@ -315,6 +360,7 @@ void main() {
     addTearDown(rfService.dispose);
     addTearDown(criterionService.dispose);
     addTearDown(studyService.dispose);
+    final recommendation = _PendingRecommendation();
     bool? created;
     await tester.pumpWidget(
       MaterialApp(
@@ -335,6 +381,7 @@ void main() {
                       rfProfileService: rfService,
                       criterionService: criterionService,
                       studyService: studyService,
+                      recommendationRepository: recommendation,
                     ),
                   ),
                 );
@@ -412,9 +459,22 @@ void main() {
         .removeCurrentSnackBar();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continuar salvamento'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(created, isTrue);
     expect(find.byType(NovoEstudoPage), findsNothing);
+    expect(find.byType(RecomendacaoResultadoPage), findsOneWidget);
+    expect(
+      find.text('Calculando a recomendação de cobertura...'),
+      findsOneWidget,
+    );
+    expect(recommendation.request, (81, 32, 47));
+    recommendation.result.complete(buildRecommendationMock(studyId: 81));
+    await tester.pumpAndSettle();
+    expect(find.byType(RecommendationMap), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Abrir formulário'), findsOneWidget);
     expect(payloads.length, 2);
     expect(pontosPayloads.length, 2);
     expect(requisicoesEstudo, 2);
@@ -437,6 +497,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: NovoEstudoPage(
+          userId: 1,
           distribuidora: '',
           municipio: null,
           areaKm2: 0,
@@ -557,6 +618,7 @@ void main() {
       await tester.pumpWidget(
         host(
           StudiesPage(
+            userId: 1,
             service: service,
             rfProfileService: rfService,
             criterionService: criterionService,
@@ -640,7 +702,7 @@ void main() {
       }),
     );
     addTearDown(service.dispose);
-    await tester.pumpWidget(host(StudiesPage(service: service)));
+    await tester.pumpWidget(host(StudiesPage(userId: 1, service: service)));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Ações de Estudo salvo'));
     await tester.pumpAndSettle();
@@ -679,7 +741,7 @@ void main() {
       }),
     );
     addTearDown(service.dispose);
-    await tester.pumpWidget(host(StudiesPage(service: service)));
+    await tester.pumpWidget(host(StudiesPage(userId: 1, service: service)));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Ações de Estudo salvo'));
     await tester.pumpAndSettle();
@@ -705,7 +767,7 @@ void main() {
     addTearDown(service.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: StudiesPage(service: service)),
+        home: Scaffold(body: StudiesPage(userId: 1, service: service)),
       ),
     );
     await tester.pumpAndSettle();
@@ -725,7 +787,7 @@ void main() {
     final service = serviceWith(http.Response('{"estudos": []}', 200));
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: StudiesPage(service: service)),
+        home: Scaffold(body: StudiesPage(userId: 1, service: service)),
       ),
     );
     await tester.pumpAndSettle();
@@ -745,7 +807,7 @@ void main() {
     addTearDown(service.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: StudiesPage(service: service)),
+        home: Scaffold(body: StudiesPage(userId: 1, service: service)),
       ),
     );
     await tester.pumpAndSettle();
@@ -755,4 +817,40 @@ void main() {
     expect(find.text('Nenhum estudo cadastrado'), findsOneWidget);
     expect(requests, 2);
   });
+}
+
+class _PendingRecommendation implements RecommendationRepository {
+  @override
+  Future<RecommendationScenarios> loadScenarios({
+    required int studyId,
+    required int profileId,
+    int? criterionId,
+  }) async => RecommendationScenarios(
+    scenarios: [
+      await gerarRecomendacao(
+        idEstudo: studyId,
+        idPerfilRf: profileId,
+        idCriterioInstalacao: criterionId,
+      ),
+    ],
+  );
+  @override
+  Future<void> selectScenario({
+    required int studyId,
+    required int scenarioId,
+  }) async {}
+
+  final result = Completer<ResultadoRecomendacao>();
+  (int, int, int?)? request;
+
+  @override
+  Future<ResultadoRecomendacao> gerarRecomendacao({
+    required int idEstudo,
+    required int idPerfilRf,
+    int? idCriterioInstalacao,
+    String? nomeCenario,
+  }) {
+    request = (idEstudo, idPerfilRf, idCriterioInstalacao);
+    return result.future;
+  }
 }

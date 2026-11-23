@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/study_area_format.dart';
 
 class StudyAreaStep extends StatelessWidget {
   const StudyAreaStep({
@@ -9,6 +10,9 @@ class StudyAreaStep extends StatelessWidget {
     required this.areaDesenhada,
     required this.areaKm2,
     required this.ativosNaArea,
+    this.carregandoAtivos = false,
+    this.erroAtivos,
+    this.onTentarContagem,
     required this.onCancelar,
     required this.onRefazer,
     required this.onProsseguir,
@@ -17,13 +21,13 @@ class StudyAreaStep extends StatelessWidget {
   final String locationLabel;
   final bool areaDesenhada;
   final double areaKm2;
-  final int ativosNaArea;
+  final int? ativosNaArea;
+  final bool carregandoAtivos;
+  final String? erroAtivos;
+  final VoidCallback? onTentarContagem;
   final VoidCallback onCancelar;
   final VoidCallback onRefazer;
   final VoidCallback onProsseguir;
-
-  String _formatArea(double area) =>
-      area.toStringAsFixed(1).replaceAll('.', ',');
 
   String _formatCount(int count) => count.toString().replaceAllMapped(
     RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
@@ -107,7 +111,7 @@ class StudyAreaStep extends StatelessWidget {
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: const Text(
-                    'PASSO 3 DE 4',
+                    'PASSO 4 DE 5',
                     style: TextStyle(
                       color: AppColors.textDark,
                       fontSize: 11,
@@ -173,18 +177,24 @@ class StudyAreaStep extends StatelessWidget {
                       Expanded(
                         child: _AreaMetric(
                           label: 'ÁREA',
-                          value: '${_formatArea(areaKm2)} km²',
+                          value: formatStudyArea(areaKm2),
                         ),
                       ),
                       Expanded(
                         child: _AreaMetric(
                           label: 'ATIVOS NA ÁREA',
-                          value: _formatCount(ativosNaArea),
+                          value: carregandoAtivos
+                              ? 'Carregando...'
+                              : ativosNaArea == null
+                              ? 'Indisponível'
+                              : _formatCount(ativosNaArea!),
                           highlight: true,
                         ),
                       ),
                     ],
                   ),
+                  if (erroAtivos != null)
+                    TextButton(onPressed: onTentarContagem, child: Text(erroAtivos!, textAlign: TextAlign.center)),
                 ],
               ),
             ),
