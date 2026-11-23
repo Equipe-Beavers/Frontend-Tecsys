@@ -31,6 +31,7 @@ void main() {
     await confirmDistributor(tester);
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Filtrar por cidade'), findsOneWidget);
+    expect(find.text('Carregando cidades...'), findsOneWidget);
     expect(find.text('Cidade A'), findsNothing);
 
     service.municipios.complete(const [
@@ -39,6 +40,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Filtrar por cidade'), findsOneWidget);
     expect(find.text('Cidade A'), findsOneWidget);
+    expect(find.text('Carregando cidades...'), findsNothing);
     await tester.tap(find.text('Cidade A'));
     await tester.pumpAndSettle();
     expect(find.text('Filtrar por cidade'), findsNothing);
@@ -74,6 +76,16 @@ void main() {
     await tester.pumpAndSettle();
     await confirmDistributor(tester);
     expect(find.byType(SelectionBottomSheet<String>), findsNothing);
+    expect(find.byType(CidadeBottomSheet), findsOneWidget);
+    expect(find.text('Carregando cidades...'), findsOneWidget);
+    expect(
+      tester
+          .widget<ElevatedButton>(
+            find.widgetWithText(ElevatedButton, 'Prosseguir'),
+          )
+          .onPressed,
+      isNull,
+    );
     service.municipios.complete(const [
       MunicipioResumo(nome: 'Cidade A', uf: 'SP'),
     ]);
@@ -86,19 +98,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(CidadeBottomSheet), findsNothing);
     expect(find.byType(StudyAreaStep), findsOneWidget);
-    expect(find.text('PASSO 3 DE 4'), findsOneWidget);
+    expect(find.text('INICIAR ESTUDO'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('estudo sem opções não fecha a etapa seguinte por engano', (
+  testWidgets('estudo sem municípios não fecha a etapa seguinte por engano', (
     tester,
   ) async {
-    final service = _DelayedAtivos(empty: true);
+    final service = _DelayedAtivos();
     addTearDown(service.dispose);
     await mount(tester, service);
     await tester.tap(find.text('Iniciar estudo'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Prosseguir'));
+    await confirmDistributor(tester);
+    service.municipios.complete(const []);
     await tester.pumpAndSettle();
     expect(find.byType(CidadeBottomSheet), findsOneWidget);
     await tester.tap(find.text('Prosseguir'));
@@ -122,24 +135,47 @@ void main() {
     expect(find.byType(StudyAreaStep), findsNothing);
     expect(find.text('Iniciar estudo'), findsOneWidget);
   });
+
+  testWidgets(
+    'falha no carregamento do estudo permite tentar novamente na mesma etapa',
+    (tester) async {
+      final service = _DelayedAtivos();
+      addTearDown(service.dispose);
+      await mount(tester, service);
+      await tester.tap(find.text('Iniciar estudo'));
+      await tester.pumpAndSettle();
+      await confirmDistributor(tester);
+      service.municipios.completeError(StateError('temporário'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tentar novamente'), findsOneWidget);
+      expect(find.text('Carregando cidades...'), findsNothing);
+      service.municipios = Completer<List<MunicipioResumo>>();
+      await tester.tap(find.text('Tentar novamente'));
+      await tester.pump();
+      expect(find.text('Carregando cidades...'), findsOneWidget);
+      service.municipios.complete(const [
+        MunicipioResumo(nome: 'Cidade A', uf: 'SP'),
+      ]);
+      await tester.pumpAndSettle();
+      expect(find.text('Cidade A'), findsOneWidget);
+      expect(find.text('Tentar novamente'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 class _DelayedAtivos extends AtivosService {
-  _DelayedAtivos({this.empty = false});
-  final bool empty;
-  final municipios = Completer<List<MunicipioResumo>>();
+  var municipios = Completer<List<MunicipioResumo>>();
 
   @override
-  Future<List<DistribuidoraResumo>> getDistribuidoras() async => empty
-      ? []
-      : [
-          const DistribuidoraResumo(
-            id: 1,
-            nome: 'Distribuidora A',
-            uf: 'SP',
-            anoBdgd: 2024,
-          ),
-        ];
+  Future<List<DistribuidoraResumo>> getDistribuidoras() async => [
+    const DistribuidoraResumo(
+      id: 1,
+      nome: 'Distribuidora A',
+      uf: 'SP',
+      anoBdgd: 2024,
+    ),
+  ];
 
   @override
   Future<List<MunicipioResumo>> getMunicipios({

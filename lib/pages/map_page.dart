@@ -1,3 +1,5 @@
+import '../widgets/city_loading_indicator.dart';
+
 import 'dart:async';
 
 import '../controllers/study_area_count_controller.dart';
@@ -1243,46 +1245,50 @@ class _MapPageState extends State<MapPage> {
       _carregando = false;
     });
 
-    await _atualizarPoligono();
-    await _carregarMunicipios(distribuidoraSelecionada);
-    if (!mounted) return;
-    // A seleção da cidade depende dos municípios, não das camadas do mapa.
-    _agendarCarregamento();
-    await _abrirCidadeDoEstudo();
+    final carregamento = _carregarMunicipios(distribuidoraSelecionada);
+    unawaited(_atualizarPoligono());
+    await Future.wait<void>([carregamento, _abrirCidadeDoEstudo()]);
+    if (mounted) _agendarCarregamento();
   }
 
   Future<void> _abrirCidadeDoEstudo() async {
-    final cidades = _municipiosDisponiveis;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
-        return CidadeBottomSheet(
-          cidades: cidades,
-          cidadeSelecionada: _municipioSelecionado,
-          bairroSelecionado: _bairroSelecionado,
-          stepLabel: 'PASSO 2 DE 4',
-          breadcrumb: _distribuidoraSelecionada != null
-              ? '$_distribuidoraSelecionada · Selecione o município'
-              : null,
-          notFoundMessage: cidades.isEmpty
-              ? _erroMunicipios ?? 'Nenhuma cidade encontrada para a distribuidora selecionada.'
-              : 'Não encontrada',
-          allowEmptySelection: cidades.isEmpty,
-          onProsseguirComBairro: (cidade, bairro) {
-            if (cidade == null && cidades.isNotEmpty) return;
-            setState(() {
-              _municipioSelecionado = cidade;
-              _bairroSelecionado = bairro;
-              isDrawing = true;
-              _limparPontosDesenho();
-            });
-            _atualizarPoligono();
-            if (cidade != null) unawaited(_centralizarNoMunicipio(cidade));
-          },
-        );
-      },
+      builder: (context) => ValueListenableBuilder<bool>(
+        valueListenable: _carregandoMunicipios,
+        builder: (context, loading, _) {
+          final cidades = _municipiosDisponiveis;
+          return CidadeBottomSheet(
+            cidades: cidades,
+            loading: loading,
+            onRetry: _erroMunicipios == null ? null : _recarregarMunicipios,
+            cidadeSelecionada: _municipioSelecionado,
+            bairroSelecionado: _bairroSelecionado,
+            stepLabel: 'PASSO 2 DE 4',
+            breadcrumb: _distribuidoraSelecionada != null
+                ? '$_distribuidoraSelecionada · Selecione o município'
+                : null,
+            notFoundMessage: cidades.isEmpty
+                ? _erroMunicipios ?? 'Nenhuma cidade encontrada para a distribuidora selecionada.'
+                : 'Não encontrada',
+            allowEmptySelection:
+                !loading && _erroMunicipios == null && cidades.isEmpty,
+            onProsseguirComBairro: (cidade, bairro) {
+              if (cidade == null && cidades.isNotEmpty) return;
+              setState(() {
+                _municipioSelecionado = cidade;
+                _bairroSelecionado = bairro;
+                isDrawing = true;
+                _limparPontosDesenho();
+              });
+              _atualizarPoligono();
+              if (cidade != null) unawaited(_centralizarNoMunicipio(cidade));
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -1308,6 +1314,13 @@ class _MapPageState extends State<MapPage> {
 
   List<String> get _municipiosDisponiveis {
     return _municipios.map((municipio) => municipio.nome).toList();
+  }
+
+  void _recarregarMunicipios() {
+    final selected = _distribuidoras.where(
+      (item) => item.nome == _distribuidoraSelecionada,
+    );
+    if (selected.isNotEmpty) unawaited(_carregarMunicipios(selected.first));
   }
 
   Future<void> _carregarMunicipios(DistribuidoraResumo distribuidora) async {
@@ -1349,7 +1362,8 @@ class _MapPageState extends State<MapPage> {
       setState(() {
         _municipios = [];
         _carregandoMunicipios.value = false;
-        _erroMunicipios = 'Não foi possível carregar os municípios: $error';
+        _erroMunicipios =
+            'Não foi possível carregar os municípios. Tente novamente.';
       });
     }
   }
@@ -1405,17 +1419,28 @@ class _MapPageState extends State<MapPage> {
                   const Divider(height: 1),
                   Flexible(
                     child: carregandoMunicipios
-                        ? const Center(child: CircularProgressIndicator())
+                        ? const CityLoadingIndicator()
                         : municipios.isEmpty
                         ? Center(
                             child: Padding(
                               padding: const EdgeInsets.all(20),
-                              child: Text(
-                                _erroMunicipios ?? 'Selecione uma distribuidora para carregar os municípios.',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: AppColors.textMuted,
-                                ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _erroMunicipios ?? 'Selecione uma distribuidora para carregar os municípios.',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
+                                  if (_erroMunicipios != null)
+                                    TextButton.icon(
+                                      onPressed: _recarregarMunicipios,
+                                      icon: const Icon(Icons.refresh),
+                                      label: const Text('Tentar novamente'),
+                                    ),
+                                ],
                               ),
                             ),
                           )
@@ -1814,8 +1839,9 @@ class _MapPageState extends State<MapPage> {
                       ),
                     ],
                   ),
-                  Row(
+                  Wrap(
                     spacing: 10,
+                    runSpacing: 8,
                     children: [
                       FilterChipWidget(
                         label: _distribuidoraSelecionada != null
@@ -1828,9 +1854,14 @@ class _MapPageState extends State<MapPage> {
                         isSelected: _distribuidoraSelecionada != null,
                         onTap: _abrirDistribuidoraDoFiltro,
                       ),
-                      FilterChipWidget(
-                        label: _municipioSelecionado ?? 'Cidade',
-                        onTap: _abrirFiltroMunicipio,
+                      ValueListenableBuilder<bool>(
+                        valueListenable: _carregandoMunicipios,
+                        builder: (context, loading, _) => FilterChipWidget(
+                          label: loading
+                              ? 'Cidade (carregando...)'
+                              : _municipioSelecionado ?? 'Cidade',
+                          onTap: _abrirFiltroMunicipio,
+                        ),
                       ),
                     ],
                   ),

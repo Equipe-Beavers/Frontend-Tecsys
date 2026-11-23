@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:frontend_tecsys/theme/app_colors.dart';
 
+import 'city_loading_indicator.dart';
+
 class CidadeBottomSheet extends StatefulWidget {
   final List<String> cidades;
   final String? cidadeSelecionada;
@@ -10,6 +12,8 @@ class CidadeBottomSheet extends StatefulWidget {
   final String? breadcrumb;
   final String notFoundMessage;
   final bool allowEmptySelection;
+  final bool loading;
+  final VoidCallback? onRetry;
 
   final ValueChanged<String?>? onProsseguir;
   final void Function(String? cidade, String? bairro)? onProsseguirComBairro;
@@ -24,6 +28,8 @@ class CidadeBottomSheet extends StatefulWidget {
     this.breadcrumb,
     this.notFoundMessage = 'Não encontrada',
     this.allowEmptySelection = true,
+    this.loading = false,
+    this.onRetry,
     this.onProsseguir,
     this.onProsseguirComBairro,
   }) : assert(onProsseguir != null || onProsseguirComBairro != null);
@@ -62,8 +68,9 @@ class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
   }
 
   bool get _podeProsseguir =>
-      _cidadeSelecionada != null ||
-      (widget.allowEmptySelection && widget.cidades.isEmpty);
+      !widget.loading &&
+      (_cidadeSelecionada != null ||
+          (widget.allowEmptySelection && widget.cidades.isEmpty));
 
   @override
   Widget build(BuildContext context) {
@@ -156,6 +163,7 @@ class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
+                enabled: !widget.loading,
                 controller: _buscaController,
                 onChanged: (valor) => setState(() => _busca = valor),
                 style: const TextStyle(color: AppColors.textWhite),
@@ -181,20 +189,33 @@ class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
             const Divider(color: AppColors.borderSubtle, height: 1),
 
             Flexible(
-              child: cidades.isEmpty
+              child: widget.loading
+                  ? const CityLoadingIndicator()
+                  : cidades.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.symmetric(
                         vertical: 32,
                         horizontal: 20,
                       ),
                       child: Center(
-                        child: Text(
-                          widget.notFoundMessage,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 13,
-                          ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.notFoundMessage,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 13,
+                              ),
+                            ),
+                            if (widget.onRetry != null)
+                              TextButton.icon(
+                                onPressed: widget.onRetry,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Tentar novamente'),
+                              ),
+                          ],
                         ),
                       ),
                     )
@@ -206,7 +227,9 @@ class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
                     ),
             ),
 
-            if (widget.cidades.isEmpty && widget.allowEmptySelection)
+            if (!widget.loading &&
+                widget.cidades.isEmpty &&
+                widget.allowEmptySelection)
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 child: Text(
