@@ -1,11 +1,58 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/services/ativos_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('converte poste do JSON de importação em ativo do mapa', () {
+    final poste = AtivoBdgd.fromBdgdPoste(
+      {
+        'Y': -28.5968475,
+        'X': -49.4257371,
+        'COD_ID': '1480209',
+        'MAT': 'CO',
+        'ESF': '11',
+        'ALT': '12',
+        'SITCONT': 'AT1',
+      },
+      distribuidora: 'Distribuidora importada',
+      municipio: 'Cidade importada',
+    );
+
+    expect(poste.tipo, TipoAtivo.poste);
+    expect(poste.codId, '1480209');
+    expect(poste.latitude, -28.5968475);
+    expect(poste.longitude, -49.4257371);
+    expect(poste.municipio, 'Cidade importada');
+    expect(poste.distribuidora, 'Distribuidora importada');
+  });
+
+  test('lê os dados da distribuidora diretamente do JSON importado', () {
+    final distribuidora = DistribuidoraResumo.fromImportJson({
+      'id_distribuidora': 88,
+      'nome': 'Joao Cesa',
+      'uf': 'SC',
+    });
+
+    expect(distribuidora.id, 88);
+    expect(distribuidora.nome, 'Joao Cesa');
+    expect(distribuidora.uf, 'SC');
+  });
+
+  test('rejeita importação sem os dados da distribuidora', () {
+    expect(
+      () => DistribuidoraResumo.fromImportJson({
+        'id_distribuidora': 88,
+        'uf': 'SC',
+      }),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
   group('AtivosService', () {
     test('busca distribuidoras na rota de regiões do backend', () async {
       final service = AtivosService(
@@ -24,6 +71,44 @@ void main() {
       final result = await service.getDistribuidoras();
 
       expect(result.single.nome, 'CEMIG');
+    });
+
+    test('envia arquivo e versão em multipart para importar BDGD', () async {
+      final service = AtivosService(
+        client: MockClient.streaming((request, bodyStream) async {
+          expect(request, isA<http.MultipartRequest>());
+          final multipartRequest = request as http.MultipartRequest;
+          expect(multipartRequest.url.path, '/import-file');
+          expect(multipartRequest.method, 'POST');
+          expect(multipartRequest.fields['bdgd_version'], '2026');
+          expect(multipartRequest.files.single.field, 'file');
+          expect(multipartRequest.files.single.filename, 'base.gdb.zip');
+          final body = await bodyStream.toBytes();
+          expect(
+            utf8.decode(body),
+            contains('name="bdgd_version"\r\n\r\n2026'),
+          );
+          expect(
+            utf8.decode(body),
+            contains('name="file"; filename="base.gdb.zip"'),
+          );
+          return http.StreamedResponse(
+            Stream.value(
+              utf8.encode(jsonEncode({'id_distribuidora': 88, 'postes': []})),
+            ),
+            200,
+          );
+        }),
+      );
+      addTearDown(service.dispose);
+
+      final result = await service.importarArquivoBdgd(
+        versaoBdgd: '2026',
+        nomeArquivo: 'base.gdb.zip',
+        arquivo: Uint8List.fromList([1, 2, 3]),
+      );
+
+      expect(result['id_distribuidora'], 88);
     });
 
     test('busca tipos de dispositivos na rota de ativos', () async {
@@ -99,6 +184,44 @@ void main() {
         ]);
       },
     );
+
+    test('busca todos os municípios da UF sem filtrar distribuidora', () async {
+      var requestCount = 0;
+      final service = AtivosService(
+        client: MockClient((request) async {
+          expect(request.url.path, '/municipios');
+          expect(
+            request.url.queryParameters.containsKey('distribuidora'),
+            isFalse,
+          );
+          expect(request.url.queryParameters['uf'], 'SE');
+          requestCount++;
+
+          final pagina = request.url.queryParameters['pagina'];
+          return http.Response(
+            jsonEncode({
+              'dados': [
+                {
+                  'nome': pagina == '1' ? 'Aracaju' : 'Amparo do São Francisco',
+                  'uf': 'SE',
+                },
+              ],
+              'paginacao': {'totalPaginas': 2},
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(service.dispose);
+
+      final result = await service.getMunicipios(uf: 'SE');
+
+      expect(requestCount, 2);
+      expect(result.map((municipio) => municipio.nome), [
+        'Aracaju',
+        'Amparo do São Francisco',
+      ]);
+    });
 
     test('busca um ativo pelo ID na rota de detalhe', () async {
       final service = AtivosService(

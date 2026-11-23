@@ -45,7 +45,7 @@ class StudyLocationStep extends StatelessWidget {
     return SelectionBottomSheet.show<DistribuidoraResumo>(
       context: context,
       title: 'Selecionar distribuidora',
-      stepLabel: 'PASSO 1 DE 4',
+      stepLabel: 'PASSO 2 DE 5',
       searchHint: 'Buscar distribuidora',
       notFoundMessage: distribuidoras.isEmpty
           ? 'Não foi possível carregar as distribuidoras.'
@@ -74,7 +74,8 @@ class StudyLocationStep extends StatelessWidget {
       builder: (context) => CidadeBottomSheet(
         cidades: municipios,
         cidadeSelecionada: municipioSelecionado,
-        stepLabel: 'PASSO 2 DE 4',
+        bairroSelecionado: bairroSelecionado,
+        stepLabel: 'PASSO 3 DE 5',
         allowEmptySelection: false,
         breadcrumb: nomeDistribuidora == null
             ? null
