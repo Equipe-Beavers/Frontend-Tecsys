@@ -4,23 +4,29 @@ import 'package:frontend_tecsys/theme/app_colors.dart';
 class CidadeBottomSheet extends StatefulWidget {
   final List<String> cidades;
   final String? cidadeSelecionada;
+  final String? bairroSelecionado;
+  final Map<String, List<String>> bairrosPorCidade;
   final String? stepLabel;
   final String? breadcrumb;
   final String notFoundMessage;
   final bool allowEmptySelection;
 
-  final Function(String? cidade) onProsseguir;
+  final ValueChanged<String?>? onProsseguir;
+  final void Function(String? cidade, String? bairro)? onProsseguirComBairro;
 
   const CidadeBottomSheet({
     super.key,
     required this.cidades,
     this.cidadeSelecionada,
+    this.bairroSelecionado,
+    this.bairrosPorCidade = const {},
     this.stepLabel,
     this.breadcrumb,
     this.notFoundMessage = 'Não encontrada',
     this.allowEmptySelection = true,
-    required this.onProsseguir,
-  });
+    this.onProsseguir,
+    this.onProsseguirComBairro,
+  }) : assert(onProsseguir != null || onProsseguirComBairro != null);
 
   @override
   State<CidadeBottomSheet> createState() => _CidadeBottomSheetState();
@@ -28,6 +34,7 @@ class CidadeBottomSheet extends StatefulWidget {
 
 class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
   String? _cidadeSelecionada;
+  String? _bairroSelecionado;
   final TextEditingController _buscaController = TextEditingController();
   String _busca = '';
 
@@ -35,6 +42,7 @@ class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
   void initState() {
     super.initState();
     _cidadeSelecionada = widget.cidadeSelecionada;
+    _bairroSelecionado = widget.bairroSelecionado;
   }
 
   @override
@@ -218,6 +226,7 @@ class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
                     onPressed: () {
                       setState(() {
                         _cidadeSelecionada = null;
+                        _bairroSelecionado = null;
                         _buscaController.clear();
                         _busca = '';
                       });
@@ -232,7 +241,16 @@ class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
                     child: ElevatedButton(
                       onPressed: _podeProsseguir
                           ? () {
-                              widget.onProsseguir(_cidadeSelecionada);
+                              final onProsseguirComBairro =
+                                  widget.onProsseguirComBairro;
+                              if (onProsseguirComBairro != null) {
+                                onProsseguirComBairro(
+                                  _cidadeSelecionada,
+                                  _bairroSelecionado,
+                                );
+                              } else {
+                                widget.onProsseguir!(_cidadeSelecionada);
+                              }
                               Navigator.of(context).pop();
                             }
                           : null,
@@ -283,6 +301,7 @@ class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
             onTap: () {
               setState(() {
                 _cidadeSelecionada = cidade;
+                _bairroSelecionado = null;
               });
             },
             child: Padding(
@@ -311,6 +330,31 @@ class _CidadeBottomSheetState extends State<CidadeBottomSheet> {
               ),
             ),
           ),
+          if (selecionada)
+            for (final bairro
+                in widget.bairrosPorCidade[cidade] ?? const <String>[])
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.only(left: 54, right: 14),
+                  title: Text(
+                    bairro,
+                    style: const TextStyle(
+                      color: AppColors.textWhite,
+                      fontSize: 13,
+                    ),
+                  ),
+                  leading: Icon(
+                    bairro == _bairroSelecionado
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    color: AppColors.primaryLime,
+                    size: 20,
+                  ),
+                  onTap: () => setState(() => _bairroSelecionado = bairro),
+                ),
+              ),
         ],
       ),
     );

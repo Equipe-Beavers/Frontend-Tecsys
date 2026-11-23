@@ -2,13 +2,12 @@ import 'dart:async';
 
 import '../controllers/study_area_count_controller.dart';
 
-import '../widgets/auth/auth_scope.dart';
-
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Visibility;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:frontend_tecsys/widgets/auth/auth_scope.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
 import 'package:frontend_tecsys/widgets/dist_bottom_sheet.dart';
@@ -1123,10 +1122,10 @@ class _MapPageState extends State<MapPage> {
 
     setState(() {
       _municipioSelecionado = municipio;
+      _bairroSelecionado = null;
       if (isDrawing) {
         _limparPontosDesenho();
         isDrawing = false;
-        _bairroSelecionado = null;
       }
     });
     _atualizarPoligono();
@@ -1262,6 +1261,7 @@ class _MapPageState extends State<MapPage> {
         return CidadeBottomSheet(
           cidades: cidades,
           cidadeSelecionada: _municipioSelecionado,
+          bairroSelecionado: _bairroSelecionado,
           stepLabel: 'PASSO 2 DE 4',
           breadcrumb: _distribuidoraSelecionada != null
               ? '$_distribuidoraSelecionada · Selecione o município'
@@ -1270,11 +1270,11 @@ class _MapPageState extends State<MapPage> {
               ? _erroMunicipios ?? 'Nenhuma cidade encontrada para a distribuidora selecionada.'
               : 'Não encontrada',
           allowEmptySelection: cidades.isEmpty,
-          onProsseguir: (cidade) {
+          onProsseguirComBairro: (cidade, bairro) {
             if (cidade == null && cidades.isNotEmpty) return;
             setState(() {
               _municipioSelecionado = cidade;
-              _bairroSelecionado = null;
+              _bairroSelecionado = bairro;
               isDrawing = true;
               _limparPontosDesenho();
             });
@@ -1361,6 +1361,10 @@ class _MapPageState extends State<MapPage> {
           _municipioSelecionado == null ||
           ativo.municipio == _municipioSelecionado;
       if (!correspondeMunicipio) return false;
+      final correspondeBairro =
+          _bairroSelecionado == null ||
+          ativo.bairro.trim() == _bairroSelecionado;
+      if (!correspondeBairro) return false;
       if (termo.isEmpty) return true;
       return ativo.codId.toLowerCase().contains(termo) ||
           ativo.id.toLowerCase().contains(termo) ||
@@ -1631,7 +1635,19 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _prosseguirArea() async {
-    if (!await AuthScope.ensureSignedIn(context) || !mounted) return;
+    final autenticado = await AuthScope.ensureSignedIn(context);
+    if (!autenticado || !mounted) return;
+
+    final userId = AuthScope.maybeOf(context)?.controller.user?.id;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível identificar o usuário.'),
+        ),
+      );
+      return;
+    }
+
     final revisao = _polygonRevision;
     setState(() => isDrawing = false);
     final consultasRelevo = List<Future<void>>.of(_consultasRelevo);
@@ -1642,7 +1658,7 @@ class _MapPageState extends State<MapPage> {
       context,
       MaterialPageRoute(
         builder: (_) => NovoEstudoPage(
-          userId: AuthScope.maybeOf(context)!.controller.user!.id,
+          userId: userId,
           distribuidora: _distribuidoraSelecionada ?? '',
           municipio: _municipioSelecionado,
           bairro: _bairroSelecionado,
