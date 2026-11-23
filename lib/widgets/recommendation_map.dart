@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/mancha_cenario.dart';
 import '../models/recomendacao_resultado.dart';
 import 'recommendation/recommendation_map_overlays.dart';
+import 'recommendation/map_snapshot_controller.dart';
 import 'recommendation/recommendation_map_viewport.dart';
 import 'recommendation/responsive_recommendation_map.dart';
 
@@ -17,6 +18,7 @@ class RecommendationMap extends StatelessWidget {
     this.onGatewayTap,
     this.lockPosition = false,
     this.showBaseMap = true,
+    this.snapshotController,
   });
 
   final List<GatewayProposto> gateways;
@@ -26,6 +28,8 @@ class RecommendationMap extends StatelessWidget {
   final ValueChanged<GatewayProposto>? onGatewayTap;
   final bool lockPosition;
   final bool showBaseMap;
+
+  final MapSnapshotController? snapshotController;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +60,7 @@ class RecommendationMap extends StatelessWidget {
               onGatewayTap: onGatewayTap,
               showBaseMap: showBaseMap,
               lockPosition: lockPosition,
+              snapshotController: snapshotController,
             ),
           ),
           Positioned(

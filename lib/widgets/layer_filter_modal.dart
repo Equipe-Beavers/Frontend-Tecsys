@@ -91,7 +91,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
       (_edificacoesRascunho ? 1 : 0) +
       (_relevoRascunho ? 1 : 0);
 
-  // +3 pelas camadas de vegetação, antenas e edifícios
+  // +4 pelas camadas de vegetação, antenas, edifícios e relevo.
   int get _totalCamadas => _estadoRascunho.length + 4;
 
   void _limparTodasCamadas() {
@@ -100,6 +100,7 @@ class _LayerFilterModalState extends State<LayerFilterModal> {
       _vegetacaoRascunho = false;
       _antenasRascunho = false;
       _edificacoesRascunho = false;
+      _relevoRascunho = false;
     });
   }
 

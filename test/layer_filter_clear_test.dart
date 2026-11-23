@@ -21,6 +21,11 @@ void main() {
                 vegetacaoAtiva: filters.vegetation,
                 antenasAtivas: filters.antennas,
                 edificacoesAtivas: filters.buildings,
+                relevoAtivo: filters.terrain,
+                onSalvarRelevo: (value) {
+                  filters.terrain = value;
+                  filters.saves++;
+                },
                 onSalvarVegetacao: (value) {
                   filters.vegetation = value;
                   filters.saves++;
@@ -49,16 +54,16 @@ void main() {
   }
 
   testWidgets(
-    'limpar desmarca as 13 camadas e salvar mantém todas desligadas',
+    'limpar desmarca as 14 camadas e salvar mantém todas desligadas',
     (tester) async {
       final filters = _Filters();
       await mount(tester, filters);
-      expect(find.text('13 de 13 camadas ativas'), findsOneWidget);
+      expect(find.text('14 de 14 camadas ativas'), findsOneWidget);
       await tester.tap(find.text('Limpar'));
       await tester.pump();
-      expect(find.text('0 de 13 camadas ativas'), findsOneWidget);
+      expect(find.text('0 de 14 camadas ativas'), findsOneWidget);
       final checkboxes = tester.widgetList<Checkbox>(find.byType(Checkbox));
-      expect(checkboxes, hasLength(13));
+      expect(checkboxes, hasLength(14));
       expect(checkboxes.every((checkbox) => checkbox.value == false), isTrue);
       expect(filters.saves, 0);
       expect(filters.layers.values.every((value) => value), isTrue);
@@ -68,15 +73,16 @@ void main() {
       expect(filters.vegetation, isFalse);
       expect(filters.antennas, isFalse);
       expect(filters.buildings, isFalse);
+      expect(filters.terrain, isFalse);
       await tester.tap(find.text('Abrir camadas'));
       await tester.pumpAndSettle();
-      expect(find.text('0 de 13 camadas ativas'), findsOneWidget);
+      expect(find.text('0 de 14 camadas ativas'), findsOneWidget);
       await tester.tap(find.text('Limpar'));
       await tester.pump();
       await tester.tap(find.text('Chave Seccionadora'));
       await tester.tap(find.text('Edifícios'));
       await tester.pump();
-      expect(find.text('2 de 13 camadas ativas'), findsOneWidget);
+      expect(find.text('2 de 14 camadas ativas'), findsOneWidget);
       await tester.tap(find.text('Salvar filtro'));
       await tester.pumpAndSettle();
       expect(filters.layers[TipoAtivo.chaveSeccionadora], isTrue);
@@ -102,9 +108,10 @@ void main() {
       expect(filters.vegetation, isTrue);
       expect(filters.antennas, isTrue);
       expect(filters.buildings, isTrue);
+      expect(filters.terrain, isTrue);
       await tester.tap(find.text('Abrir camadas'));
       await tester.pumpAndSettle();
-      expect(find.text('13 de 13 camadas ativas'), findsOneWidget);
+      expect(find.text('14 de 14 camadas ativas'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -114,6 +121,6 @@ class _Filters {
   Map<TipoAtivo, bool> layers = CatalogoCamadas.obterEstadoInicialPadrao().map(
     (key, _) => MapEntry(key, true),
   );
-  bool vegetation = true, antennas = true, buildings = true;
+  bool vegetation = true, antennas = true, buildings = true, terrain = true;
   int saves = 0;
 }

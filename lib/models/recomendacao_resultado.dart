@@ -163,6 +163,10 @@ double? _optionalDouble(dynamic value) {
 
 class ResultadoRecomendacao {
   final int idCenario;
+  final String name;
+  final bool optimized;
+  final bool selected;
+  final double? capacityUsedPercent;
   final int quantidadeGateways;
   final int percentualCobertura;
   final int pontosInteresse;
@@ -175,6 +179,10 @@ class ResultadoRecomendacao {
 
   const ResultadoRecomendacao({
     required this.idCenario,
+    this.name = 'Otimizada',
+    this.optimized = true,
+    this.selected = false,
+    this.capacityUsedPercent,
     required this.quantidadeGateways,
     required this.percentualCobertura,
     required this.pontosInteresse,
@@ -201,6 +209,12 @@ class ResultadoRecomendacao {
             : <String>[]),
       ],
       idCenario: (json['id_cenario'] as num).toInt(),
+      name: json['nome']?.toString() ?? 'Otimizada',
+      optimized: json['otimizado'] != false,
+      selected: json['selecionado'] == true,
+      capacityUsedPercent: _optionalDouble(
+        json['capacidade_utilizada_media_pct'],
+      ),
       quantidadeGateways: (json['quantidade_gateways'] as num).toInt(),
       percentualCobertura: (json['percentual_cobertura'] as num).toInt(),
       pontosInteresse: (json['pontos_interesse'] as num).toInt(),
@@ -228,4 +242,29 @@ class ResultadoRecomendacao {
           .toList(),
     );
   }
+}
+
+class RecommendationScenarios {
+  const RecommendationScenarios({
+    required this.scenarios,
+    this.selectedScenarioId,
+    this.warning,
+  });
+
+  final List<ResultadoRecomendacao> scenarios;
+  final int? selectedScenarioId;
+  final String? warning;
+
+  factory RecommendationScenarios.fromJson(Map<String, dynamic> json) =>
+      RecommendationScenarios(
+        scenarios: List.unmodifiable(
+          (json['cenarios'] as List? ?? []).map(
+            (scenario) => ResultadoRecomendacao.fromJson(
+              Map<String, dynamic>.from(scenario as Map),
+            ),
+          ),
+        ),
+        selectedScenarioId: (json['id_cenario_selecionado'] as num?)?.toInt(),
+        warning: json['aviso']?.toString(),
+      );
 }

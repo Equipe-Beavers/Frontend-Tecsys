@@ -820,6 +820,26 @@ void main() {
 }
 
 class _PendingRecommendation implements RecommendationRepository {
+  @override
+  Future<RecommendationScenarios> loadScenarios({
+    required int studyId,
+    required int profileId,
+    int? criterionId,
+  }) async => RecommendationScenarios(
+    scenarios: [
+      await gerarRecomendacao(
+        idEstudo: studyId,
+        idPerfilRf: profileId,
+        idCriterioInstalacao: criterionId,
+      ),
+    ],
+  );
+  @override
+  Future<void> selectScenario({
+    required int studyId,
+    required int scenarioId,
+  }) async {}
+
   final result = Completer<ResultadoRecomendacao>();
   (int, int, int?)? request;
 

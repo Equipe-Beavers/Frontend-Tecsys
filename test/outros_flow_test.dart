@@ -128,7 +128,7 @@ class _SelectionService extends AtivosService {
   ];
   @override
   Future<List<MunicipioResumo>> getMunicipios({
-    required String distribuidora,
+    String? distribuidora,
     required String uf,
   }) async {
     calls++;

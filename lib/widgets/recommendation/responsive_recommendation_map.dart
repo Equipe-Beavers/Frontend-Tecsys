@@ -10,6 +10,7 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' hide Size;
 import '../../models/mancha_cenario.dart';
 import '../../models/recomendacao_resultado.dart';
 import '../../theme/app_colors.dart';
+import 'map_snapshot_controller.dart';
 import 'recommendation_map_viewport.dart';
 
 class ResponsiveRecommendationMap extends StatefulWidget {
@@ -23,6 +24,7 @@ class ResponsiveRecommendationMap extends StatefulWidget {
     required this.lockPosition,
     this.selectedGateway,
     this.onGatewayTap,
+    this.snapshotController,
   });
 
   final List<GatewayProposto> gateways;
@@ -33,6 +35,8 @@ class ResponsiveRecommendationMap extends StatefulWidget {
   final ValueChanged<GatewayProposto>? onGatewayTap;
   final bool showBaseMap;
   final bool lockPosition;
+
+  final MapSnapshotController? snapshotController;
 
   @override
   State<ResponsiveRecommendationMap> createState() =>
@@ -62,6 +66,9 @@ class _ResponsiveRecommendationMapState
   double _minimumZoom = recommendationMinimumAllowedZoom;
   late final CameraViewportState _initialViewport;
   bool _constrainingCenter = false;
+  bool _dataApplied = false;
+  bool _mapLoaded = false;
+  bool _awaitingReadyIdle = false;
 
   @override
   void initState() {
@@ -98,8 +105,23 @@ class _ResponsiveRecommendationMapState
     }
   }
 
+  Future<Uint8List> _snapshot() {
+    final map = _map;
+    if (map == null || !_styleReady) {
+      return Future.error(StateError('O mapa ainda não terminou de carregar.'));
+    }
+    return map.snapshot();
+  }
+
+  @override
+  void dispose() {
+    widget.snapshotController?.detach(_snapshot);
+    super.dispose();
+  }
+
   Future<void> _onMapCreated(MapboxMap map) async {
     _map = map;
+    widget.snapshotController?.attach(_snapshot);
     _styleReady = false;
     _lastViewportSignature = null;
     await Future.wait([
@@ -148,6 +170,8 @@ class _ResponsiveRecommendationMapState
       _styleReady = true;
       await _updateMapData();
       await _fitCamera(force: true);
+      _dataApplied = true;
+      _scheduleReadySignal();
     } catch (error, stackTrace) {
       debugPrint('Falha ao configurar o mapa de recomendação: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -159,7 +183,30 @@ class _ResponsiveRecommendationMapState
     // the final size imposed by the result/detail layout. Refit on the next
     // frame so backend coverage is not cropped by that provisional size.
     await WidgetsBinding.instance.endOfFrame;
-    if (mounted) await _fitCamera(force: true);
+    if (!mounted) return;
+    await _fitCamera(force: true);
+    _mapLoaded = true;
+    _scheduleReadySignal();
+  }
+
+  void _scheduleReadySignal() {
+    final controller = widget.snapshotController;
+    if (controller == null || controller.isReady) return;
+    if (!_dataApplied || !_mapLoaded) return;
+    _awaitingReadyIdle = true;
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      if (mounted && _awaitingReadyIdle) _signalReady();
+    });
+  }
+
+  void _onMapIdle() {
+    unawaited(_constrainCenter());
+    if (_awaitingReadyIdle) _signalReady();
+  }
+
+  void _signalReady() {
+    _awaitingReadyIdle = false;
+    widget.snapshotController?.markReady();
   }
 
   Future<void> _addSourcesAndLayers(MapboxMap map) async {
@@ -542,7 +589,7 @@ class _ResponsiveRecommendationMapState
                       EagerGestureRecognizer.new,
                     ),
                   },
-                  onMapIdleListener: (_) => unawaited(_constrainCenter()),
+                  onMapIdleListener: (_) => _onMapIdle(),
                   onMapCreated: _onMapCreated,
                   onStyleLoadedListener: _onStyleLoaded,
                   onMapLoadedListener: _onMapLoaded,

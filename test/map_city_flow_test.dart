@@ -143,7 +143,7 @@ class _DelayedAtivos extends AtivosService {
 
   @override
   Future<List<MunicipioResumo>> getMunicipios({
-    required String distribuidora,
+    String? distribuidora,
     required String uf,
   }) => municipios.future;
 }
