@@ -3,8 +3,6 @@ import 'dart:typed_data';
 
 import 'package:latlong2/latlong.dart';
 
-import 'package:latlong2/latlong.dart';
-
 import '../config/api_config.dart';
 
 import 'package:http/http.dart' as http;
