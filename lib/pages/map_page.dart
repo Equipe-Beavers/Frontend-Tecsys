@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import '../controllers/study_area_count_controller.dart';
+
 import '../widgets/auth/auth_scope.dart';
 
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Visibility;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:frontend_tecsys/widgets/layer_filter_button.dart';
 import 'package:frontend_tecsys/widgets/search_bar.dart';
@@ -30,7 +32,9 @@ import 'package:frontend_tecsys/utils/map_utils.dart';
 import 'package:frontend_tecsys/widgets/study_area_step.dart';
 
 class MapPage extends StatefulWidget {
-  const MapPage({super.key});
+  const MapPage({super.key, this.ativosService});
+
+  final AtivosService? ativosService;
 
   @override
   State<MapPage> createState() => _MapPageState();
@@ -47,7 +51,8 @@ class _MapPageState extends State<MapPage> {
   final Map<String, AtivoBdgd> _ativosPorAnnotationId = {};
   final Map<String, AntenaAnatel> _antenasPorAnnotationId = {};
 
-  final AtivosService _ativosService = AtivosService();
+  late final AtivosService _ativosService;
+  late final StudyAreaCountController _contagemArea;
   final EdificacoesService _edificacoesService = EdificacoesService();
   final CamadasExternasService _camadasExternasService =
       CamadasExternasService();
@@ -66,6 +71,7 @@ class _MapPageState extends State<MapPage> {
   List<AntenaAnatel> _antenas = [];
   VegetacaoConfig? _vegetacaoConfig;
   bool _vegetacaoAtiva = false;
+  bool _relevoAtivo = true;
   bool _antenasAtivas = false;
   bool _legendaExpandida = false;
   Map<TipoAtivo, bool> _camadasAtivas =
@@ -75,7 +81,8 @@ class _MapPageState extends State<MapPage> {
   String? _erro;
   String? _erroMapa;
   String? _erroMunicipios;
-  bool _carregandoMunicipios = false;
+  final ValueNotifier<bool> _carregandoMunicipios = ValueNotifier(false);
+  bool _iniciandoEstudo = false;
 
   Timer? _debounceTimer;
   int _sequenciaRequisicao = 0;
@@ -100,6 +107,8 @@ class _MapPageState extends State<MapPage> {
   static const int _limiteAtivos = 3000;
   static const double _ladoMaximoGrausAtivos = 0.2;
   static const String _terrainSourceId = 'study-terrain-dem';
+  static const String _vegetacaoSourceId = 'study-vegetation-source';
+  static const String _vegetacaoLayerId = 'study-vegetation-layer';
   static const String _edificacoesSourceId = 'study-buildings';
   static const String _edificacoesFillLayerId = 'study-buildings-fill';
   static const String _edificacoesLabelLayerId = 'study-buildings-label';
@@ -117,6 +126,8 @@ class _MapPageState extends State<MapPage> {
   @override
   void initState() {
     super.initState();
+    _ativosService = widget.ativosService ?? AtivosService();
+    _contagemArea = StudyAreaCountController(_ativosService);
     _inicializar();
   }
 
@@ -126,10 +137,86 @@ class _MapPageState extends State<MapPage> {
     _buscaController.dispose();
     _ativoTapEvents?.cancel();
     _antenaTapEvents?.cancel();
-    _ativosService.dispose();
+    _carregandoMunicipios.dispose();
+    _contagemArea.dispose();
+    if (widget.ativosService == null) _ativosService.dispose();
     _camadasExternasService.dispose();
     _edificacoesService.dispose();
     super.dispose();
+  }
+
+  String _montarUrlWmsVegetacao(VegetacaoConfig config) {
+    final base = config.baseUrl.endsWith('?')
+        ? config.baseUrl
+        : '${config.baseUrl}${config.baseUrl.contains('?') ? '&' : '?'}';
+
+    return '${base}SERVICE=WMS'
+        '&REQUEST=GetMap'
+        '&VERSION=1.1.1'
+        '&LAYERS=${Uri.encodeQueryComponent(config.layer)}'
+        '&STYLES='
+        '&FORMAT=${Uri.encodeQueryComponent(config.format)}'
+        '&TRANSPARENT=TRUE'
+        '&SRS=EPSG:3857'
+        '&BBOX={bbox-epsg-3857}'
+        '&WIDTH=256'
+        '&HEIGHT=256';
+  }
+
+  Future<void> _configurarCamadaVegetacao() async {
+    final map = _mapboxMap;
+    final config = _vegetacaoConfig;
+
+    if (map == null || config == null) return;
+
+    try {
+      if (!await map.styleSourceExists(_vegetacaoSourceId)) {
+        await map.addStyleSource(
+          _vegetacaoSourceId,
+          jsonEncode({
+            'type': 'raster',
+            'tiles': [_montarUrlWmsVegetacao(config)],
+            'tileSize': 256,
+            'attribution': config.attribution,
+          }),
+        );
+      }
+
+      if (!await map.styleLayerExists(_vegetacaoLayerId)) {
+        await map.addLayer(
+          RasterLayer(
+            id: _vegetacaoLayerId,
+            sourceId: _vegetacaoSourceId,
+            slot: 'top',
+            rasterOpacity: 0.65,
+            rasterFadeDuration: 0,
+            visibility: _vegetacaoAtiva ? Visibility.VISIBLE : Visibility.NONE,
+          ),
+        );
+      }
+
+      await _atualizarVisibilidadeVegetacao();
+    } catch (error, stackTrace) {
+      debugPrint('Falha ao configurar vegetação: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> _atualizarVisibilidadeVegetacao() async {
+    final map = _mapboxMap;
+    if (map == null) return;
+
+    try {
+      if (!await map.styleLayerExists(_vegetacaoLayerId)) return;
+
+      await map.setStyleLayerProperty(
+        _vegetacaoLayerId,
+        'visibility',
+        _vegetacaoAtiva ? 'visible' : 'none',
+      );
+    } catch (error) {
+      debugPrint('Falha ao alterar visibilidade da vegetação: $error');
+    }
   }
 
   void _onMapCreated(MapboxMap controller) async {
@@ -175,10 +262,18 @@ class _MapPageState extends State<MapPage> {
 
   void _onStyleLoaded(StyleLoadedEventData _) {
     unawaited(
-      Future.wait([_configurarRelevo(), _configurarCamadaEdificacoes()])
-          .whenComplete(() {
-            if (!_terrainReady.isCompleted) _terrainReady.complete();
-          }),
+      Future.wait([
+        _configurarRelevo(),
+        _configurarCamadaEdificacoes().catchError(
+          (Object error) =>
+              debugPrint('Falha ao configurar edificações: $error'),
+        ),
+        _configurarCamadaVegetacao(),
+      ]).whenComplete(() {
+        if (!_terrainReady.isCompleted) {
+          _terrainReady.complete();
+        }
+      }),
     );
   }
 
@@ -197,9 +292,7 @@ class _MapPageState extends State<MapPage> {
           }),
         );
       }
-      await map.setStyleTerrain(
-        jsonEncode({'source': _terrainSourceId, 'exaggeration': 1.0}),
-      );
+      await _atualizarVisibilidadeRelevo();
     } catch (error, stackTrace) {
       debugPrint('Falha ao configurar o relevo do Mapbox: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -209,6 +302,23 @@ class _MapPageState extends State<MapPage> {
               'Não foi possível carregar a fonte de relevo do Mapbox.';
         });
       }
+    }
+  }
+
+  Future<void> _atualizarVisibilidadeRelevo() async {
+    final map = _mapboxMap;
+    if (map == null) return;
+
+    try {
+      if (_relevoAtivo) {
+        await map.setStyleTerrain(
+          jsonEncode({'source': _terrainSourceId, 'exaggeration': 1.0}),
+        );
+      } else {
+        await map.removeStyleTerrain();
+      }
+    } catch (error) {
+      debugPrint('Falha ao alternar relevo: $error');
     }
   }
 
@@ -352,6 +462,7 @@ class _MapPageState extends State<MapPage> {
       indice = _relevoPontos.length - 1;
       revisao = _polygonRevision;
     });
+    _consultarAtivosDaArea();
     _atualizarPoligono();
     final consulta = _consultarRelevoDoPonto(map, point, indice, revisao);
     _consultasRelevo.add(consulta);
@@ -392,6 +503,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _limparPontosDesenho() {
+    _contagemArea.updateArea(const []);
     polygonPoints = [];
     _relevoPontos = [];
     _consultasRelevo = [];
@@ -406,40 +518,12 @@ class _MapPageState extends State<MapPage> {
     _atualizarPoligono();
   }
 
-  bool _ativoDentroDaArea(AtivoBdgd ativo) {
-    if (polygonPoints.length < 3) return false;
-
-    var dentro = false;
-    for (
-      var i = 0, j = polygonPoints.length - 1;
-      i < polygonPoints.length;
-      j = i++
-    ) {
-      final atual = polygonPoints[i];
-      final anterior = polygonPoints[j];
-      final cruzaLatitude =
-          (atual.latitude > ativo.latitude) !=
-          (anterior.latitude > ativo.latitude);
-      if (!cruzaLatitude) continue;
-
-      final longitudeIntersecao =
-          (anterior.longitude - atual.longitude) *
-              (ativo.latitude - atual.latitude) /
-              (anterior.latitude - atual.latitude) +
-          atual.longitude;
-      if (ativo.longitude < longitudeIntersecao) dentro = !dentro;
-    }
-    return dentro;
+  void _consultarAtivosDaArea() {
+    _contagemArea.updateArea(
+      polygonPoints,
+      distributor: _distribuidoraSelecionada,
+    );
   }
-
-  int get _ativosNaArea => _todosAtivos
-      .where(
-        (ativo) =>
-            _municipioSelecionado == null ||
-            ativo.municipio == _municipioSelecionado,
-      )
-      .where(_ativoDentroDaArea)
-      .length;
 
   String get _locationLabel => [
     _distribuidoraSelecionada,
@@ -881,10 +965,7 @@ class _MapPageState extends State<MapPage> {
   Future<void> _inicializar() async {
     // As duas cargas são independentes: a de distribuidoras pode levar dezenas
     // de segundos e não deve esperar a configuração de vegetação.
-    await Future.wait([
-      _carregarConfigVegetacao(),
-      _carregarDistribuidoras(),
-    ]);
+    await Future.wait([_carregarConfigVegetacao(), _carregarDistribuidoras()]);
   }
 
   Future<void> _carregarConfigVegetacao() async {
@@ -899,6 +980,9 @@ class _MapPageState extends State<MapPage> {
     setState(() {
       _vegetacaoConfig = configVegetacao;
     });
+    if (_mapboxMap != null) {
+      unawaited(_configurarCamadaVegetacao());
+    }
   }
 
   Future<void> _carregarDistribuidoras({bool novaTentativa = false}) async {
@@ -972,7 +1056,33 @@ class _MapPageState extends State<MapPage> {
       _camadasAtivas.values.where((ativa) => ativa).length +
       (_vegetacaoAtiva ? 1 : 0) +
       (_antenasAtivas ? 1 : 0) +
-      (_edificacoesAtivas ? 1 : 0);
+      (_edificacoesAtivas ? 1 : 0) +
+      (_relevoAtivo ? 1 : 0);
+
+  Future<void> _abrirDistribuidoraDoFiltro() async {
+    if (!_distribuidorasDisponiveis()) return;
+    var confirmado = false;
+    String? escolhida;
+    await SelectionBottomSheet.show<String>(
+      context: context,
+      title: 'Distribuidora',
+      searchHint: 'Buscar distribuidora',
+      items: _distribuidoras
+          .map((dist) => SelectionItem(title: dist.nome, value: dist.nome))
+          .toList(),
+      selectedValue: _distribuidoraSelecionada,
+      onSelected: (nome) {
+        confirmado = true;
+        escolhida = nome;
+      },
+    );
+    if (!mounted || !confirmado || escolhida == null) return;
+    // A consulta inicia antes do seletor, que acompanha sua conclusão ao vivo.
+    await Future.wait<void>([
+      _selecionarDistribuidora(escolhida),
+      _abrirFiltroMunicipio(),
+    ]);
+  }
 
   Future<void> _selecionarDistribuidora(String? distribuidora) async {
     if (distribuidora == null || distribuidora == _distribuidoraSelecionada) {
@@ -996,12 +1106,13 @@ class _MapPageState extends State<MapPage> {
       _buscaController.clear();
       _limparPontosDesenho();
       isDrawing = false;
-      _carregando = true;
+      _carregando = false;
     });
 
     if (selecionada != null) {
       await _carregarMunicipios(selecionada);
     }
+    if (!mounted || _distribuidoraSelecionada != distribuidora) return;
     _atualizarPoligono();
     await _atualizarAnnotations();
     _agendarCarregamento();
@@ -1046,46 +1157,71 @@ class _MapPageState extends State<MapPage> {
 
   Future<void> _iniciarEstudo() async {
     if (!_distribuidorasDisponiveis()) return;
-
-    await SelectionBottomSheet.show<String>(
-      context: context,
-      title: 'Distribuidora',
-      stepLabel: 'PASSO 1 DE 4',
-      searchHint: 'Buscar distribuidora',
-      notFoundMessage: _distribuidoras.isEmpty
-          ? 'Não foi possível carregar as distribuidoras.'
-          : 'Não encontrada',
-      items: _distribuidoras
-          .map((dist) => SelectionItem(title: dist.nome, value: dist.nome))
-          .toList(),
-      selectedValue: _distribuidoraSelecionada,
-      onSelected: (distribuidoraNome) async {
-        if (distribuidoraNome == null) {
-          _debounceTimer?.cancel();
-          setState(() {
-            _distribuidoraSelecionada = null;
-            _estadoSelecionado = null;
-            _municipioSelecionado = null;
-            _bairroSelecionado = null;
-            _municipios = [];
-            _sequenciaMunicipios++;
-            _carregandoMunicipios = false;
-            _erroMunicipios = null;
-            _todosAtivos = [];
-            _carregando = false;
-            _limparPontosDesenho();
-            isDrawing = false;
-          });
-          await _abrirCidadeBairroDoEstudo();
-          return;
-        }
-        await _selecionarDistribuidoraParaEstudo(distribuidoraNome);
-      },
-    );
+    if (_iniciandoEstudo) return;
+    _iniciandoEstudo = true;
+    try {
+      var confirmado = false;
+      String? distribuidoraEscolhida;
+      await SelectionBottomSheet.show<String>(
+        context: context,
+        title: 'Distribuidora',
+        stepLabel: 'PASSO 1 DE 4',
+        searchHint: 'Buscar distribuidora',
+        notFoundMessage: _distribuidoras.isEmpty
+            ? 'Não foi possível carregar as distribuidoras.'
+            : 'Não encontrada',
+        items: _distribuidoras
+            .map((dist) => SelectionItem(title: dist.nome, value: dist.nome))
+            .toList(),
+        selectedValue: _distribuidoraSelecionada,
+        onSelected: (nome) {
+          confirmado = true;
+          distribuidoraEscolhida = nome;
+        },
+      );
+      // O seletor fecha antes de abrir a próxima etapa do estudo.
+      if (!mounted || !confirmado) return;
+      final distribuidora = distribuidoraEscolhida;
+      if (distribuidora != null) {
+        await _selecionarDistribuidoraParaEstudo(distribuidora);
+        return;
+      }
+      _debounceTimer?.cancel();
+      setState(() {
+        _distribuidoraSelecionada = null;
+        _estadoSelecionado = null;
+        _municipioSelecionado = null;
+        _bairroSelecionado = null;
+        _municipios = [];
+        _sequenciaMunicipios++;
+        _carregandoMunicipios.value = false;
+        _erroMunicipios = null;
+        _todosAtivos = [];
+        _carregando = false;
+        _limparPontosDesenho();
+        isDrawing = false;
+      });
+      await _abrirCidadeDoEstudo();
+    } finally {
+      _iniciandoEstudo = false;
+    }
   }
 
   Future<void> _selecionarDistribuidoraParaEstudo(String distribuidora) async {
     if (!mounted) return;
+
+    if (distribuidora == _distribuidoraSelecionada &&
+        !_carregandoMunicipios.value &&
+        _erroMunicipios == null &&
+        _municipios.isNotEmpty) {
+      // A cidade já escolhida continua marcada ao confirmar a mesma distribuidora.
+      setState(() {
+        _limparPontosDesenho();
+        isDrawing = false;
+      });
+      await _abrirCidadeDoEstudo();
+      return;
+    }
 
     _debounceTimer?.cancel();
     final distribuidoraSelecionada = _distribuidoras
@@ -1105,51 +1241,27 @@ class _MapPageState extends State<MapPage> {
       _buscaController.clear();
       _limparPontosDesenho();
       isDrawing = false;
-      _carregando = true;
+      _carregando = false;
     });
 
     await _atualizarPoligono();
     await _carregarMunicipios(distribuidoraSelecionada);
-    try {
-      await _carregarDados();
-      if (!mounted) return;
-      await _abrirCidadeBairroDoEstudo();
-    } finally {
-      if (mounted) {
-        setState(() {
-          _carregando = false;
-        });
-      }
-    }
+    if (!mounted) return;
+    // A seleção da cidade depende dos municípios, não das camadas do mapa.
+    _agendarCarregamento();
+    await _abrirCidadeDoEstudo();
   }
 
-  Future<void> _abrirCidadeBairroDoEstudo() async {
+  Future<void> _abrirCidadeDoEstudo() async {
     final cidades = _municipiosDisponiveis;
-    final bairrosPorCidade = <String, List<String>>{};
-
-    for (final cidade in cidades) {
-      final bairros =
-          _todosAtivos
-              .where((ativo) => ativo.municipio == cidade)
-              .map((ativo) => ativo.bairro.trim())
-              .where((bairro) => bairro.isNotEmpty && bairro != 'Não informado')
-              .toSet()
-              .toList()
-            ..sort();
-
-      bairrosPorCidade[cidade] = bairros;
-    }
-
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return CidadeBairroBottomSheet(
+        return CidadeBottomSheet(
           cidades: cidades,
-          bairrosPorCidade: bairrosPorCidade,
           cidadeSelecionada: _municipioSelecionado,
-          bairroSelecionado: _bairroSelecionado,
           stepLabel: 'PASSO 2 DE 4',
           breadcrumb: _distribuidoraSelecionada != null
               ? '$_distribuidoraSelecionada · Selecione o município'
@@ -1158,15 +1270,16 @@ class _MapPageState extends State<MapPage> {
               ? _erroMunicipios ?? 'Nenhuma cidade encontrada para a distribuidora selecionada.'
               : 'Não encontrada',
           allowEmptySelection: cidades.isEmpty,
-          onProsseguir: (cidade, bairro) {
+          onProsseguir: (cidade) {
             if (cidade == null && cidades.isNotEmpty) return;
             setState(() {
               _municipioSelecionado = cidade;
-              _bairroSelecionado = bairro;
+              _bairroSelecionado = null;
               isDrawing = true;
               _limparPontosDesenho();
             });
             _atualizarPoligono();
+            if (cidade != null) unawaited(_centralizarNoMunicipio(cidade));
           },
         );
       },
@@ -1193,8 +1306,6 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  void _onLocationPressed() {}
-
   List<String> get _municipiosDisponiveis {
     return _municipios.map((municipio) => municipio.nome).toList();
   }
@@ -1206,7 +1317,7 @@ class _MapPageState extends State<MapPage> {
     if (uf == null || uf.isEmpty) {
       setState(() {
         _municipios = [];
-        _carregandoMunicipios = false;
+        _carregandoMunicipios.value = false;
         _erroMunicipios =
             'A distribuidora selecionada não possui UF cadastrada.';
       });
@@ -1215,7 +1326,7 @@ class _MapPageState extends State<MapPage> {
 
     setState(() {
       _municipios = [];
-      _carregandoMunicipios = true;
+      _carregandoMunicipios.value = true;
       _erroMunicipios = null;
     });
 
@@ -1228,7 +1339,7 @@ class _MapPageState extends State<MapPage> {
 
       setState(() {
         _municipios = municipios;
-        _carregandoMunicipios = false;
+        _carregandoMunicipios.value = false;
       });
     } catch (error, stackTrace) {
       if (!mounted || sequencia != _sequenciaMunicipios) return;
@@ -1237,7 +1348,7 @@ class _MapPageState extends State<MapPage> {
       debugPrintStack(stackTrace: stackTrace);
       setState(() {
         _municipios = [];
-        _carregandoMunicipios = false;
+        _carregandoMunicipios.value = false;
         _erroMunicipios = 'Não foi possível carregar os municípios: $error';
       });
     }
@@ -1265,79 +1376,85 @@ class _MapPageState extends State<MapPage> {
     _atualizarAnnotations();
   }
 
-  void _abrirFiltroMunicipio() {
-    final municipios = _municipiosDisponiveis;
-
-    showModalBottomSheet<void>(
+  Future<void> _abrirFiltroMunicipio() {
+    return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.7,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ListTile(
-                title: Text('Filtrar por cidade'),
-                subtitle: Text(
-                  'Selecione um município para filtrar os ativos no mapa.',
-                ),
+      builder: (context) => ValueListenableBuilder<bool>(
+        valueListenable: _carregandoMunicipios,
+        builder: (context, carregandoMunicipios, _) {
+          final municipios = _municipiosDisponiveis;
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.7,
               ),
-              const Divider(height: 1),
-              Flexible(
-                child: _carregandoMunicipios
-                    ? const Center(child: CircularProgressIndicator())
-                    : municipios.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Text(
-                            _erroMunicipios ?? 'Selecione uma distribuidora para carregar os municípios.',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: AppColors.textMuted),
-                          ),
-                        ),
-                      )
-                    : ListView(
-                        shrinkWrap: true,
-                        padding: EdgeInsets.zero,
-                        children: [
-                          ListTile(
-                            title: const Text('Todos os municípios'),
-                            leading: Icon(
-                              _municipioSelecionado == null
-                                  ? Icons.radio_button_checked
-                                  : Icons.radio_button_unchecked,
-                              color: AppColors.primaryLime,
-                            ),
-                            onTap: () {
-                              Navigator.pop(context);
-                              _selecionarMunicipioDoFiltro(null);
-                            },
-                          ),
-                          ...municipios.map(
-                            (municipio) => ListTile(
-                              title: Text(municipio),
-                              leading: Icon(
-                                municipio == _municipioSelecionado
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_unchecked,
-                                color: AppColors.primaryLime,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const ListTile(
+                    title: Text('Filtrar por cidade'),
+                    subtitle: Text(
+                      'Selecione um município para filtrar os ativos no mapa.',
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: carregandoMunicipios
+                        ? const Center(child: CircularProgressIndicator())
+                        : municipios.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Text(
+                                _erroMunicipios ?? 'Selecione uma distribuidora para carregar os municípios.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: AppColors.textMuted,
+                                ),
                               ),
-                              onTap: () {
-                                Navigator.pop(context);
-                                _selecionarMunicipioDoFiltro(municipio);
-                              },
                             ),
+                          )
+                        : ListView(
+                            shrinkWrap: true,
+                            padding: EdgeInsets.zero,
+                            children: [
+                              ListTile(
+                                title: const Text('Todos os municípios'),
+                                leading: Icon(
+                                  _municipioSelecionado == null
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  color: AppColors.primaryLime,
+                                ),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _selecionarMunicipioDoFiltro(null);
+                                },
+                              ),
+                              ...municipios.map(
+                                (municipio) => ListTile(
+                                  title: Text(municipio),
+                                  leading: Icon(
+                                    municipio == _municipioSelecionado
+                                        ? Icons.radio_button_checked
+                                        : Icons.radio_button_unchecked,
+                                    color: AppColors.primaryLime,
+                                  ),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _selecionarMunicipioDoFiltro(municipio);
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1350,7 +1467,16 @@ class _MapPageState extends State<MapPage> {
       antenasAtivas: _antenasAtivas,
       edificacoesAtivas: _edificacoesAtivas,
       onSalvarVegetacao: (ativa) {
-        setState(() => _vegetacaoAtiva = ativa);
+        setState(() {
+          _vegetacaoAtiva = ativa;
+          if (!ativa) _legendaExpandida = false;
+        });
+        unawaited(_configurarCamadaVegetacao());
+      },
+      relevoAtivo: _relevoAtivo,
+      onSalvarRelevo: (ativo) {
+        setState(() => _relevoAtivo = ativo);
+        unawaited(_atualizarVisibilidadeRelevo());
       },
       onSalvarAntenas: (ativa) {
         setState(() => _antenasAtivas = ativa);
@@ -1369,7 +1495,7 @@ class _MapPageState extends State<MapPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length + 3} ativas',
+              'Camadas atualizadas: $_totalCamadasAtivas de ${_camadasAtivas.length + 4} ativas',
               style: const TextStyle(
                 color: AppColors.textDark,
                 fontWeight: FontWeight.bold,
@@ -1634,6 +1760,7 @@ class _MapPageState extends State<MapPage> {
     return Scaffold(
       backgroundColor: AppColors.surfaceBackground,
       body: Stack(
+        fit: StackFit.expand,
         children: [
           if (_emTesteDeWidget)
             const ColoredBox(color: AppColors.surfaceBackground)
@@ -1665,12 +1792,10 @@ class _MapPageState extends State<MapPage> {
                           onChanged: _aplicarBusca,
                         ),
                       ),
-                      if (_distribuidoraSelecionada != null &&
-                          _municipioSelecionado != null)
-                        LayerFilterButton(
-                          onPressed: _abrirPainelCamadas,
-                          activeLayersCount: _totalCamadasAtivas,
-                        ),
+                      LayerFilterButton(
+                        onPressed: _abrirPainelCamadas,
+                        activeLayersCount: _totalCamadasAtivas,
+                      ),
                     ],
                   ),
                   Row(
@@ -1680,34 +1805,15 @@ class _MapPageState extends State<MapPage> {
                         label: _distribuidoraSelecionada != null
                             ? 'DIST. $_distribuidoraSelecionada'
                             : _carregandoDistribuidoras
-                                ? 'DIST. (carregando…)'
-                                : _distribuidoras.isEmpty
-                                    ? 'DIST. (tentar novamente)'
-                                    : 'DIST.',
+                            ? 'DIST. (carregando…)'
+                            : _distribuidoras.isEmpty
+                            ? 'DIST. (tentar novamente)'
+                            : 'DIST.',
                         isSelected: _distribuidoraSelecionada != null,
-                        onTap: () {
-                          if (!_distribuidorasDisponiveis()) return;
-                          SelectionBottomSheet.show<String>(
-                            context: context,
-                            title: 'Distribuidora',
-                            searchHint: 'Buscar distribuidora',
-                            items: _distribuidoras
-                                .map(
-                                  (dist) => SelectionItem(
-                                    title: dist.nome,
-                                    value: dist.nome,
-                                  ),
-                                )
-                                .toList(),
-                            selectedValue: _distribuidoraSelecionada,
-                            onSelected: (distribuidoraNome) {
-                              _selecionarDistribuidora(distribuidoraNome);
-                            },
-                          );
-                        },
+                        onTap: _abrirDistribuidoraDoFiltro,
                       ),
                       FilterChipWidget(
-                        label: _municipioSelecionado ?? 'Cidade / bairro',
+                        label: _municipioSelecionado ?? 'Cidade',
                         onTap: _abrirFiltroMunicipio,
                       ),
                     ],
@@ -1717,7 +1823,6 @@ class _MapPageState extends State<MapPage> {
                     child: MapNavigationControls(
                       onZoomIn: _zoomIn,
                       onZoomOut: _zoomOut,
-                      onLocationPressed: _onLocationPressed,
                     ),
                   ),
                 ],
@@ -1725,14 +1830,20 @@ class _MapPageState extends State<MapPage> {
             ),
           if (isDrawing)
             Positioned.fill(
-              child: StudyAreaStep(
-                locationLabel: _locationLabel,
-                areaDesenhada: _areaDesenhada,
-                areaKm2: calculatePolygonAreaKm2(polygonPoints),
-                ativosNaArea: _ativosNaArea,
-                onCancelar: _cancelarArea,
-                onRefazer: _refazerDesenhoArea,
-                onProsseguir: _prosseguirArea,
+              child: ListenableBuilder(
+                listenable: _contagemArea,
+                builder: (context, _) => StudyAreaStep(
+                  locationLabel: _locationLabel,
+                  areaDesenhada: _areaDesenhada,
+                  areaKm2: calculatePolygonAreaKm2(polygonPoints),
+                  ativosNaArea: _contagemArea.count,
+                  carregandoAtivos: _contagemArea.loading,
+                  erroAtivos: _contagemArea.error,
+                  onTentarContagem: _consultarAtivosDaArea,
+                  onCancelar: _cancelarArea,
+                  onRefazer: _refazerDesenhoArea,
+                  onProsseguir: _prosseguirArea,
+                ),
               ),
             )
           else
@@ -1847,7 +1958,7 @@ class _MapPageState extends State<MapPage> {
                               ),
                             ),
                             const SizedBox(height: 6),
-
+                            const SizedBox(height: 8),
                             for (final classe in _vegetacaoConfig!.classes)
                               Padding(
                                 padding: const EdgeInsets.symmetric(

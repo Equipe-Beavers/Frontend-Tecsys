@@ -169,13 +169,13 @@ class ResultadoRecomendacao {
   final double? capacityUsedPercent;
   final int quantidadeGateways;
   final int percentualCobertura;
-  final double custoTotalEstimado;
   final int pontosInteresse;
   final int pontosCobertos;
   final int pontosNaoCobertos;
   final List<CategoriaCobertura> porCategoria;
   final List<GatewayProposto> gateways;
   final List<AtivoResultadoMapa> ativosMapa;
+  final List<String> avisosAmbientais;
 
   const ResultadoRecomendacao({
     required this.idCenario,
@@ -185,17 +185,29 @@ class ResultadoRecomendacao {
     this.capacityUsedPercent,
     required this.quantidadeGateways,
     required this.percentualCobertura,
-    required this.custoTotalEstimado,
     required this.pontosInteresse,
     required this.pontosCobertos,
     required this.pontosNaoCobertos,
     required this.porCategoria,
     required this.gateways,
     this.ativosMapa = const [],
+    this.avisosAmbientais = const [],
   });
 
   factory ResultadoRecomendacao.fromJson(Map<String, dynamic> json) {
+    final ambiental = _asAttrMap(json['analise_ambiental']);
+    final fontes = _asAttrMap(ambiental['fontes']);
+    final pendentes = fontes.entries
+        .where((entry) => entry.value != 'disponivel')
+        .map((entry) => '${entry.key}: ${entry.value}')
+        .toList();
     return ResultadoRecomendacao(
+      avisosAmbientais: [
+        ...pendentes,
+        ...(ambiental['avisos'] is List
+            ? (ambiental['avisos'] as List).map((e) => e.toString())
+            : <String>[]),
+      ],
       idCenario: (json['id_cenario'] as num).toInt(),
       name: json['nome']?.toString() ?? 'Otimizada',
       optimized: json['otimizado'] != false,
@@ -205,7 +217,6 @@ class ResultadoRecomendacao {
       ),
       quantidadeGateways: (json['quantidade_gateways'] as num).toInt(),
       percentualCobertura: (json['percentual_cobertura'] as num).toInt(),
-      custoTotalEstimado: (json['custo_total_estimado'] as num).toDouble(),
       pontosInteresse: (json['pontos_interesse'] as num).toInt(),
       pontosCobertos: (json['pontos_cobertos'] as num).toInt(),
       pontosNaoCobertos: (json['pontos_nao_cobertos'] as num).toInt(),

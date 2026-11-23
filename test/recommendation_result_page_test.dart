@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:frontend_tecsys/widgets/branded_loading_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend_tecsys/mocks/recomendacao_mock.dart';
 import 'package:frontend_tecsys/models/mancha_cenario.dart';
@@ -17,6 +18,76 @@ import 'package:http/testing.dart';
 import 'package:frontend_tecsys/widgets/recommendation/recommendation_result_panel.dart';
 
 void main() {
+  for (final size in [const Size(390, 844), const Size(1440, 900)]) {
+    testWidgets('loading do estudo reutiliza visual de autenticação em $size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository = _PendingRecommendationRepository();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecomendacaoResultadoPage(
+            idEstudo: 27,
+            idPerfilRf: 8,
+            titulo: 'Meu estudo',
+            repository: repository,
+            showBaseMap: false,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(BrandedLoadingScreen), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(
+        find.text('Calculando a recomendação de cobertura...'),
+        findsOneWidget,
+      );
+      expect(find.text('GEOMASH'), findsOneWidget);
+      expect(find.byType(AppBar), findsNothing);
+      expect(tester.getSize(find.byType(BrandedLoadingScreen)), size);
+      repository.result.complete(buildRecommendationMock(studyId: 27));
+      await tester.pumpAndSettle();
+      expect(find.byType(BrandedLoadingScreen), findsNothing);
+      expect(find.byType(RecommendationMap), findsOneWidget);
+      expect(find.text('Meu estudo'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('falha encerra novo loading e preserva a mensagem de erro', (
+    tester,
+  ) async {
+    final repository = _PendingRecommendationRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecomendacaoResultadoPage(
+          idEstudo: 27,
+          idPerfilRf: 8,
+          repository: repository,
+          showBaseMap: false,
+        ),
+      ),
+    );
+    expect(
+      find.text('Calculando a recomendação de cobertura...'),
+      findsOneWidget,
+    );
+    repository.result.completeError(StateError('Falha de teste'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BrandedLoadingScreen), findsNothing);
+    expect(
+      find.textContaining('Não foi possível gerar a recomendação.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Falha de teste'), findsOneWidget);
+    expect(find.byType(BackButton), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('switches all six scenarios without changing another result', (
     tester,
   ) async {
@@ -247,8 +318,9 @@ void main() {
         baseUrl: 'http://localhost:3000',
         client: MockClient((request) async {
           methods.add(request.method);
-          if (request.method == 'GET')
+          if (request.method == 'GET') {
             return http.Response('{"cenarios": []}', 200);
+          }
           expect(jsonDecode(request.body), {
             'id_perfil_rf': 2,
             'id_criterio_instalacao': 3,
@@ -324,6 +396,29 @@ void main() {
     expect(find.text('2'), findsOneWidget);
     expect(find.text('4,2 km'), findsOneWidget);
   });
+
+  testWidgets(
+    'falha na recomendação aparece sem erro assíncrono de cobertura',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecomendacaoResultadoPage(
+            idEstudo: 27,
+            idPerfilRf: 8,
+            repository: _FailedRecommendationRepository(),
+            coverageRepository: _FakeScenarioCoverageRepository(),
+            showBaseMap: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Não foi possível gerar a recomendação.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('accepts an injected recommendation repository', (tester) async {
     final repository = _FakeRecommendationRepository();
@@ -436,7 +531,7 @@ class _ScenarioRepository implements RecommendationRepository {
       optimized: index == 0,
       quantidadeGateways: 1,
       percentualCobertura: (covered / base.pontosInteresse * 100).round(),
-      custoTotalEstimado: 100,
+
       pontosInteresse: base.pontosInteresse,
       pontosCobertos: covered,
       pontosNaoCobertos: base.pontosInteresse - covered,
@@ -516,4 +611,68 @@ class _DelayedCoverageRepository implements ScenarioCoverageRepository {
   @override
   Future<ManchaCenario> getManchaCenario(int idCenario) =>
       (requests[idCenario] = Completer<ManchaCenario>()).future;
+}
+
+class _FailedRecommendationRepository implements RecommendationRepository {
+  @override
+  Future<RecommendationScenarios> loadScenarios({
+    required int studyId,
+    required int profileId,
+    int? criterionId,
+  }) async => RecommendationScenarios(
+    scenarios: [
+      await gerarRecomendacao(
+        idEstudo: studyId,
+        idPerfilRf: profileId,
+        idCriterioInstalacao: criterionId,
+      ),
+    ],
+  );
+  @override
+  Future<void> selectScenario({
+    required int studyId,
+    required int scenarioId,
+  }) async {}
+
+  @override
+  Future<ResultadoRecomendacao> gerarRecomendacao({
+    required int idEstudo,
+    required int idPerfilRf,
+    int? idCriterioInstalacao,
+    String? nomeCenario,
+  }) async {
+    throw StateError('Falha de teste');
+  }
+}
+
+class _PendingRecommendationRepository implements RecommendationRepository {
+  @override
+  Future<RecommendationScenarios> loadScenarios({
+    required int studyId,
+    required int profileId,
+    int? criterionId,
+  }) async => RecommendationScenarios(
+    scenarios: [
+      await gerarRecomendacao(
+        idEstudo: studyId,
+        idPerfilRf: profileId,
+        idCriterioInstalacao: criterionId,
+      ),
+    ],
+  );
+  @override
+  Future<void> selectScenario({
+    required int studyId,
+    required int scenarioId,
+  }) async {}
+
+  final result = Completer<ResultadoRecomendacao>();
+
+  @override
+  Future<ResultadoRecomendacao> gerarRecomendacao({
+    required int idEstudo,
+    required int idPerfilRf,
+    int? idCriterioInstalacao,
+    String? nomeCenario,
+  }) => result.future;
 }

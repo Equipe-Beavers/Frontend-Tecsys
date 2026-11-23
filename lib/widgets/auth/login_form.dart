@@ -7,6 +7,7 @@ import '../../theme/app_colors.dart';
 import '../../utils/auth_validation.dart';
 import 'auth_form_components.dart';
 import 'auth_shell.dart';
+import '../../pages/password_recovery_page.dart';
 
 class LoginForm extends StatefulWidget {
   const LoginForm({
@@ -148,6 +149,21 @@ class _LoginFormState extends State<LoginForm> {
                 onPressed: _submit,
               ),
               const SizedBox(height: 10),
+              Center(
+                child: TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => PasswordRecoveryPage(
+                              controller: widget.controller,
+                              initialEmail: _email.text.trim(),
+                            ),
+                          ),
+                        ),
+                  child: const Text('Esqueci a senha'),
+                ),
+              ),
               Center(
                 child: Wrap(
                   alignment: WrapAlignment.center,

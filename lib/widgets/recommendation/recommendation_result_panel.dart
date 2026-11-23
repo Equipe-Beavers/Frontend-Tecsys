@@ -54,9 +54,12 @@ class RecommendationResultPanel extends StatelessWidget {
       ),
       const SizedBox(height: 20),
       CoverageSummaryCard(result: result),
-      if (result.porCategoria.isNotEmpty) ...[
-        const SizedBox(height: 20),
-        CoverageByCategoryCard(categories: result.porCategoria),
+      if (result.avisosAmbientais.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Text(
+          'Dados ambientais parciais: ${result.avisosAmbientais.join("; ")}',
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+        ),
       ],
       const SizedBox(height: 24),
       Row(

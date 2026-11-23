@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/auth/auth_scope.dart';
+import '../widgets/branded_loading_screen.dart';
 
 import '../models/mancha_cenario.dart';
 import '../models/recomendacao_resultado.dart';
@@ -108,8 +109,10 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
 
   Future<void> _loadScenarioCoverage(ResultadoRecomendacao result) async {
     final repository = widget.coverageRepository ?? _ownedCoverageService;
-    if (repository == null || _coverageByScenario.containsKey(result.idCenario))
+    if (repository == null ||
+        _coverageByScenario.containsKey(result.idCenario)) {
       return;
+    }
     try {
       final coverage = await repository.getManchaCenario(result.idCenario);
       if (!mounted) return;
@@ -144,147 +147,165 @@ class _RecomendacaoResultadoPageState extends State<RecomendacaoResultadoPage> {
   );
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: AppColors.surfaceBackground,
-    appBar: AppBar(
-      backgroundColor: AppColors.surfaceBackground,
-      elevation: 0,
-      leading: const BackButton(color: AppColors.textWhite),
-      title: Text(
-        widget.titulo ?? 'Resultado da recomendação',
-        style: const TextStyle(color: AppColors.textWhite, fontSize: 16),
-      ),
-    ),
-    body: FutureBuilder<RecommendationScenarios>(
-      future: _futureScenarios,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const _RecommendationLoading();
-        }
-        if (snapshot.hasError) {
-          return _RecommendationError(
-            message: snapshot.error.toString(),
-            onRetry: () => setState(() => _futureScenarios = _loadScenarios()),
-          );
-        }
-        final group = snapshot.data!;
-        final result = group.scenarios.firstWhere(
-          (scenario) => scenario.idCenario == _activeScenarioId,
-          orElse: () => group.scenarios.first,
+  Widget build(BuildContext context) => FutureBuilder<RecommendationScenarios>(
+    future: _futureScenarios,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const BrandedLoadingScreen(
+          message: 'Calculando a recomendação de cobertura...',
         );
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (group.scenarios.length > 1)
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.navBarBackground,
-                    border: Border.all(color: AppColors.border),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.all(4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+      }
+      return Scaffold(
+        backgroundColor: AppColors.surfaceBackground,
+        appBar: AppBar(
+          backgroundColor: AppColors.surfaceBackground,
+          elevation: 0,
+          leading: const BackButton(color: AppColors.textWhite),
+          title: Text(
+            widget.titulo ?? 'Resultado da recomendação',
+            style: const TextStyle(color: AppColors.textWhite, fontSize: 16),
+          ),
+        ),
+        body: snapshot.hasError
+            ? _RecommendationError(
+                message: snapshot.error.toString(),
+                onRetry: () =>
+                    setState(() => _futureScenarios = _loadScenarios()),
+              )
+            : Builder(
+                builder: (context) {
+                  final group = snapshot.data!;
+                  final result = group.scenarios.firstWhere(
+                    (scenario) => scenario.idCenario == _activeScenarioId,
+                    orElse: () => group.scenarios.first,
+                  );
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final scenario in group.scenarios)
-                        _ScenarioTab(
-                          key: ValueKey('scenario-tab-${scenario.idCenario}'),
-                          label: scenario.optimized
-                              ? 'Otimizada'
-                              : scenario.name,
-                          selected: scenario.idCenario == result.idCenario,
-                          onTap: () {
-                            final active = group.scenarios.firstWhere(
-                              (item) => item.idCenario == scenario.idCenario,
-                            );
-                            setState(
-                              () => _activeScenarioId = active.idCenario,
-                            );
-                            unawaited(_loadScenarioCoverage(active));
-                          },
+                      if (group.scenarios.length > 1)
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.navBarBackground,
+                              border: Border.all(color: AppColors.border),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (final scenario in group.scenarios)
+                                  _ScenarioTab(
+                                    key: ValueKey(
+                                      'scenario-tab-${scenario.idCenario}',
+                                    ),
+                                    label: scenario.optimized
+                                        ? 'Otimizada'
+                                        : scenario.name,
+                                    selected:
+                                        scenario.idCenario == result.idCenario,
+                                    onTap: () {
+                                      final active = group.scenarios.firstWhere(
+                                        (item) =>
+                                            item.idCenario ==
+                                            scenario.idCenario,
+                                      );
+                                      setState(
+                                        () => _activeScenarioId =
+                                            active.idCenario,
+                                      );
+                                      unawaited(_loadScenarioCoverage(active));
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (group.warning != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 6,
+                          ),
+                          child: Text(
+                            group.warning!,
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: _RecommendationContent(
+                          key: ValueKey('scenario-content-${result.idCenario}'),
+                          result: result,
+                          subtitle: widget.subtitulo,
+                          showBaseMap: widget.showBaseMap,
+                          scenarioCoverage:
+                              _coverageByScenario[result.idCenario]?.gateways ??
+                              const [],
+                          onGatewayTap: (gateway) =>
+                              _openGateway(result, gateway),
+                          snapshotController: _mapSnapshot,
+                          scenarioCaptureHost: ScenarioMapCaptureHost(
+                            controller: _scenarioCapture,
+                            showBaseMap: widget.showBaseMap,
+                          ),
+                          exportButton: ExportResultsButton(
+                            idEstudo: widget.idEstudo,
+                            idCenario: result.idCenario,
+                            snapshotController: _mapSnapshot,
+                            capturarOutrosMapas: group.scenarios.length > 1
+                                ? (imagem) => _captureOtherScenarioMaps(
+                                    group,
+                                    result,
+                                    imagem,
+                                  )
+                                : null,
+                            repository: widget.exportRepository,
+                            downloader: widget.fileDownloader,
+                          ),
+                        ),
+                      ),
+                      if (widget.resultadoInicial == null)
+                        SafeArea(
+                          top: false,
+                          minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton.icon(
+                              key: const ValueKey('keep-scenario'),
+                              onPressed:
+                                  _saving ||
+                                      result.idCenario == _selectedScenarioId
+                                  ? null
+                                  : () => _selectScenario(result),
+                              icon: Icon(
+                                result.idCenario == _selectedScenarioId
+                                    ? Icons.check_circle
+                                    : Icons.check,
+                              ),
+                              label: Text(
+                                _saving
+                                    ? 'Salvando...'
+                                    : result.idCenario == _selectedScenarioId
+                                    ? 'Cenário mantido no estudo'
+                                    : 'Manter este cenário',
+                              ),
+                            ),
+                          ),
                         ),
                     ],
-                  ),
-                ),
+                  );
+                },
               ),
-            if (group.warning != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
-                ),
-                child: Text(
-                  group.warning!,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            Expanded(
-              child: _RecommendationContent(
-                key: ValueKey('scenario-content-${result.idCenario}'),
-                result: result,
-                subtitle: widget.subtitulo,
-                showBaseMap: widget.showBaseMap,
-                scenarioCoverage:
-                    _coverageByScenario[result.idCenario]?.gateways ?? const [],
-                onGatewayTap: (gateway) => _openGateway(result, gateway),
-                snapshotController: _mapSnapshot,
-                scenarioCaptureHost: ScenarioMapCaptureHost(
-                  controller: _scenarioCapture,
-                  showBaseMap: widget.showBaseMap,
-                ),
-                exportButton: ExportResultsButton(
-                  idEstudo: widget.idEstudo,
-                  idCenario: result.idCenario,
-                  snapshotController: _mapSnapshot,
-                  capturarOutrosMapas: group.scenarios.length > 1
-                      ? (imagem) =>
-                            _captureOtherScenarioMaps(group, result, imagem)
-                      : null,
-                  repository: widget.exportRepository,
-                  downloader: widget.fileDownloader,
-                ),
-              ),
-            ),
-            if (widget.resultadoInicial == null)
-              SafeArea(
-                top: false,
-                minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    key: const ValueKey('keep-scenario'),
-                    onPressed:
-                        _saving || result.idCenario == _selectedScenarioId
-                        ? null
-                        : () => _selectScenario(result),
-                    icon: Icon(
-                      result.idCenario == _selectedScenarioId
-                          ? Icons.check_circle
-                          : Icons.check,
-                    ),
-                    label: Text(
-                      _saving
-                          ? 'Salvando...'
-                          : result.idCenario == _selectedScenarioId
-                          ? 'Cenário mantido no estudo'
-                          : 'Manter este cenário',
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    ),
+      );
+    },
   );
 
   Future<void> _selectScenario(ResultadoRecomendacao result) async {
@@ -481,25 +502,6 @@ class _ScenarioTab extends StatelessWidget {
           ),
         ),
       ),
-    ),
-  );
-}
-
-class _RecommendationLoading extends StatelessWidget {
-  const _RecommendationLoading();
-
-  @override
-  Widget build(BuildContext context) => const Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        CircularProgressIndicator(color: AppColors.primaryLime),
-        SizedBox(height: 16),
-        Text(
-          'Calculando a recomendação de cobertura...',
-          style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-        ),
-      ],
     ),
   );
 }

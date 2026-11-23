@@ -125,7 +125,7 @@ void main() {
     );
 
     expect(find.text('Ativo coberto'), findsOneWidget);
-    expect(find.text('Sem cobertura'), findsOneWidget);
+    expect(find.text('Sem cobertura'), findsNothing);
     expect(find.byKey(const ValueKey('covered-asset-1401')), findsOneWidget);
     expect(find.byKey(const ValueKey('uncovered-asset-1403')), findsOneWidget);
 

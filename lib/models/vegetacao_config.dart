@@ -43,8 +43,8 @@ class VegetacaoConfig {
     final rawClasses = json['classes'];
     return VegetacaoConfig(
       product: json['product']?.toString() ?? 'ESA WorldCover 2021',
-      baseUrl: json['baseUrl']?.toString() ?? 'https://services.terrascope.be/wms/v2?',
-      layer: json['layer']?.toString() ?? 'WORLDCOVER_2021_MAP',
+      baseUrl: json['baseUrl']?.toString() ?? 'https://mapproxy.terrascope.be/mapproxy/service',
+      layer: json['layer']?.toString() ?? 'esa-worldcover-map-10m-2021-v2_map',
       version: json['version']?.toString() ?? '1.3.0',
       format: json['format']?.toString() ?? 'image/png',
       attribution: json['attribution']?.toString() ?? '© ESA WorldCover project 2021 © Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium',
@@ -60,8 +60,8 @@ class VegetacaoConfig {
 
   factory VegetacaoConfig.fallback() => const VegetacaoConfig(
         product: 'ESA WorldCover 2021',
-        baseUrl: 'https://services.terrascope.be/wms/v2?',
-        layer: 'WORLDCOVER_2021_MAP',
+        baseUrl: 'https://mapproxy.terrascope.be/mapproxy/service',
+        layer: 'esa-worldcover-map-10m-2021-v2_map',
         version: '1.3.0',
         format: 'image/png',
         attribution: '© ESA WorldCover project 2021 © Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium',

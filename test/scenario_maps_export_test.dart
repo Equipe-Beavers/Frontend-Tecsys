@@ -23,7 +23,7 @@ ResultadoRecomendacao _cenario(int id, {bool otimizado = false}) {
     optimized: otimizado,
     quantidadeGateways: base.quantidadeGateways,
     percentualCobertura: base.percentualCobertura,
-    custoTotalEstimado: 0,
+
     pontosInteresse: base.pontosInteresse,
     pontosCobertos: base.pontosCobertos,
     pontosNaoCobertos: base.pontosNaoCobertos,

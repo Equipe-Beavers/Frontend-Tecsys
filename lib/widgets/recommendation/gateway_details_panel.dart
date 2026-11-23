@@ -91,12 +91,16 @@ class GatewayDetailsPanel extends StatelessWidget {
             ),
             _InfoLine(
               label: 'ID do ativo (BDGD)',
-              value: gateway.idAtivoBdgd ?? 'Não informado',
+              value:
+                  gateway.idAtivoBdgd ??
+                  (gateway.atributos['origem'] == 'manual'
+                      ? 'Não se aplica (ponto manual)'
+                      : 'Não disponível na base'),
               highlight: gateway.idAtivoBdgd != null,
             ),
             _InfoLine(
               label: 'Alimentador',
-              value: gateway.alimentador ?? 'Não informado',
+              value: gateway.alimentador ?? 'Não disponível na base',
             ),
             const SizedBox(height: 16),
             Row(

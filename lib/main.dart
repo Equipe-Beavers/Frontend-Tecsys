@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -13,6 +14,8 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'controllers/auth_controller.dart';
 import 'pages/auth_page.dart';
 import 'pages/profile_page.dart';
+import 'widgets/auth/auth_loading_screen.dart';
+import 'pages/password_recovery_page.dart';
 import 'services/session_store.dart';
 import 'widgets/auth/auth_scope.dart';
 
@@ -111,10 +114,37 @@ class _MyAppState extends State<MyApp> {
       title: 'Geomash Tecsys',
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigator,
-      builder: (context, child) => AuthScope(controller: _auth, child: child!),
+      builder: (context, child) => AuthScope(
+        controller: _auth,
+        child: AuthLoadingHost(controller: _auth, child: child!),
+      ),
       routes: {
         '/cadastro': (_) => AuthPage(controller: _auth, register: true),
         '/login': (_) => AuthPage(controller: _auth),
+      },
+      onGenerateRoute: (settings) {
+        final uri = Uri.tryParse(settings.name ?? '');
+        if (uri?.path == '/redefinir-senha') {
+          // Keep the token only in the page state, not in navigation history.
+          if (kIsWeb) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              unawaited(
+                SystemNavigator.routeInformationUpdated(
+                  uri: Uri(path: '/redefinir-senha'),
+                  replace: true,
+                ),
+              );
+            });
+          }
+          return MaterialPageRoute<void>(
+            settings: const RouteSettings(name: '/redefinir-senha'),
+            builder: (_) => PasswordRecoveryPage(
+              controller: _auth,
+              token: uri!.queryParameters['token'] ?? '',
+            ),
+          );
+        }
+        return null;
       },
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -129,13 +159,7 @@ class _MyAppState extends State<MyApp> {
       ),
       home: Builder(
         builder: (context) => _auth.restoring
-            ? const Scaffold(
-                body: Center(
-                  child: CircularProgressIndicator(
-                    semanticsLabel: 'Restaurando sessão',
-                  ),
-                ),
-              )
+            ? const SizedBox.expand()
             : LayoutBuilder(
                 builder: (context, box) {
                   final desktop = box.maxWidth >= 900;
