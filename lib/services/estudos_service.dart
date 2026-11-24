@@ -132,6 +132,45 @@ class EstudosService {
     }
     return Map<String, dynamic>.from(body['data'] as Map);
   }
+
+  Future<void> criarPontosEstudoEmLote(
+    int idEstudo,
+    List<NovoEstudoPonto> pontos,
+  ) async {
+    const tamanhoLote = 250;
+    for (var inicio = 0; inicio < pontos.length; inicio += tamanhoLote) {
+      final fim = inicio + tamanhoLote < pontos.length
+          ? inicio + tamanhoLote
+          : pontos.length;
+      final pontosJson = pontos.sublist(inicio, fim).map((ponto) {
+        final json = ponto.toJson();
+        json.remove('id_estudo');
+        return json;
+      }).toList();
+      final response = await _client
+          .post(
+            Uri.parse('$_baseUrl/study/$idEstudo/points/batch'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'pontos': pontosJson}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final body = response.body.isEmpty ? null : jsonDecode(response.body);
+      if (response.statusCode != 201) {
+        final message = body is Map && body['message'] != null
+            ? body['message'].toString()
+            : 'A API de estudos respondeu com HTTP ${response.statusCode}.';
+        throw StateError(message);
+      }
+      if (body is! Map ||
+          body['data'] is! Map ||
+          (body['data'] as Map)['inseridos'] is! num) {
+        throw const FormatException(
+          'Resposta de criação dos pontos em lote inválida.',
+        );
+      }
+    }
+  }
 }
 
 class StudyApiException implements Exception {

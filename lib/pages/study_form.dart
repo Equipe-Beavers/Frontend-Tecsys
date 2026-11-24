@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:frontend_tecsys/models/install_criterion.dart';
 import 'package:frontend_tecsys/services/install_criterion_service.dart';
 import 'package:frontend_tecsys/models/novo_estudo.dart';
+import 'package:frontend_tecsys/models/ativo_bdgd.dart';
 import 'package:frontend_tecsys/models/rf_profile.dart';
 import 'package:frontend_tecsys/services/rf_profile_service.dart';
 import 'package:frontend_tecsys/services/estudos_service.dart';
@@ -19,6 +20,8 @@ import 'package:frontend_tecsys/widgets/primary_button.dart';
 import 'package:frontend_tecsys/widgets/secondary_button.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../utils/geojson_utils.dart';
+
 class NovoEstudoPage extends StatefulWidget {
   final String distribuidora;
   final String? municipio;
@@ -26,6 +29,8 @@ class NovoEstudoPage extends StatefulWidget {
   final String? uf;
   final double areaKm2;
   final List<LatLng> pontosArea;
+  final List<AtivoBdgd> ativosImportados;
+  final bool usarBaseImportada;
   final List<double?> relevoPontos;
   final InstallCriterionService? criterionService;
   final RFProfileService? rfProfileService;
@@ -42,6 +47,8 @@ class NovoEstudoPage extends StatefulWidget {
     this.uf,
     required this.areaKm2,
     required this.pontosArea,
+    this.ativosImportados = const [],
+    this.usarBaseImportada = false,
     this.relevoPontos = const [],
     this.criterionService,
     this.rfProfileService,
@@ -84,6 +91,8 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   bool _loadingSelections = false;
   int? _idEstudoCriado;
   final Set<int> _pontosSalvos = {};
+  final Set<String> _ativosImportadosSalvos = {};
+  late final List<AtivoBdgd> _ativosImportadosNaArea;
 
   bool get _isEditing => widget.study != null;
   bool get _saveDisabled =>
@@ -92,6 +101,7 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
   @override
   void initState() {
     super.initState();
+    _ativosImportadosNaArea = _filtrarAtivosImportadosNaArea();
     _estudosService =
         widget.studyService ??
         EstudosService(client: AuthScope.clientOf(context));
@@ -102,6 +112,24 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
         widget.criterionService ??
         InstallCriterionService(client: AuthScope.clientOf(context));
     if (_isEditing) _loadSelections();
+  }
+
+  List<AtivoBdgd> _filtrarAtivosImportadosNaArea() {
+    if (!widget.usarBaseImportada || widget.pontosArea.length < 3) {
+      return const [];
+    }
+    final ids = <String>{};
+    return widget.ativosImportados
+        .where((ativo) {
+          final id = ativo.codId.trim();
+          return id.isNotEmpty &&
+              ids.add(id) &&
+              pontoDentroDoPoligono(
+                LatLng(ativo.latitude, ativo.longitude),
+                widget.pontosArea,
+              );
+        })
+        .toList(growable: false);
   }
 
   Future<void> _loadSelections() async {
@@ -329,6 +357,16 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
       );
       return;
     }
+    if (!_isEditing &&
+        widget.usarBaseImportada &&
+        _ativosImportadosNaArea.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não há postes importados dentro da área selecionada.'),
+        ),
+      );
+      return;
+    }
     setState(() => _salvando = true);
     try {
       if (_isEditing) {
@@ -369,12 +407,13 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
           idEstudo = id.toInt();
           _idEstudoCriado = idEstudo;
         }
+        final int estudoId = idEstudo;
         for (var indice = 0; indice < widget.pontosArea.length; indice++) {
           if (_pontosSalvos.contains(indice)) continue;
           final ponto = widget.pontosArea[indice];
           await _estudosService.criarPontoEstudo(
             NovoEstudoPonto(
-              idEstudo: idEstudo,
+              idEstudo: estudoId,
               latitude: ponto.latitude,
               longitude: ponto.longitude,
               relevoM: indice < widget.relevoPontos.length
@@ -385,6 +424,43 @@ class _NovoEstudoPageState extends State<NovoEstudoPage> {
             ),
           );
           _pontosSalvos.add(indice);
+        }
+        final ativosPendentes = _ativosImportadosNaArea
+            .where(
+              (ativo) =>
+                  !_ativosImportadosSalvos.contains('POSTE:${ativo.codId}'),
+            )
+            .map(
+              (ativo) => NovoEstudoPonto(
+                idEstudo: estudoId,
+                latitude: ativo.latitude,
+                longitude: ativo.longitude,
+                relevoM: null,
+                rotulo: ativo.codId,
+                indice: 0,
+                origem: 'bdgd',
+                idAtivoBdgd: 'POSTE:${ativo.codId}',
+                tipoAtivo: ativo.tipo.apiValue,
+                atributos: {
+                  'material': ativo.material,
+                  'esforco': ativo.esforcoTracao,
+                  'altura': ativo.altura,
+                  'status_operacional': ativo.statusOperacional,
+                  'situacao_ativo': ativo.situacaoAtivo,
+                  'municipio': ativo.municipio,
+                  'distribuidora': ativo.distribuidora,
+                },
+              ),
+            )
+            .toList(growable: false);
+        if (ativosPendentes.isNotEmpty) {
+          await _estudosService.criarPontosEstudoEmLote(
+            estudoId,
+            ativosPendentes,
+          );
+          _ativosImportadosSalvos.addAll(
+            _ativosImportadosNaArea.map((ativo) => 'POSTE:${ativo.codId}'),
+          );
         }
       }
       if (!mounted) return;

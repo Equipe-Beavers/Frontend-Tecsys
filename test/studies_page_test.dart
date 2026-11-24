@@ -163,6 +163,48 @@ void main() {
     expect((await service.criarPontoEstudo(ponto))['id_estudo_ponto'], 4);
   });
 
+  test('envia pontos BDGD em lotes aceitos pelo backend', () async {
+    final pontos = List.generate(
+      251,
+      (indice) => NovoEstudoPonto(
+        idEstudo: 81,
+        latitude: -23.55,
+        longitude: -46.63,
+        relevoM: null,
+        rotulo: 'POSTE-$indice',
+        indice: indice,
+        origem: 'bdgd',
+        idAtivoBdgd: 'POSTE:POSTE-$indice',
+        tipoAtivo: 'POSTE',
+        atributos: const {'material': 'concreto'},
+      ),
+    );
+    final tamanhosLotes = <int>[];
+    final service = EstudosService(
+      client: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/study/81/points/batch');
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        final enviados = body['pontos'] as List;
+        tamanhosLotes.add(enviados.length);
+        expect((enviados.first as Map).containsKey('id_estudo'), isFalse);
+        expect((enviados.first as Map)['origem'], 'bdgd');
+        return http.Response(
+          jsonEncode({
+            'message': 'Pontos adicionados ao estudo com sucesso!',
+            'data': {'inseridos': enviados.length},
+          }),
+          201,
+        );
+      }),
+    );
+    addTearDown(service.dispose);
+
+    await service.criarPontosEstudoEmLote(81, pontos);
+
+    expect(tamanhosLotes, [250, 1]);
+  });
+
   test('rejeita erros HTTP e respostas inválidas', () async {
     await expectLater(
       serviceWith(http.Response('Indisponível', 500)).list(),

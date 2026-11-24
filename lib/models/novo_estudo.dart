@@ -34,6 +34,11 @@ class NovoEstudoPonto {
   final double? relevoM;
   final String rotulo;
   final int indice;
+  final String origem;
+  final String? idAtivoBdgd;
+  final String? tipoAtivo;
+  final String papel;
+  final Map<String, dynamic>? atributos;
 
   const NovoEstudoPonto({
     required this.idEstudo,
@@ -42,19 +47,24 @@ class NovoEstudoPonto {
     required this.relevoM,
     required this.rotulo,
     required this.indice,
+    this.origem = 'manual',
+    this.idAtivoBdgd,
+    this.tipoAtivo,
+    this.papel = 'ambos',
+    this.atributos,
   });
 
   Map<String, dynamic> toJson() => {
     'id_estudo': idEstudo,
-    'origem': 'manual',
-    'id_ativo_bdgd': null,
-    'tipo_ativo': null,
+    'origem': origem,
+    'id_ativo_bdgd': idAtivoBdgd,
+    'tipo_ativo': tipoAtivo,
     'rotulo': rotulo,
-    'papel': 'ambos',
+    'papel': papel,
     'prioridade': null,
     'latitude': latitude,
     'longitude': longitude,
-    'atributos': {'tipo_ponto': 'vertice_area', 'indice': indice},
+    'atributos': atributos ?? {'tipo_ponto': 'vertice_area', 'indice': indice},
     'relevo_m': relevoM,
   };
 }

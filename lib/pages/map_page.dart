@@ -1880,6 +1880,8 @@ class _MapPageState extends State<MapPage> {
           uf: _estadoSelecionado,
           areaKm2: calculatePolygonAreaKm2(polygonPoints),
           pontosArea: List.unmodifiable(polygonPoints),
+          ativosImportados: List.unmodifiable(_ativosImportados ?? const []),
+          usarBaseImportada: _ativosImportados != null,
           relevoPontos: List.unmodifiable(_relevoPontos),
         ),
       ),
